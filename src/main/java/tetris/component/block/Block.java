@@ -12,9 +12,11 @@ public abstract class Block {
     public int[][] getShape() {
         return shape;
     }
+
     public int getRow() {
         return row;
     }
+
     public int getCol() {
         return col;
     }
@@ -23,6 +25,7 @@ public abstract class Block {
         this.row = row;
         this.col = col;
     }
+    
     public void setShape(int[][] newShape) {
         this.shape = newShape;
     }
