@@ -17,7 +17,7 @@ public class Board {
       }
 
     private int[][] CreateDefaultBoard() { // 기본 테트리스 보드 생성 22 * 12 size 벽 -1 공백 0
-        int[][] board = new int[HEIGHT + WALL_MARGIN][WIDTH + WALL_MARGIN];
+        int[][] board = new int[HEIGHT + WALL_MARGIN][WIDTH + WALL_MARGIN]; 
             for(int i = 0; i <= WIDTH + 1; i++){
                 board[0][i] = WALL;
                 board[HEIGHT + 1][i] = WALL;
@@ -60,26 +60,20 @@ public class Board {
     public void moveBlock(Block block, int nextRow, int nextCol) {
           // 블록 이동
           boolean canPlace = CanPlace(block, nextRow, nextCol);
-          if(!canPlace) {
-           block.setPosition(nextRow, nextCol);
+          if(canPlace) {
+           block.setPosition(nextRow, nextCol);   
           }
       }
 
     public void PlaceBlock(Block block) {
-          // 블록 배치
-          row = block.getRow();
-          col = block.getCol();
-
+        // 블록 배치
+        
       }
 
     private void ClearLine(int row){
-        // 한 줄 삭제
-        for(int i = 0; i < HEIGHT + WALL_MARGIN; i++){
-            for(int j = 0; j < WIDTH + WALL_MARGIN; j++){
-                if(i == row){
-                    board[i][j] = EMPTY;
-                }
-            }
+        // 한 줄 삭제 
+        for(int i = 0; i <= WIDTH; i++){
+            
         }
     }
 
@@ -88,7 +82,7 @@ public class Board {
     }
 
     public void GetRowCount(){
-        // 현재 보드에 row 가 꽉찬 줄이 몇개인지 확인
+        // 현재 보드에 row 가 꽉찬 줄이 몇개인지 확인  
     }
 
 
