@@ -111,20 +111,19 @@ public class Board {
     }
 
     private void ClearLine(int row){
-        // 한 줄 삭제 
+        // 한 줄 삭제 - GetFullRowCount를 경유하면 필요없는 guard인데 아직은 보류.
+        // 만약 한 줄이 다 채워지지 않았어도 없애야 하는 상황이 생기면 guard 삭제하면 됨.
         if(isRowFull(row)){
             for(int i = 1; i <= WIDTH; i++){
                 board[row][i] = 0;
             }
         }
-
-        
     }
 
-    public void ClearLines(int row, int count) {
+    public void ClearLines(ArrayList<Integer> targets) {
           // 여러 줄 삭제
-        for(int i = row; i < row + count; i++){
-            ClearLine(i);
+        for(Integer row : targets){
+            ClearLine(row);
         }
 
         // 점수 로직 구현시 구현 사항
