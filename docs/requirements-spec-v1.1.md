@@ -505,7 +505,7 @@ Swing UI / Key Binding  ──읽기──▶  GameSnapshot (보드 복사본, �
 저장 계층: SettingsRepository · ScoreboardRepository · DataDirectory (Jackson은 여기서만)
 ```
 
-- UI는 보드 배열을 직접 수정하지 않는다. `GameSession`이 공개하는 명령(`moveLeft/Right`, `softDrop`, `rotate`, `hardDrop`, `togglePause`, `requestQuit`, `tick` 등)만 호출한다. **[확정 + 제안]**
+- UI는 보드 배열을 직접 수정하지 않는다. `GameSession`이 공개하는 명령(`moveLeft`, `moveRight`, `moveDown`(=Soft Drop), `rotateRight`, `hardDrop`, `pause`, `resume`, `requestQuit`, `confirmQuit`, `cancelQuit`, `restart`, `tick` 등)만 호출한다. Pause 키가 눌렸을 때 `pause`/`resume` 중 무엇을 부를지는 UI가 현재 `GameState`를 보고 정한다. **[확정 + 제안]**
 - 화면 갱신은 `GameSession`이 UI에 "상태가 바뀌었다"고 알리는 단순한 관찰자(listener) 방식이 좋다. UI가 주기적으로 게임 상태를 폴링하지 않는다. **[제안]**
 - `GameState`(LOADING/PLAYING/PAUSED/GAME_OVER/ENDED)는 게임 진행 상태만 표현하고, MENU/SETTINGS/SCOREBOARD 같은 화면 흐름은 앱 계층이 관리한다. **[확정]**
 
@@ -518,6 +518,77 @@ Swing UI / Key Binding  ──읽기──▶  GameSnapshot (보드 복사본, �
 | Lock Delay | `LockPolicy` 구현 추가 |
 | Next 여러 개 | `previewCount` 증가, UI는 큐에서 여러 개 그리기 |
 | 메뉴 추가 | 메뉴 항목 목록과 렌더링 분리 |
+
+### 14.3 파일 구조 (v1.1 반영) **[제안]**
+
+파일이 아니라 메서드로 충분한 기능은 파일을 없애고 담당 클래스의 메서드 시그니처로 옮겼다.
+
+```text
+src/main/java/tetris/
+├─ Main.java
+├─ component/block/
+│  ├─ Block.java                 (+ getType())
+│  ├─ BlockType.java             (신규: I..Z, 셀 값 1..7)
+│  └─ IBlock … ZBlock.java
+├─ feature/
+│  ├─ data/Board.java            (유지)
+│  ├─ crash/CrashDetector.java   (판정 전용. IsBlockOnTop·IsRowFull 제거)
+│  ├─ game/
+│  │  ├─ GameSession.java        (이동·회전·드롭·Pause·Restart·Quit·Lock 파이프라인 메서드)
+│  │  ├─ GameState.java
+│  │  ├─ GameSnapshot.java · GameListener.java · GameClock.java   (신규)
+│  ├─ rule/                      (신규: 교체 가능한 정책)
+│  │  ├─ BlockGenerator · RandomBlockGenerator · NextBlockQueue
+│  │  ├─ RotationPolicy · BasicRotationPolicy
+│  │  ├─ LockPolicy · ImmediateLockPolicy
+│  │  └─ LevelPolicy · ScoringPolicy
+│  ├─ score/    Scoreboard · ScoreEntry
+│  ├─ setting/  Settings · ScreenSize · GameAction · KeyMap
+│  └─ save/     SettingsRepository · ScoreboardRepository · DataDirectory · LoadResult
+└─ ui/
+   ├─ MainFrame · MenuItem
+   ├─ MainMenuPanel · GamePanel · PausePanel · ConfirmDialog
+   ├─ SettingPanel · ScoreBoardPanel · NameInputPanel · GameOverPanel
+   └─ KeyBindingManager · BlockPalette · Messages · SwingGameClock
+
+src/test/java/tetris/feature/
+   BoardTest · CrashTest · SpawnAndRotationTest · LockPipelineTest · LevelPolicyTest
+   ScoringPolicyTest · BlockGenerationTest · GameSessionFlowTest · KeyMapTest
+   ScoreboardTest · PersistenceTest · RandomInputStressTest
+```
+
+### 14.4 Board 공개 API (0-기반 논리 좌표) **[제안]**
+
+| 메서드 | 기능 | 상태 |
+|---|---|---|
+| `reset()` | 모든 칸 비우기 | 구현 |
+| `canPlace(block, row, col)` | 앵커를 (row, col)에 뒀을 때 유효한지 (상태 변경 없음) | 구현 |
+| `moveBlock(block, row, col)` | 유효하면 앵커 이동 | 구현 |
+| `placeBlock(block)` | Lock: 블록 종류 값(1..7)으로 기록 (LCK-4) | 구현 |
+| `isRowFull(row)` | 행 완성 여부 | 구현 |
+| `findFullRows()` | 완성 행 목록 (0-기반) | 구현 |
+| `clearRows(rows)` | 행 삭제·압축·상단 빈 행 (CLR-1, CLR-2) | 구현 |
+| `getDropDistance(block)` | Hard Drop 거리 | 시그니처 |
+| `getCell(row, col)` | 한 칸 조회 | 시그니처 |
+| `copyCells()` | 20x10 복사본 (UI/스냅샷용) | 시그니처 |
+
+내부의 22x12 벽 배열은 바깥에서 보이지 않는다. 이전 이름(`CanPlace`, `PlaceBlock`, `GetFullRowCount`, `ClearLines`)은 위 이름으로 바꿨다.
+
+**삭제 대상(메서드로 흡수)**
+
+| 삭제 파일 | 흡수한 곳 |
+|---|---|
+| `move/MoveBlockLeft·Right·Down` | `GameSession.moveLeft/moveRight/moveDown` |
+| `drop/BlockDrop`, `drop/ShiftRowDown`, `clear/LineClear·MultiLineClear` | `GameSession.hardDrop`, `Board.ClearLines` 등 |
+| `playsetting/Pause·Restart·ReturnToMain` | `GameSession.pause/resume/restart/end`, `MainFrame.showScreen` |
+| `timer/FallingTime·DecreaseTime` | `LevelPolicy.fallIntervalMillis` |
+| `timer/RandomSelect` | `RandomBlockGenerator` |
+| `score/ScoreCount·ScoreBoardSort·ScoreReset` | `ScoringPolicy`, `Scoreboard.add/clear` |
+| `setting/BoardSizeChange·ColorChange·ControlKeyChange·ControlKeySet` | `Settings`, `ScreenSize`, `KeyMap.assign` |
+| `save/BlockSave·ControlKeySave·ScoreBoardSave·ScoreSave·SettingSave` | `SettingsRepository`, `ScoreboardRepository` |
+| `component/button/*` (9개) | `ui/MenuItem` (라벨 + 동작) |
+| `ui/*Screen` (6개) | `ui/*Panel` |
+| 테스트 `DropTest·ScoreTest·SaveTest·SettingTest·TimerTest` | 위 신규 테스트 클래스 |
 
 ---
 
@@ -638,14 +709,14 @@ Q2가 특히 중요하다. 답이 "실제 행·열 수 변경"이라면 v1.0 §2
 | 커버리지 | 50~70% 이상 | 70% 이상 |
 | 스코어보드 | "최소 상위 10개" | Top 10만 유지 |
 
-### 18.3 기존 클래스 골격 처리 방향 **[제안]** (파일 이름 기준. 내용은 확인하지 않았다)
+### 18.3 기존 클래스 골격 처리 방향 **[제안]** (최종 구조는 §14.3 참고)
 
 | 기존 | 방향 |
 |---|---|
 | `ui/*Screen` (Landing, Menu, Board, Setting, ScoreBoard, End) | Swing 패널(`MainMenuPanel`, `GamePanel`, `SettingPanel`, `ScoreBoardPanel`, `GameOverPanel`, `NameInputPanel`, `PausePanel`)로 재정의. Landing과 Menu는 통합 |
 | `component/button/*` | Swing에서는 메뉴 항목(라벨+동작) 목록으로 대체 가능. 필요성 재검토 |
 | `feature/move/*`, `drop/*`, `clear/*` | 판정·계산은 순수 로직으로 남기고, 보드 변경은 `Board`로 통일. 클래스를 합쳐도 무방 |
-| `feature/crash/CrashDetector` | 유지 (판정 전용) |
+| `feature/crash/CrashDetector` | 유지 (판정 전용). 상단 도달로 Game Over를 판정하는 `IsBlockOnTop`은 SPN-4와 충돌해 제거, `IsRowFull`은 `Board.isRowFull`과 중복이라 제거 |
 | `feature/timer/FallingTime`, `DecreaseTime` | `LevelPolicy`(간격 계산)로 흡수 |
 | `feature/timer/RandomSelect` | `BlockGenerator` 구현체 |
 | `feature/setting/BoardSizeChange` | 삭제 후 `ScreenSize`(셀 크기) 설정으로 대체. 논리 보드는 변하지 않는다 |
