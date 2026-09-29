@@ -4,19 +4,8 @@ import tetris.component.block.*;
 
 public class CrashDetector {
     //#region 판정 raw 로직
-    //Block이 Board의 최상단에 닿았는지 확인(게임오버 판정)
-    public static boolean IsBlockOnTop(int[][] board, int baseline) {
-        if (baseline < 0 || baseline >= board.length) 
-            throw new IllegalArgumentException(String.format("baseline should be between %d and %d. Value : %d", 0, board.length - 1, baseline));
-
-        for (int _row = 0; _row < baseline; _row++) {
-            for (int _col = 0; _col < board[_row].length; _col++) {
-                if (board[_row][_col] != 0) return true;
-            }
-        }
-        
-        return false;
-    }
+    // 명세 SPN-4/14장: Game Over는 Spawn 충돌로만 판정한다.
+    // 상단 도달 여부(IsBlockOnTop)로는 판정하지 않으므로 해당 메서드는 제거했다.
 
     //Block의 유효한 부분이 Board index 내부 범위에 있는지 판정
     public static boolean IsInBoard(int[][] board, int[][] shape, int offsetRow, int offsetCol) {
