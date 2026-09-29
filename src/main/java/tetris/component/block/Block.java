@@ -9,6 +9,11 @@ public abstract class Block {
         this.shape = shape;
     }
 
+    protected Block(int[][] shape, int row, int col) {
+        this(shape);
+        setPosition(row, col);
+    }
+
     public int[][] getShape() {
         return shape;
     }
