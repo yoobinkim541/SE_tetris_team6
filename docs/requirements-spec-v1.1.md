@@ -239,7 +239,7 @@ SPAWN
 - **KEY-3** 7개 기능은 항상 서로 다른 키에 할당되어 있어야 한다. 이미 다른 기능이 쓰는 키를 지정하면 **변경을 적용하지 않고** "이미 [기능]에 사용 중입니다"를 안내한다(자동 교환 없음). **[확정 + 제안]**
 - **KEY-4** 같은 기능에 현재 키와 같은 키를 다시 지정하면 오류 없이 변경 없음으로 처리한다.
 - **KEY-5** 방향키를 게임 기능에 지정해도 메뉴·확인창에서는 항상 메뉴 규칙(↑↓ 이동)이 우선한다. 화면 맥락이 다르므로 충돌하지 않는다.
-- **KEY-6** 저장 값은 `KeyEvent` VK 코드(정수)다. 표시 문자열은 실행 시 `KeyEvent.getKeyText`로 만든다. Key Guide 문구는 현재 설정에서 생성하며 하드코딩하지 않는다. **[확정 + 제안]**
+- **KEY-6** 저장 값은 `KeyEvent` VK 코드(정수)다. 표시 문자열은 실행 시 `KeyEvent.getKeyText`로 만든다. Key Guide 문구는 현재 설정에서 생성하며 하드코딩하지 않는다. 담당 메서드: `KeyMap.displayName(action)`(키 이름), `Messages.keyGuide(screen, keyMap)`·`Messages.pauseKeyGuide(keyMap)`(화면별 문구). **[확정 + 제안]**
 
 ### 7.3 반복 입력 **[제안]**
 
@@ -343,7 +343,7 @@ v1.0의 메뉴는 한글("게임 시작"), Pause·Settings 항목은 영문(`Res
 ## 10. 설정
 
 - **SET-1** 설정 항목: Screen Size, Control Keys, Color Blind Mode, Reset Scoreboard, Reset Settings. **[확정]**
-- **SET-2** 항목별 동작 **[제안]**
+- **SET-2** 항목별 동작 **[제안]** (Control Keys 흐름의 담당 메서드: `SettingPanel.openControlKeys` → `beginKeyCapture(action)` → `captureKey(keyCode)` / `cancelKeyCapture` → `closeControlKeys`)
 
 | 항목 | 조작 |
 |---|---|
@@ -379,7 +379,7 @@ v1.0의 메뉴는 한글("게임 시작"), Pause·Settings 항목은 영문(`Res
 - **NAM-1** 허용 문자 **[제안]**: 한글 음절 `가–힣`, 한글 자모 `ㄱ–ㅎ ㅏ–ㅣ`, 영문 `A–Z a–z`, 숫자 `0–9`, 그리고 **문자 사이의 공백**. 그 외 문자(특수문자·이모지 등)는 입력을 받지 않는다.
 - **NAM-2** 길이: 앞뒤 공백을 제거(trim)한 뒤 **1자 이상 10자 이하**. 허용 문자가 모두 BMP 문자라 `String.length()`로 센다. **[확정 + 제안]**
 - **NAM-3** 빈 문자열, 공백만 있는 이름은 금지하며 `Enter`를 눌러도 저장하지 않고 안내한다. 같은 이름의 중복 등록은 허용한다. **[확정]**
-- **NAM-4** 한글 IME 조합 중에도 10자 제한이 지켜지도록 `DocumentFilter`로 제한한다(입력 후 검사만 하지 않는다). **[제안]**
+- **NAM-4** 한글 IME 조합 중에도 10자 제한이 지켜지도록 `DocumentFilter`로 제한한다(입력 후 검사만 하지 않는다). 담당: `NameInputPanel.createNameFilter()`. **[제안]**
 
 | 입력 | 결과 |
 |---|---|
@@ -505,7 +505,7 @@ Swing UI / Key Binding  ──읽기──▶  GameSnapshot (보드 복사본, �
 저장 계층: SettingsRepository · ScoreboardRepository · DataDirectory (Jackson은 여기서만)
 ```
 
-- UI는 보드 배열을 직접 수정하지 않는다. `GameSession`이 공개하는 명령(`moveLeft`, `moveRight`, `moveDown`(=Soft Drop), `rotateRight`, `hardDrop`, `pause`, `resume`, `requestQuit`, `confirmQuit`, `cancelQuit`, `restart`, `tick` 등)만 호출한다. Pause 키가 눌렸을 때 `pause`/`resume` 중 무엇을 부를지는 UI가 현재 `GameState`를 보고 정한다. **[확정 + 제안]**
+- UI는 보드 배열을 직접 수정하지 않는다. `GameSession`이 공개하는 명령(`moveLeft`, `moveRight`, `moveDown`(=Soft Drop), `rotateRight`, `hardDrop`, `togglePause`(=`pause`/`resume`), `requestQuit`, `confirmQuit`, `cancelQuit`, `onFocusLost`, `restart`, `tick` 등)만 호출한다. Pause 키는 `togglePause` 하나에 연결하고, 현재 `GameState`에 따른 분기는 `GameSession`이 맡는다. **[확정 + 제안]**
 - 화면 갱신은 `GameSession`이 UI에 "상태가 바뀌었다"고 알리는 단순한 관찰자(listener) 방식이 좋다. UI가 주기적으로 게임 상태를 폴링하지 않는다. **[제안]**
 - `GameState`(LOADING/PLAYING/PAUSED/GAME_OVER/ENDED)는 게임 진행 상태만 표현하고, MENU/SETTINGS/SCOREBOARD 같은 화면 흐름은 앱 계층이 관리한다. **[확정]**
 
@@ -559,6 +559,8 @@ src/test/java/tetris/feature/
 
 ### 14.4 Board 공개 API (0-기반 논리 좌표) **[제안]**
 
+`상태` 열에서 "구현"은 본문이 있고, "시그니처"는 선언만 있는 것이다.
+
 | 메서드 | 기능 | 상태 |
 |---|---|---|
 | `reset()` | 모든 칸 비우기 | 구현 |
@@ -568,6 +570,8 @@ src/test/java/tetris/feature/
 | `isRowFull(row)` | 행 완성 여부 | 구현 |
 | `findFullRows()` | 완성 행 목록 (0-기반) | 구현 |
 | `clearRows(rows)` | 행 삭제·압축·상단 빈 행 (CLR-1, CLR-2) | 구현 |
+| `getSpawnColumn(block)` | Spawn 앵커 열 `⌊(10−n)/2⌋` (SPN-1) | 시그니처 |
+| `placeAtSpawn(block)` | Spawn 위치(row 0, rotation 0)에 놓기. 충돌이면 false = Game Over (SPN-3, SPN-4) | 시그니처 |
 | `getDropDistance(block)` | Hard Drop 거리 | 시그니처 |
 | `getCell(row, col)` | 한 칸 조회 | 시그니처 |
 | `copyCells()` | 20x10 복사본 (UI/스냅샷용) | 시그니처 |

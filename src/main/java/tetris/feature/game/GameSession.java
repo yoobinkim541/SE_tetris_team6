@@ -80,6 +80,10 @@ public class GameSession {
         // PAUSED -> PLAYING, 타이머를 전체 간격으로 재시작 (TMR-3)
     }
 
+    public void togglePause() {
+        // Pause 키: PLAYING이면 pause(), PAUSED면 resume(). 그 외 상태는 무시 (KEY: Pause 키는 최초 눌림만)
+    }
+
     public void requestQuit() {
         // Quit 키: 확인창 동안 게임 정지 (QIT-1)
     }
@@ -116,7 +120,7 @@ public class GameSession {
     }
 
     private void spawnNextBlock() {
-        // S1~S4: 큐에서 꺼내 Spawn -> 충돌이면 gameOver() -> blockCounter/Level 갱신 -> 타이머 재시작
+        // S1~S4: 큐에서 꺼내 board.placeAtSpawn(block) -> false(충돌)이면 gameOver() -> blockCounter/Level 갱신 -> 타이머 재시작
     }
 
     private void gameOver() {
