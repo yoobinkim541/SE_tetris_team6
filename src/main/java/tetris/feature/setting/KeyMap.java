@@ -12,6 +12,11 @@ public class KeyMap {
         throw new UnsupportedOperationException("TODO");
     }
 
+    /** 화면에 보일 키 이름 (예: "Left", "Space", "P"). Key Guide와 설정 화면이 사용 (KEY-6) */
+    public String displayName(GameAction action) {
+        throw new UnsupportedOperationException("TODO");
+    }
+
     /** 키를 눌렀을 때 대응하는 기능. 없으면 null */
     public GameAction actionOf(int keyCode) {
         throw new UnsupportedOperationException("TODO");
