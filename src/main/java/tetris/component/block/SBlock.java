@@ -8,4 +8,9 @@ public class SBlock extends Block {
             {0, 0, 0}
         });
     }
+
+    @Override
+    public BlockType getType() {
+        return BlockType.S;
+    }
 }

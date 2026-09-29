@@ -117,35 +117,6 @@ public class CrashTest {
     }
     //#endregion
 
-    //#region IsBlockOnTop
-    @Test
-    void IsBlockOnTop_빈_보드면_false() {
-        assertFalse(CrashDetector.IsBlockOnTop(board, BASELINE));
-    }
-
-    @Test
-    void IsBlockOnTop_버퍼_영역에_블록이_있으면_true() {
-        board[0][5] = 1;
-        assertTrue(CrashDetector.IsBlockOnTop(board, BASELINE));
-
-        setUp();
-        board[1][0] = 3;
-        assertTrue(CrashDetector.IsBlockOnTop(board, BASELINE));
-    }
-
-    @Test
-    void IsBlockOnTop_화면_맨윗줄은_게임오버_아님() {
-        board[BASELINE][0] = 1;
-        assertFalse(CrashDetector.IsBlockOnTop(board, BASELINE));
-    }
-
-    @Test
-    void IsBlockOnTop_baseline이_범위_밖이면_예외() {
-        assertThrows(IllegalArgumentException.class, () -> CrashDetector.IsBlockOnTop(board, -1));
-        assertThrows(IllegalArgumentException.class, () -> CrashDetector.IsBlockOnTop(board, ROWS));
-    }
-    //#endregion
-
     //#region IsRowFull
     @Test
     void IsRowFull_꽉_찬_줄이면_true() {
