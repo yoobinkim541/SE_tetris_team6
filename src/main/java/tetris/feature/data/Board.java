@@ -12,17 +12,12 @@ import tetris.feature.crash.CrashDetector;
  * 20x10 논리 보드 (명세 G-1~G-3). 보드 배열의 유일한 변경 지점이다.
  *
  * 공개 API는 항상 0-기반 논리 좌표를 쓴다: row 0..19(위->아래), col 0..9(왼->오).
- * 내부 배열은 판정을 단순하게 하려고 벽 테두리를 둔 22x12이며(위 0행, 아래 21행, 좌 0열, 우 11열),
- * 바깥에서는 이 내부 좌표를 볼 수 없다.
+ * 내부 배열도 같은 20x10이라 논리 좌표가 곧 배열 인덱스이며, 보드 밖 판정은 CrashDetector.IsInBoard가 맡는다.
  */
 public class Board {
     public static final int WIDTH = 10;
     public static final int HEIGHT = 20;
-    public static final int WALL = -1;
     public static final int EMPTY = 0;
-
-    private static final int WALL_MARGIN = 2;
-    private static final int OFFSET = 1; // 논리 좌표 -> 내부 배열 좌표
 
     private final int[][] board;
 
@@ -30,24 +25,15 @@ public class Board {
         board = createDefaultBoard();
     }
     
-    // 기본 테트리스 보드 생성: 22 x 12, 테두리 WALL(-1), 내부 EMPTY(0)
+    // 기본 테트리스 보드 생성: 20 x 10, 모든 칸 EMPTY(0)
     private int[][] createDefaultBoard() {
-        int[][] cells = new int[HEIGHT + WALL_MARGIN][WIDTH + WALL_MARGIN];
-        for (int i = 0; i <= WIDTH + 1; i++) {
-            cells[0][i] = WALL;
-            cells[HEIGHT + 1][i] = WALL;
-        }
-        for (int i = 1; i <= HEIGHT; i++) {
-            cells[i][0] = WALL;
-            cells[i][WIDTH + 1] = WALL;
-        }
-        return cells;
+        return new int[HEIGHT][WIDTH];
     }
 
     /** 새 게임/Restart: 모든 칸을 비운다 */
     public void reset() {
-        for (int row = 1; row <= HEIGHT; row++) {
-            Arrays.fill(board[row], 1, WIDTH + 1, EMPTY);
+        for (int[] row : board) {
+            Arrays.fill(row, EMPTY);
         }
     }
 
@@ -90,13 +76,7 @@ public class Board {
 
     /** 한 행의 10칸이 모두 채워졌는지 (row: 0..19). 범위 밖이면 false */
     public boolean isRowFull(int row) {
-        if (row < 0 || row >= HEIGHT) {
-            return false;
-        }
-        for (int col = 1; col <= WIDTH; col++) {
-            if (board[row + OFFSET][col] == EMPTY) return false;
-        }
-        return true;
+        return CrashDetector.IsRowFull(board, row);
     }
 
     /** 완성된 행 번호 목록 (0-기반, 위->아래 순) */
@@ -112,17 +92,17 @@ public class Board {
     public void clearRows(List<Integer> targets) {
         Set<Integer> completed = new HashSet<>();
         for (int row : targets) {
-            if (isRowFull(row)) completed.add(row + OFFSET);
+            if (isRowFull(row)) completed.add(row);
         }
 
-        int writeRow = HEIGHT;
-        for (int readRow = HEIGHT; readRow >= 1; readRow--) {
+        int writeRow = HEIGHT - 1;
+        for (int readRow = HEIGHT - 1; readRow >= 0; readRow--) {
             if (completed.contains(readRow)) continue;
-            System.arraycopy(board[readRow], 1, board[writeRow], 1, WIDTH);
+            System.arraycopy(board[readRow], 0, board[writeRow], 0, WIDTH);
             writeRow--;
         }
-        while (writeRow >= 1) {
-            Arrays.fill(board[writeRow], 1, WIDTH + 1, EMPTY);
+        while (writeRow >= 0) {
+            Arrays.fill(board[writeRow], EMPTY);
             writeRow--;
         }
     }
@@ -150,9 +130,9 @@ public class Board {
         throw new UnsupportedOperationException("TODO");
     }
 
-    /** UI/스냅샷용 20x10 복사본 (벽 제외). 수정해도 게임에 영향이 없다 */
+    /** UI/스냅샷용 20x10 복사본. 수정해도 게임에 영향이 없다 */
     public int[][] copyCells() {
-        int[][] copy = new int[HEIGHT + 2 * OFFSET][WIDTH + 2 * OFFSET];
+        int[][] copy = new int[HEIGHT][];
 
         for (int row = 0; row < copy.length; row++) {
             copy[row] = Arrays.copyOfRange(board[row], 0, board[row].length);
