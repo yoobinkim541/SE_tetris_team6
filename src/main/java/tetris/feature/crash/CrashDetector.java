@@ -73,5 +73,16 @@ public class CrashDetector {
 
         return true;
     }
+
+    // 블록을 움직일 수 있는지 없는지를 판정 (다음 위치에 가상 블럭을 만든 후 lnBoard, OnBlock 확인)
+    public static boolean CanPlace(int[][] board, Block block, int row, int col) {
+        boolean inBoard = CrashDetector.IsInBoard(board, block.getShape(), row, col);
+        boolean onBlock = CrashDetector.IsOnBlock(board, block.getShape(), row, col);
+        return inBoard && !onBlock;
+    }
+
+    public static boolean CanPlace(int[][] board, Block block) {
+        return CanPlace(board, block, block.getRow(), block.getCol());
+    }
     //#endregion
 }
