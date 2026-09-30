@@ -138,7 +138,7 @@ public class Board {
 
     /** Spawn 앵커 열 = floor((WIDTH - n) / 2), n = 블록 행렬 크기 (SPN-1). I,J,L,S,T,Z = 3, O = 4 */
     public int getSpawnColumn(Block block) {
-        throw new UnsupportedOperationException("TODO");
+        return (WIDTH - block.getShape().length) / 2; // 음수가 아닌 정수 나눗셈 = 내림
     }
 
     /**
