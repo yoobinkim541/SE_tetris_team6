@@ -3,10 +3,8 @@ package tetris.feature;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static tetris.feature.GameTestSupport.sequence;
 
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Iterator;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import tetris.component.block.Block;
@@ -19,13 +17,12 @@ import tetris.component.block.SBlock;
 import tetris.component.block.TBlock;
 import tetris.component.block.ZBlock;
 import tetris.debug.AsciiBoard;
+import tetris.feature.GameTestSupport.RecordingClock;
+import tetris.feature.GameTestSupport.RecordingListener;
 import tetris.feature.data.Board;
-import tetris.feature.game.GameClock;
-import tetris.feature.game.GameListener;
 import tetris.feature.game.GameSession;
 import tetris.feature.game.GameSnapshot;
 import tetris.feature.game.GameState;
-import tetris.feature.rule.BlockGenerator;
 import tetris.feature.rule.SpawnPolicy;
 
 /** SPN-1, SPN-4, ROT-2~4, ROT-6 (Spawn 앵커, 회전 4회 원복, O 불변, 벽 근처 회전 실패, Spawn 충돌) */
@@ -86,27 +83,6 @@ public class SpawnAndRotationTest {
     //#endregion
 
     //#region GameSession Spawn
-    private static BlockGenerator sequence(Block... blocks) {
-        Iterator<Block> it = Arrays.asList(blocks).iterator();
-        return it::next;
-    }
-
-    private static final class RecordingClock implements GameClock {
-        final List<Integer> starts = new ArrayList<>();
-        int stops;
-
-        @Override public void start(int intervalMillis) { starts.add(intervalMillis); }
-        @Override public void stop() { stops++; }
-    }
-
-    private static final class RecordingListener implements GameListener {
-        final List<GameSnapshot> changed = new ArrayList<>();
-        final List<GameSnapshot> gameOvers = new ArrayList<>();
-
-        @Override public void onChanged(GameSnapshot snapshot) { changed.add(snapshot); }
-        @Override public void onGameOver(GameSnapshot snapshot) { gameOvers.add(snapshot); }
-    }
-
     @Test
     void start하면_첫_블록이_Spawn되고_PLAYING() { // PIPE-4
         RecordingClock clock = new RecordingClock();
