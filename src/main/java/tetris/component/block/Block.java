@@ -1,6 +1,6 @@
 package tetris.component.block;
 
-public abstract class Block {
+public abstract class Block implements Cloneable {
     protected int[][] shape;
     private int row;
     private int col;
@@ -63,5 +63,16 @@ public abstract class Block {
         return rotated;
     }    
 
+    /** 스냅샷용 깊은 복사. 서브클래스(종류)는 유지되고, 복사본을 바꿔도 원본에 영향이 없다 */
+    public Block copy() {
+        try {
+            Block copy = (Block) super.clone();
+            copy.shape = new int[shape.length][];
+            for (int i = 0; i < shape.length; i++) copy.shape[i] = shape[i].clone();
+            return copy;
+        } catch (CloneNotSupportedException e) {
+            throw new AssertionError(e);
+        }
+    }
 }
 
