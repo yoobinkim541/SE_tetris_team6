@@ -90,8 +90,13 @@ public class GameSession {
         // board.getDropDistance(currentBlock)만큼 이동 -> +칸수 x Level -> 즉시 Lock
     }
 
+    /** 자동 낙하 1회 = 하강 시도 (§3.1). 실패하면 LockPolicy 판단으로 Lock. PLAYING이 아니면 무시 (TMR-2) */
     public void tick() {
-        // 자동 낙하 1회 = 하강 시도. 테스트는 타이머 없이 직접 호출
+        if (state != GameState.PLAYING) return;
+
+        boolean descended = tryDescend();
+        if (lockPolicy.shouldLock(!descended)) lockCurrentBlock();
+        if (state == GameState.PLAYING) listener.onChanged(snapshot());
     }
 
     // ── Pause / Quit ─────────────────────────
@@ -140,9 +145,15 @@ public class GameSession {
     }
 
     // ── 명세 4장 파이프라인 (내부) ────────────
+    /** 성공하면 한 칸 내리고 +Level (SCR-1). 실패하면 아무것도 바꾸지 않는다 (SCR-4) */
     private boolean tryDescend() {
-        // 한 칸 하강 시도. 성공하면 score += softDropScore(level) 후 true, 실패 false
-        throw new UnsupportedOperationException("TODO");
+        int row = currentBlock.getRow() + 1;
+        int col = currentBlock.getCol();
+        if (!board.canPlace(currentBlock, row, col)) return false;
+
+        currentBlock.setPosition(row, col);
+        score += scoringPolicy.softDropScore(levelPolicy.getLevel());
+        return true;
     }
 
     private void lockCurrentBlock() {
