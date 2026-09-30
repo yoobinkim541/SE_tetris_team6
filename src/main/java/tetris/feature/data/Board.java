@@ -136,19 +136,6 @@ public class Board {
         }
     }
 
-    /** Spawn 앵커 열 = floor((WIDTH - n) / 2), n = 블록 행렬 크기 (SPN-1). I,J,L,S,T,Z = 3, O = 4 */
-    public int getSpawnColumn(Block block) {
-        return (WIDTH - block.getShape().length) / 2; // 음수가 아닌 정수 나눗셈 = 내림
-    }
-
-    /**
-     * 블록을 Spawn 위치(row 0, getSpawnColumn, rotation 0)에 놓는다 (SPN-1, SPN-3).
-     * 유효하면 앵커를 옮기고 true, 기존 고정 칸과 겹치면 상태를 바꾸지 않고 false (= Game Over 조건).
-     */
-    public boolean placeAtSpawn(Block block) {
-        throw new UnsupportedOperationException("TODO");
-    }
-
     /** Hard Drop 거리:블록을 아래로 몇 칸 내릴 수 있는지 (0 이상). 상태를 바꾸지 않는다 */
     public int getDropDistance(Block block) {
         throw new UnsupportedOperationException("TODO");
