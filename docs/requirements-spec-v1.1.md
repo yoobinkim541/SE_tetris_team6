@@ -576,7 +576,7 @@ src/test/java/tetris/feature/
 | `getCell(row, col)` | 한 칸 조회 | 시그니처 |
 | `copyCells()` | 20x10 복사본 (UI/스냅샷용) | 시그니처 |
 
-내부 배열도 20x10이라 논리 좌표가 곧 배열 인덱스다(벽 테두리 없음). 이전 이름(`CanPlace`, `PlaceBlock`, `GetFullRowCount`, `ClearLines`)은 위 이름으로 바꿨다.
+내부 배열은 상하좌우로 `Board.MARGIN`(2)칸씩 늘린 24x14다(위: 빈 숨은 줄, 아래·좌우: 벽 `-1`). 논리 좌표 → 배열 인덱스 변환은 Board 안에서만 한다. 이전 이름(`CanPlace`, `PlaceBlock`, `GetFullRowCount`, `ClearLines`)은 위 이름으로 바꿨다.
 
 **삭제 대상(메서드로 흡수)**
 

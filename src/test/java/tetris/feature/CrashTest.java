@@ -10,11 +10,12 @@ import tetris.component.block.IBlock;
 import tetris.component.block.OBlock;
 import tetris.component.block.TBlock;
 import tetris.feature.crash.CrashDetector;
+import tetris.feature.data.Board;
 
 public class CrashTest {
-    private static final int ROWS = 22;
-    private static final int COLS = 10;
-    private static final int BASELINE = 2;
+    // 실제 Board 내부 배열과 같은 크기의 빈 배열로 순수 판정 함수를 검사한다
+    private static final int ROWS = Board.ARRAY_ROWS;
+    private static final int COLS = Board.ARRAY_COLS;
 
     private int[][] board;
 
