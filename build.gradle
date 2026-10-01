@@ -4,10 +4,8 @@ plugins {
     id 'jacoco'
 }
 
-java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
-    }
+tasks.withType(JavaCompile).configureEach {
+    options.release = 21
 }
 
 repositories {
@@ -26,4 +24,9 @@ application {
 test {
     useJUnitPlatform()
     finalizedBy jacocoTestReport
+}
+
+if (providers.gradleProperty('skipCoverage').isPresent()) {
+    test.jacoco.enabled = false
+    jacocoTestReport.enabled = false
 }
