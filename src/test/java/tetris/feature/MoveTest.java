@@ -93,13 +93,13 @@ public class MoveTest {
     }
 
     @Test
-    void 바닥에서의_Soft_Drop은_점수가_늘지_않는다() { // SCR-4
+    void 바닥에서_Soft_Drop하면_점수_없이_고정된다() { // SCR-4, LCK-2 (Soft Drop 입력 즉시 Lock)
         GameSession session = startedSession(new OBlock(), new TBlock());
         repeat(session::moveDown, 18);
         assertEquals(18, session.snapshot().score());
         session.moveDown();
         assertEquals(18, session.snapshot().score());
-        assertEquals("....oo....", row(session, 19));
+        assertEquals("....OO....", row(session, 19));
     }
     //#endregion
 
