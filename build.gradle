@@ -33,7 +33,31 @@ jacocoTestReport {
     }
 }
 
+// 커버리지 기준선: 요구사항(라인 커버리지 50~70% 이상)에 맞춰 최소치를 강제한다. 미달이면 CI가 실패한다
+jacocoTestCoverageVerification {
+    mustRunAfter jacocoTestReport
+    violationRules {
+        rule {
+            limit {
+                counter = 'LINE'
+                value = 'COVEREDRATIO'
+                minimum = 0.50
+            }
+        }
+    }
+}
+check.dependsOn jacocoTestCoverageVerification
+
+// 배포용 실행 JAR (jpackage가 이 파일을 쓴다)
+jar {
+    archiveFileName = 'tetris.jar'
+    manifest {
+        attributes 'Main-Class': 'tetris.Main'
+    }
+}
+
 if (providers.gradleProperty('skipCoverage').isPresent()) {
     test.jacoco.enabled = false
     jacocoTestReport.enabled = false
+    jacocoTestCoverageVerification.enabled = false
 }

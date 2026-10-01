@@ -14,20 +14,18 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '21'
 
-      # gradlew가 저장소에 없으므로 Gradle을 직접 설치한다 (wrapper를 추가하면 gradle-version 줄과 gradle 명령을 ./gradlew로 교체)
-      - uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.10.2'
+      - uses: gradle/actions/setup-gradle@v6
 
-      - name: Test
-        run: gradle test --no-daemon
+      # 테스트 실행 후 커버리지 기준선(build.gradle의 LINE 최소치)을 검사한다. 미달이면 이 단계가 실패한다
+      - name: Test and coverage check
+        run: ./gradlew test jacocoTestCoverageVerification --no-daemon
 
       # 실행 결과 요약(테스트 수·커버리지 %)을 summary.md로 만들어 Actions Summary와 PR 댓글에 쓴다
       - name: Summary (tests and coverage)
@@ -74,14 +72,47 @@ jobs:
 
       - name: Upload test report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: test-report
           path: build/reports/tests/test
 
       - name: Upload coverage report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: jacoco-report
           path: build/reports/jacoco/test/html
+
+  # 배포 패키지: 더블클릭으로 실행되는 Tetris.exe(JRE 포함)를 만들어 아티팩트로 올린다
+  package:
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - uses: gradle/actions/setup-gradle@v6
+
+      - name: Build jar
+        run: .\gradlew.bat jar --no-daemon
+
+      # 아이콘(src/main/resources/icons/tetris.ico)이 있으면 exe에 적용한다
+      - name: Package exe
+        shell: pwsh
+        run: |
+          $args = @('--type','app-image','--name','Tetris','--input','build/libs','--main-jar','tetris.jar','--main-class','tetris.Main','--dest','dist')
+          if (Test-Path 'src/main/resources/icons/tetris.ico') { $args += @('--icon','src/main/resources/icons/tetris.ico') }
+          else { Write-Host 'tetris.ico not found: packaging with the default icon' }
+          jpackage @args
+          Compress-Archive -Path dist/Tetris -DestinationPath Tetris-windows.zip
+
+      - name: Upload package
+        uses: actions/upload-artifact@v7
+        with:
+          name: Tetris-windows
+          path: Tetris-windows.zip
