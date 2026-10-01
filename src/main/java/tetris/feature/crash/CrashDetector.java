@@ -51,6 +51,27 @@ public class CrashDetector {
         return IsOnBlock(board, block.getShape(), block.getRow(), block.getCol());
     }
 
-    // 행 완성 판정은 Board.isRowFull이 담당한다 (보드 변경·행 규칙은 Board 소관)
+    //주어진 row index가 꽉 차있는지 판정
+    public static boolean IsRowFull(int[][] board, int row) {
+        //check is valid row index
+        if (row < 0 || row >= board.length) return false;
+
+        for (int index = 0; index < board[row].length; index++) {
+            if (board[row][index] == 0) return false;
+        }
+
+        return true;
+    }
+
+    // 블록을 움직일 수 있는지 없는지를 판정 (다음 위치에 가상 블럭을 만든 후 lnBoard, OnBlock 확인)
+    public static boolean CanPlace(int[][] board, int[][] shape, int row, int col) {
+        boolean inBoard = CrashDetector.IsInBoard(board, shape, row, col);
+        boolean onBlock = CrashDetector.IsOnBlock(board, shape, row, col);
+        return inBoard && !onBlock;
+    }
+
+    public static boolean CanPlace(int[][] board, Block block) {
+        return CanPlace(board, block.getShape(), block.getRow(), block.getCol());
+    }
     //#endregion
 }

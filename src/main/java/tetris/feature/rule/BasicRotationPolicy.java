@@ -7,6 +7,8 @@ import tetris.feature.data.Board;
 public class BasicRotationPolicy implements RotationPolicy {
     @Override
     public boolean rotate(Board board, Block block) {
-        throw new UnsupportedOperationException("TODO");
+        if (!board.canPlace(block.rotateRight(), block.getRow(), block.getCol())) return false;
+        block.rotateClockwise();
+        return true;
     }
 }
