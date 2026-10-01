@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main, develop]
 
+permissions:
+  contents: read
+  pull-requests: write   # PR 댓글 작성용
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -25,11 +29,11 @@ jobs:
       - name: Test
         run: gradle test --no-daemon
 
-      # 실행 결과 요약(테스트 수·커버리지 %)을 Actions 실행 화면 맨 아래 Summary에 표시한다
+      # 실행 결과 요약(테스트 수·커버리지 %)을 summary.md로 만들어 Actions Summary와 PR 댓글에 쓴다
       - name: Summary (tests and coverage)
         if: always()
         run: |
-          python3 - <<'EOF' >> "$GITHUB_STEP_SUMMARY"
+          python3 - <<'EOF' > summary.md
           import glob, xml.etree.ElementTree as ET
 
           total = failed = skipped = 0
@@ -58,6 +62,15 @@ jobs:
           except FileNotFoundError:
               print('Coverage report not found.')
           EOF
+          cat summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      # PR이면 같은 댓글을 갱신하고, 없으면 새로 만든다 (fork PR은 토큰이 읽기 전용이라 실패해도 CI는 막지 않는다)
+      - name: Comment on PR
+        if: always() && github.event_name == 'pull_request'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh pr comment "${{ github.event.pull_request.number }}" --body-file summary.md --edit-last --create-if-none
 
       - name: Upload test report
         if: always()
