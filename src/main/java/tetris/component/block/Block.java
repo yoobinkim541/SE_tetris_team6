@@ -36,22 +36,14 @@ public abstract class Block implements Cloneable {
         throw new UnsupportedOperationException("서브클래스에서 override 필요");
     }
 
-    // 회전 상태 0..3 (0 = 초기 모양, 시계방향으로 +1). RotationPolicy가 회전 성공 시 갱신한다
+    // 회전 상태 0..3 (0 = 초기 모양, 시계방향으로 +1). 모양과 어긋나지 않도록 rotateClockwise에서만 바뀐다
     private int rotation;
 
     public int getRotation() {
         return rotation;
     }
 
-    public void setRotation(int rotation) {
-        this.rotation = rotation;
-    }
-
-    public void setShape(int[][] newShape) {
-        this.shape = newShape;
-    }
-
-    // 시계방향 90도 회전한 새 격자를 반환 (원본은 수정하지 않음)
+    // 시계방향 90도 회전한 새 격자를 반환 (원본은 수정하지 않음). 회전 전 판정용
     public int[][] rotateRight() {
         int n = shape.length;
         int[][] rotated = new int[n][n];
@@ -62,6 +54,12 @@ public abstract class Block implements Cloneable {
         }
         return rotated;
     }    
+
+    /** 모양과 회전 상태를 함께 시계방향 90° 돌린다. 돌려도 되는지는 RotationPolicy가 먼저 판정한다 */
+    public void rotateClockwise() {
+        shape = rotateRight();
+        rotation = (rotation + 1) % 4;
+    }
 
     /** 스냅샷용 깊은 복사. 서브클래스(종류)는 유지되고, 복사본을 바꿔도 원본에 영향이 없다 */
     public Block copy() {
