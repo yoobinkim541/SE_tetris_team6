@@ -1,5 +1,6 @@
 package tetris.feature.game;
 
+import java.util.List;
 import tetris.component.block.Block;
 import tetris.feature.data.Board;
 import tetris.feature.rule.BasicRotationPolicy;
@@ -176,19 +177,34 @@ public class GameSession {
         return true;
     }
 
+    /** §4 LOCK. Level은 L5와 다음 Spawn의 S3에서만 바뀐다 (PIPE-1) */
     private void lockCurrentBlock() {
-        // L1~L5: 보드에 기록 -> 완성 행 삭제 -> 보너스 -> lineCounter/Level 갱신 -> spawnNextBlock()
-        // 기록 후 currentBlock = null (보드에 들어간 블록을 스냅샷이 두 번 그리지 않도록)
+        if (!board.tryPlaceBlock(currentBlock))                                          // L1
+            throw new IllegalStateException("current block is not at a placeable position");
+            
+        currentBlock = null; // 보드에 들어간 블록을 스냅샷이 두 번 그리지 않도록
+
+        List<Integer> fullRows = board.findFullRows();                                // L2
+        int clearedRows = fullRows.size();
+
+        board.clearRows(fullRows);                                                    // L3
+        score += scoringPolicy.lineClearBonus(clearedRows);                               // L4
+        lines += clearedRows;
+        levelPolicy.onLinesCleared(clearedRows);                                          // L5
+
+        spawnNextBlock();
     }
 
     private void spawnNextBlock() {
         Block block = nextQueue.pop();                                             // S1
         int row = spawnPolicy.getSpawnRow(block);
         int col = spawnPolicy.getSpawnColumn(block);
+
         if (!board.canPlace(block, row, col)) {                                    // S2
             gameOver(); // SPN-4: 블록을 놓지 않고 카운터·Level·타이머도 바꾸지 않는다
             return;
         }
+
         block.setPosition(row, col);
         currentBlock = block;
         levelPolicy.onBlockSpawned();                                              // S3

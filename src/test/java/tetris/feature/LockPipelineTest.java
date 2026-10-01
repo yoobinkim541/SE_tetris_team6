@@ -2,11 +2,13 @@ package tetris.feature;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static tetris.feature.GameTestSupport.sequence;
 import static tetris.feature.GameTestSupport.startedSession;
 
 import org.junit.jupiter.api.Test;
+import tetris.component.block.Block;
 import tetris.component.block.IBlock;
 import tetris.component.block.OBlock;
 import tetris.component.block.TBlock;
@@ -50,14 +52,14 @@ public class LockPipelineTest {
     }
 
     @Test
-    void 바닥에_닿은_뒤의_하강_시도는_실패하고_점수가_늘지_않는다() { // SCR-4
+    void 바닥에서_하강에_실패하면_점수_없이_고정된다() { // SCR-4, LCK-2
         GameSession session = startedSession(new IBlock(), new TBlock());
         tick(session, 19);   // I 막대: 0행 -> 19행
         assertEquals("...iiii...", AsciiBoard.row(session.snapshot(), 19));
         assertEquals(19, session.snapshot().score());
 
-        tick(session, 3);
-        assertEquals("...iiii...", AsciiBoard.row(session.snapshot(), 19));
+        session.tick();
+        assertEquals("...IIII...", AsciiBoard.row(session.snapshot(), 19));
         assertEquals(19, session.snapshot().score());
     }
 
@@ -83,6 +85,80 @@ public class LockPipelineTest {
         ImmediateLockPolicy policy = new ImmediateLockPolicy();
         assertTrue(policy.shouldLock(true));
         assertFalse(policy.shouldLock(false));
+    }
+    //#endregion
+
+    //#region Lock과 쌓기 (§4 LOCK)
+    // 하강 descents번 + 실패하는 하강 시도 1번(이때 Lock)
+    private static void dropAndLock(GameSession session, int descents) {
+        tick(session, descents + 1);
+    }
+
+    @Test
+    void 바닥에_닿은_뒤_다음_하강_시도에서_고정되고_다음_블록이_나온다() { // LCK-2, LCK-4
+        RecordingClock clock = new RecordingClock();
+        GameSession session = new GameSession(sequence(new OBlock(), new TBlock(), new IBlock()), clock, new RecordingListener());
+        session.start();
+        dropAndLock(session, 18);
+
+        GameSnapshot s = session.snapshot();
+        assertEquals("....OO....", AsciiBoard.row(s, 18));   // 고정 칸은 대문자
+        assertEquals("....OO....", AsciiBoard.row(s, 19));
+        assertEquals("....t.....", AsciiBoard.row(s, 0));    // 다음 블록 Spawn
+        assertEquals(2, clock.starts.size());                 // Spawn마다 타이머 재시작 (S4)
+    }
+
+    @Test
+    void 다음_블록은_고정된_블록_위에_쌓인다() {
+        GameSession session = startedSession(new OBlock(), new OBlock(), new TBlock());
+        dropAndLock(session, 18);
+        dropAndLock(session, 16);
+
+        GameSnapshot s = session.snapshot();
+        assertEquals("....OO....", AsciiBoard.row(s, 16));
+        assertEquals("....OO....", AsciiBoard.row(s, 17));
+        assertEquals("....OO....", AsciiBoard.row(s, 18));
+        assertEquals("....OO....", AsciiBoard.row(s, 19));
+    }
+
+    @Test
+    void 줄이_완성되면_지우고_위를_내리고_보너스() { // CLR-1, CLR-2, SCR-3
+        GameSession session = startedSession(new IBlock(), new IBlock(), new OBlock(), new TBlock(), new TBlock());
+        for (int i = 0; i < 3; i++) session.moveLeft();   // I: col 0..3
+        dropAndLock(session, 19);
+        session.moveRight();                               // I: col 4..7
+        dropAndLock(session, 19);
+        for (int i = 0; i < 4; i++) session.moveRight();  // O: col 8..9
+        dropAndLock(session, 18);                          // 19행이 꽉 참
+
+        GameSnapshot s = session.snapshot();
+        assertEquals("..........", AsciiBoard.row(s, 18));
+        assertEquals("........OO", AsciiBoard.row(s, 19)); // O의 윗줄만 내려옴
+        assertEquals(19 + 19 + 18 + 100, s.score());
+        assertEquals(1, s.lines());
+    }
+
+    @Test
+    void Spawn_자리가_막히면_GAME_OVER() { // SPN-4
+        Block[] blocks = new Block[12];
+        for (int i = 0; i < blocks.length; i++) blocks[i] = new OBlock();
+        RecordingClock clock = new RecordingClock();
+        RecordingListener listener = new RecordingListener();
+        GameSession session = new GameSession(sequence(blocks), clock, listener);
+        session.start();
+
+        for (int k = 0; k < 10; k++) dropAndLock(session, 18 - 2 * k); // 가운데에 O 10개를 쌓아 0행까지 채움
+
+        GameSnapshot s = session.snapshot();
+        assertEquals(GameState.GAME_OVER, session.getState());
+        assertEquals(1, listener.gameOvers.size());
+        assertEquals(1, clock.stops);
+        assertNull(s.currentBlock());                        // 막힌 블록은 놓지 않는다
+        assertEquals("....OO....", AsciiBoard.row(s, 0));    // 보드는 마지막 정상 상태
+        assertEquals(90, s.score());                         // 18+16+...+2
+
+        session.tick();                                      // GAME_OVER에서는 무시
+        assertEquals(90, session.snapshot().score());
     }
     //#endregion
 }
