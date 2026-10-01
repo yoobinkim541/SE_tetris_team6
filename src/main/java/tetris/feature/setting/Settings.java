@@ -1,33 +1,40 @@
 package tetris.feature.setting;
 
-/** 사용자 설정 모델 (SET-1~6). 기존 ColorChange / BoardSizeChange 흡수. */
+/** 사용자 설정 모델 (SET-1~6). 기존 ColorChange / BoardSizeChange 흡수. 저장은 save 계층 담당 */
 public class Settings {
-    public Settings() {
-        // 기본값: Medium, 색맹 OFF, 기본 KeyMap
-    }
+    private static final ScreenSize DEFAULT_SCREEN_SIZE = ScreenSize.MEDIUM; // SET-6
+    private static final boolean DEFAULT_COLOR_BLIND_MODE = false;
+
+    private ScreenSize screenSize = DEFAULT_SCREEN_SIZE;
+    private boolean colorBlindMode = DEFAULT_COLOR_BLIND_MODE;
+    private final KeyMap keyMap = new KeyMap();
 
     public ScreenSize getScreenSize() {
-        throw new UnsupportedOperationException("TODO");
+        return screenSize;
     }
 
     public void setScreenSize(ScreenSize size) {
-        // 변경
+        if (size == null) throw new IllegalArgumentException("size cannot be null");
+        screenSize = size;
     }
 
     public boolean isColorBlindMode() {
-        throw new UnsupportedOperationException("TODO");
+        return colorBlindMode;
     }
 
     public void setColorBlindMode(boolean enabled) {
-        // 변경
+        colorBlindMode = enabled;
     }
 
+    /** 키 변경은 KeyMap의 검증 메서드(assign, tryReplaceAll)로만 한다 */
     public KeyMap getKeyMap() {
-        throw new UnsupportedOperationException("TODO");
+        return keyMap;
     }
 
     /** Reset Settings: 위 항목을 모두 기본값으로 (Scoreboard는 건드리지 않음) */
     public void resetToDefaults() {
-        // 초기화
+        screenSize = DEFAULT_SCREEN_SIZE;
+        colorBlindMode = DEFAULT_COLOR_BLIND_MODE;
+        keyMap.resetToDefaults();
     }
 }
