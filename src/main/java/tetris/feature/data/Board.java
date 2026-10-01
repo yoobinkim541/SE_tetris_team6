@@ -70,35 +70,23 @@ public class Board {
         board[row + MARGIN][col + MARGIN] = value;
     }
 
-    public boolean TryPlaceBlock(Block block) {
+    /** Lock: 블록 칸을 종류 값(1..7)으로 기록한다 (LCK-4). 놓을 수 없는 위치면 아무것도 바꾸지 않고 false */
+    public boolean tryPlaceBlock(Block block) {
         if (block == null) throw new IllegalArgumentException("block cannot be null");
         if (!canPlace(block, block.getRow(), block.getCol())) return false;
 
+        int value = block.getType().cellValue();
         int[][] shape = block.getShape();
         
         for (int _row = 0; _row < shape.length; _row++) {
             for (int _col = 0; _col < shape[_row].length; _col++) {
                 if(shape[_row][_col] == 0) continue;
 
-                setCell(block.getRow() + _row, block.getCol() + _col, shape[_row][_col]);
+                setCell(block.getRow() + _row, block.getCol() + _col, value);
             }
         }
 
         return true;
-    }
-
-    public void RemoveBlock(Block block) {
-        if (block == null) throw new IllegalArgumentException("block cannot be null");
-
-        int[][] shape = block.getShape();
-        
-        for (int _row = 0; _row < shape.length; _row++) {
-            for (int _col = 0; _col < shape[_row].length; _col++) {
-                if(shape[_row][_col] == 0) continue;
-
-                setCell(block.getRow() + _row, block.getCol() + _col, EMPTY);
-            }
-        }
     }
 
     /** 한 행의 10칸이 모두 채워졌는지 (row: 0..19). 범위 밖이면 false */

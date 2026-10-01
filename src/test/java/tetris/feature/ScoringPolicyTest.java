@@ -17,6 +17,21 @@ public class ScoringPolicyTest {
     }
 
     @Test
+    void 줄_삭제_보너스는_Level과_무관하게_100_300_500_800() { // SCR-3
+        assertEquals(0L, scoring.lineClearBonus(0));
+        assertEquals(100L, scoring.lineClearBonus(1));
+        assertEquals(300L, scoring.lineClearBonus(2));
+        assertEquals(500L, scoring.lineClearBonus(3));
+        assertEquals(800L, scoring.lineClearBonus(4));
+    }
+
+    @Test
+    void 한_번에_지운_줄_수가_0에서_4를_벗어나면_예외() { // CLR-3
+        assertThrows(IllegalArgumentException.class, () -> scoring.lineClearBonus(5));
+        assertThrows(IllegalArgumentException.class, () -> scoring.lineClearBonus(-1));
+    }
+
+    @Test
     void Level이_1보다_작으면_예외() {
         assertThrows(IllegalArgumentException.class, () -> scoring.softDropScore(0));
     }

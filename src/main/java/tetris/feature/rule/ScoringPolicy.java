@@ -15,6 +15,13 @@ public class ScoringPolicy {
 
     /** 줄 삭제 보너스: 1줄 100, 2줄 300, 3줄 500, 4줄 800, 0줄 0 (Level 무관) */
     public long lineClearBonus(int lines) {
-        throw new UnsupportedOperationException("TODO");
+        return switch (lines) {
+            case 0 -> 0;
+            case 1 -> 100;
+            case 2 -> 300;
+            case 3 -> 500;
+            case 4 -> 800;
+            default -> throw new IllegalArgumentException(String.format("lines should be between %d and %d. Value : %d", 0, 4, lines));
+        };
     }
 }
