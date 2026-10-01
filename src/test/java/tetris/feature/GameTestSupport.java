@@ -5,6 +5,7 @@ import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import tetris.component.block.Block;
+import tetris.component.block.BlockType;
 import tetris.feature.game.GameClock;
 import tetris.feature.game.GameListener;
 import tetris.feature.game.GameSession;
@@ -20,6 +21,16 @@ final class GameTestSupport {
     static BlockGenerator sequence(Block... blocks) {
         Iterator<Block> it = Arrays.asList(blocks).iterator();
         return it::next;
+    }
+
+    /** 보드의 특정 칸을 채울 때 쓰는 1x1 블록. 기록할 때 종류 값이 필요해서 O로 둔다 */
+    static Block cell() {
+        return new Block(new int[][] {{1}}) {
+            @Override
+            public BlockType getType() {
+                return BlockType.O;
+            }
+        };
     }
 
     /** 블록 순서만 정해서 시작한 세션 */

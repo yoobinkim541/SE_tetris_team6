@@ -3,6 +3,7 @@ package tetris.feature;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static tetris.feature.GameTestSupport.cell;
 import static tetris.feature.GameTestSupport.sequence;
 import static tetris.feature.GameTestSupport.startedSession;
 
@@ -66,7 +67,7 @@ public class SpawnAndRotationTest {
         i.setPosition(spawn.getSpawnRow(i), spawn.getSpawnColumn(i));
         assertTrue(board.canPlace(i.rotateRight(), i.getRow(), i.getCol()));
 
-        board.TryPlaceBlock(i);
+        board.tryPlaceBlock(i);
         int[][] cells = board.copyCells();
         for (int col = 3; col <= 6; col++) assertTrue(cells[0][col] != Board.EMPTY);
     }
@@ -74,9 +75,9 @@ public class SpawnAndRotationTest {
     @Test
     void Spawn_칸이_막혀_있으면_유효하지_않다() { // SPN-4
         Board board = new Board();
-        Block cell = new Block(new int[][] {{1}}) {};
-        cell.setPosition(0, 4);
-        board.TryPlaceBlock(cell);
+        Block blocker = cell();
+        blocker.setPosition(0, 4);
+        board.tryPlaceBlock(blocker);
 
         Block t = new TBlock();
         assertFalse(board.canPlace(t, spawn.getSpawnRow(t), spawn.getSpawnColumn(t)));
