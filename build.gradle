@@ -26,6 +26,13 @@ test {
     finalizedBy jacocoTestReport
 }
 
+jacocoTestReport {
+    reports {
+        xml.required = true   // CI가 커버리지 수치를 읽는 용도
+        html.required = true
+    }
+}
+
 if (providers.gradleProperty('skipCoverage').isPresent()) {
     test.jacoco.enabled = false
     jacocoTestReport.enabled = false
