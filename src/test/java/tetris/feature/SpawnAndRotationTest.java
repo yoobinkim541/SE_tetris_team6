@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static tetris.feature.GameTestSupport.sequence;
+import static tetris.feature.GameTestSupport.startedSession;
 
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -139,6 +140,66 @@ public class SpawnAndRotationTest {
         assertEquals("....t.....", AsciiBoard.row(s, 0));
         assertEquals(BlockType.S, s.nextBlock().getType());
         assertEquals(1, s.level());
+    }
+    //#endregion
+
+    //#region 회전
+    private static String row(GameSession session, int row) {
+        return AsciiBoard.row(session.snapshot(), row);
+    }
+
+    @Test
+    void T를_시계방향으로_90도_돌린다() { // ROT-2 (앵커 고정)
+        GameSession session = startedSession(new TBlock(), new OBlock());
+        session.rotateRight();
+        assertEquals("....t.....", row(session, 0));
+        assertEquals("....tt....", row(session, 1));
+        assertEquals("....t.....", row(session, 2));
+        assertEquals(1, session.snapshot().currentBlock().getRotation());
+    }
+
+    @Test
+    void 네_번_돌리면_원래_모양과_회전_상태로() { // ROT-2
+        GameSession session = startedSession(new TBlock(), new OBlock());
+        for (int i = 0; i < 4; i++) session.rotateRight();
+        assertEquals("....t.....", row(session, 0));
+        assertEquals("...ttt....", row(session, 1));
+        assertEquals(0, session.snapshot().currentBlock().getRotation());
+    }
+
+    @Test
+    void O는_돌려도_모양과_위치가_그대로() { // ROT-4
+        GameSession session = startedSession(new OBlock(), new TBlock());
+        session.rotateRight();
+        assertEquals("....oo....", row(session, 0));
+        assertEquals("....oo....", row(session, 1));
+    }
+
+    @Test
+    void Spawn_직후_I는_숨은_줄에_걸쳐_세로로_선다() {
+        GameSession session = startedSession(new IBlock(), new OBlock());
+        session.rotateRight();
+        assertEquals(":::::i::::", row(session, -1));
+        assertEquals(".....i....", row(session, 0));
+        assertEquals(".....i....", row(session, 2));
+        assertEquals("..........", row(session, 3));
+    }
+
+    @Test
+    void 오른쪽_벽의_세로_I는_회전에_실패하고_그대로() { // ROT-3, ROT-6 (세로 I 앵커 col 7)
+        RecordingListener listener = new RecordingListener();
+        GameSession session = new GameSession(sequence(new IBlock(), new OBlock()), new RecordingClock(), listener);
+        session.start();
+        session.rotateRight();
+        for (int i = 0; i < 4; i++) session.moveRight();   // 세로 막대 col 5 -> 9
+        assertEquals(7, session.snapshot().currentBlock().getCol());
+        int notified = listener.changed.size();
+
+        session.rotateRight();
+
+        assertEquals(".........i", row(session, 0));
+        assertEquals(1, session.snapshot().currentBlock().getRotation());
+        assertEquals(notified, listener.changed.size());
     }
     //#endregion
 }

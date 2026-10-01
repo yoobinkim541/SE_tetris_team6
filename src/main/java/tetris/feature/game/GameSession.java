@@ -86,8 +86,10 @@ public class GameSession {
         descendOrLock();
     }
 
+    /** 실패하면 모양·위치·회전 상태를 바꾸지 않는다 (ROT-3) */
     public void rotateRight() {
-        // 시계방향 회전 (RotationPolicy). 실패는 무시
+        if (state != GameState.PLAYING) return;
+        if (rotationPolicy.rotate(board, currentBlock)) listener.onChanged(snapshot());
     }
 
     public void hardDrop() {
