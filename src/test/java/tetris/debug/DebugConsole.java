@@ -15,7 +15,7 @@ import tetris.feature.rule.RandomBlockGenerator;
  * 보드는 리스너가 아니라 명령이 끝날 때마다 한 번 출력한다 (여러 칸 낙하 중간 그림으로 화면이 넘치지 않도록).
  */
 public final class DebugConsole {
-    private static final String COMMANDS = "[t] 한 칸 낙하  [t N] N칸  [f] 바닥까지  [Enter] 새 게임  [q] 종료";
+    private static final String COMMANDS = "[a/d] 좌우  [s] Soft Drop  [w] 회전  [t] 한 칸 낙하  [t N] N칸  [f] 바닥까지  [Enter] 새 게임  [q] 종료";
     private static final int MAX_TICKS = 100; // f 명령이 끝나지 않는 경우 대비
 
     public static void main(String[] args) {
@@ -48,6 +48,10 @@ public final class DebugConsole {
                 for (int i = 0; i < times; i++) session.tick();
             }
             case "f" -> fallToBottom(session);
+            case "a" -> session.moveLeft();
+            case "d" -> session.moveRight();
+            case "s" -> session.moveDown();
+            case "w" -> session.rotateRight();
             default -> {
                 return false;
             }
