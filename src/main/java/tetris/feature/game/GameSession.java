@@ -183,8 +183,8 @@ public class GameSession {
 
     private void spawnNextBlock() {
         Block block = nextQueue.pop();                                             // S1
-        int row = spawnPolicy.row(block);
-        int col = spawnPolicy.column(block);
+        int row = spawnPolicy.getSpawnRow(block);
+        int col = spawnPolicy.getSpawnColumn(block);
         if (!board.canPlace(block, row, col)) {                                    // S2
             gameOver(); // SPN-4: 블록을 놓지 않고 카운터·Level·타이머도 바꾸지 않는다
             return;
