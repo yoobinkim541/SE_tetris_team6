@@ -32,19 +32,36 @@ class BoardTest {
     }
 
     @Test
-    void positionsAboveOrOutsideTheBoardAreInvalid() {
+    void positionsOutsideTheBoardAreInvalid() {
         Board board = new Board();
         Block cell = new Block(new int[][] {{1}}) {};
-        assertFalse(board.canPlace(cell, -1, 0));
-        assertFalse(board.canPlace(cell, 0, -1));
-        assertFalse(board.canPlace(cell, 0, 10));
-        assertFalse(board.canPlace(cell, 20, 0));
+        assertFalse(board.canPlace(cell, 0, -1));                    // 왼쪽 벽
+        assertFalse(board.canPlace(cell, 0, Board.WIDTH));           // 오른쪽 벽
+        assertFalse(board.canPlace(cell, Board.HEIGHT, 0));          // 바닥 벽
+        assertFalse(board.canPlace(cell, -Board.MARGIN - 1, 0));     // 숨은 줄보다 위
         assertTrue(board.canPlace(cell, 0, 0));
-        assertTrue(board.canPlace(cell, 19, 9));
+        assertTrue(board.canPlace(cell, Board.HEIGHT - 1, Board.WIDTH - 1));
+    }
+
+    @Test
+    void hiddenRowsAboveTheVisibleAreaAreValid() {
+        Board board = new Board();
+        Block cell = new Block(new int[][] {{1}}) {};
+        assertTrue(board.canPlace(cell, -1, 0));
+        assertTrue(board.canPlace(cell, -Board.MARGIN, Board.WIDTH - 1));
+        assertTrue(board.canPlace(new IBlock().rotateRight(), -Board.MARGIN, 3)); // Spawn 직후 세로 I (숨은 줄에 걸침)
+    }
+
+    @Test
+    void copyCellsReturnsOnlyTheVisibleArea() {
+        Board board = new Board();
+        int[][] cells = board.copyCells();
+        assertTrue(cells.length == Board.HEIGHT && cells[0].length == Board.WIDTH);
+        for (int[] row : cells) for (int value : row) assertTrue(value == Board.EMPTY); // 벽(-1)이 섞여 있지 않음
     }
 
     private static void place(Board board, Block block, int row, int col) {
         block.setPosition(row, col);
-        assertTrue(board.placeBlock(block));
+        assertTrue(board.TryPlaceBlock(block));
     }
 }

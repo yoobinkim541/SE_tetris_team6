@@ -4,6 +4,6 @@ package tetris.feature.rule;
 public class ImmediateLockPolicy implements LockPolicy {
     @Override
     public boolean shouldLock(boolean descentFailed) {
-        throw new UnsupportedOperationException("TODO");
+        return descentFailed;
     }
 }

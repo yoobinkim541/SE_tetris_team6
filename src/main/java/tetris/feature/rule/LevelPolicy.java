@@ -5,44 +5,64 @@ package tetris.feature.rule;
  * Level은 줄 삭제(onLinesCleared)와 Spawn(onBlockSpawned)에서만 바뀐다.
  */
 public class LevelPolicy {
+    private static final int BLOCKS_PER_LEVEL = 10;
+    private static final int LINES_PER_LEVEL = 5;
+    private static final int MAX_LINES_AT_ONCE = 4; // CLR-3
+
+    private int level;
+    private int lineCounter;
+    private int blockCounter;
+
     public LevelPolicy() {
-        // Level 1, 카운터 0
+        reset();
     }
 
-    /** 낙하 간격(ms) = max(250, 1200 - 200 * level) */
+    /** LVL-2 */
     public static int fallIntervalMillis(int level) {
-        throw new UnsupportedOperationException("TODO");
+        return Math.max(250, 1200 - 200 * level);
     }
 
-    /** 현재 Level의 낙하 간격(ms) */
     public int fallIntervalMillis() {
-        throw new UnsupportedOperationException("TODO");
+        return fallIntervalMillis(level);
     }
 
-    /** L5: lineCounter += lines, 5 이상이면 Level +1 후 5 차감 */
+    /** L5. 두 카운터는 서로 독립이고 기준값만큼만 차감해 나머지를 유지한다 (LVL-3). lines는 0..4 */
     public void onLinesCleared(int lines) {
-        // 카운터 누적, 기준 도달 시 Level 상승
+        if (lines < 0 || lines > MAX_LINES_AT_ONCE)
+            throw new IllegalArgumentException(String.format("lines should be between %d and %d. Value : %d", 0, MAX_LINES_AT_ONCE, lines));
+
+        lineCounter += lines;
+        if (lineCounter >= LINES_PER_LEVEL) {
+            level++;
+            lineCounter -= LINES_PER_LEVEL;
+        }
     }
 
-    /** S3: blockCounter += 1, 10 이상이면 Level +1 후 10 차감 */
+    /** S3 */
     public void onBlockSpawned() {
-        // 카운터 누적, 기준 도달 시 Level 상승
+        blockCounter++;
+        if (blockCounter >= BLOCKS_PER_LEVEL) {
+            level++;
+            blockCounter -= BLOCKS_PER_LEVEL;
+        }
     }
 
     public int getLevel() {
-        throw new UnsupportedOperationException("TODO");
+        return level;
     }
 
     public int getLineCounter() {
-        throw new UnsupportedOperationException("TODO");
+        return lineCounter;
     }
 
     public int getBlockCounter() {
-        throw new UnsupportedOperationException("TODO");
+        return blockCounter;
     }
 
-    /** 새 게임/Restart: Level 1, 카운터 0 */
+    /** 새 게임/Restart에서만 호출한다 (LVL-4) */
     public void reset() {
-        // 초기화
+        level = 1;
+        lineCounter = 0;
+        blockCounter = 0;
     }
 }

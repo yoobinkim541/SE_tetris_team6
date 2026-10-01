@@ -4,7 +4,8 @@ package tetris.feature.rule;
 public class ScoringPolicy {
     /** 하강 1칸(자동·Soft Drop) 점수 = level */
     public long softDropScore(int level) {
-        throw new UnsupportedOperationException("TODO");
+        if (level < 1) throw new IllegalArgumentException("level should be 1 or more. Value : " + level);
+        return level;
     }
 
     /** Hard Drop 점수 = cells × level */
