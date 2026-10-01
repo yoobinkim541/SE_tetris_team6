@@ -2,6 +2,7 @@ package tetris.debug;
 
 import java.util.Random;
 import java.util.Scanner;
+import tetris.component.block.Block;
 import tetris.feature.game.GameClock;
 import tetris.feature.game.GameListener;
 import tetris.feature.game.GameSession;
@@ -15,7 +16,7 @@ import tetris.feature.rule.RandomBlockGenerator;
  * 보드는 리스너가 아니라 명령이 끝날 때마다 한 번 출력한다 (여러 칸 낙하 중간 그림으로 화면이 넘치지 않도록).
  */
 public final class DebugConsole {
-    private static final String COMMANDS = "[a/d] 좌우  [s] Soft Drop  [w] 회전  [t] 한 칸 낙하  [t N] N칸  [f] 바닥까지  [Enter] 새 게임  [q] 종료";
+    private static final String COMMANDS = "[a/d] 좌우  [s] Soft Drop  [w] 회전  [t] 한 칸 낙하  [t N] N칸  [f] 착지해 고정될 때까지  [Enter] 새 게임  [q] 종료";
     private static final int MAX_TICKS = 100; // f 명령이 끝나지 않는 경우 대비
 
     public static void main(String[] args) {
@@ -60,12 +61,16 @@ public final class DebugConsole {
         return true;
     }
 
-    // 하강이 실패해 앵커가 더 이상 바뀌지 않을 때까지 tick
+    // 하강이 실패할 때까지 tick. 실패한 tick에서 Lock과 다음 Spawn이 일어나므로, 한 칸 내려간 게 아니면 멈춘다
     private static void fallToBottom(GameSession session) {
         for (int i = 0; i < MAX_TICKS; i++) {
-            int before = session.snapshot().currentBlock().getRow();
+            Block before = session.snapshot().currentBlock();
+            if (before == null) return;
             session.tick();
-            if (session.snapshot().currentBlock() == null || session.snapshot().currentBlock().getRow() == before) return;
+            Block after = session.snapshot().currentBlock();
+            boolean descended = after != null && after.getType() == before.getType()
+                    && after.getRow() == before.getRow() + 1 && after.getCol() == before.getCol();
+            if (!descended) return;
         }
     }
 

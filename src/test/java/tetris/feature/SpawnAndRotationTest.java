@@ -3,6 +3,7 @@ package tetris.feature;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static tetris.feature.GameTestSupport.cell;
 import static tetris.feature.GameTestSupport.sequence;
 import static tetris.feature.GameTestSupport.startedSession;
 
@@ -39,7 +40,7 @@ public class SpawnAndRotationTest {
     void Spawn_열은_I_J_L_S_T_Z가_3_O가_4() { // SPN-1
         for (Block block : allBlocks()) {
             int expected = block instanceof OBlock ? 4 : 3;
-            assertEquals(expected, spawn.column(block));
+            assertEquals(expected, spawn.getSpawnColumn(block));
         }
     }
 
@@ -47,7 +48,7 @@ public class SpawnAndRotationTest {
     void Spawn_행은_I만_마이너스1_나머지는_0() { // SPN-1 (가장 높은 칸 기준)
         for (Block block : allBlocks()) {
             int expected = block instanceof IBlock ? -1 : 0;
-            assertEquals(expected, spawn.row(block));
+            assertEquals(expected, spawn.getSpawnRow(block));
         }
     }
 
@@ -55,7 +56,7 @@ public class SpawnAndRotationTest {
     void 빈_보드에서는_7종_모두_Spawn_위치가_유효() {
         Board board = new Board();
         for (Block block : allBlocks()) {
-            assertTrue(board.canPlace(block, spawn.row(block), spawn.column(block)));
+            assertTrue(board.canPlace(block, spawn.getSpawnRow(block), spawn.getSpawnColumn(block)));
         }
     }
 
@@ -63,10 +64,10 @@ public class SpawnAndRotationTest {
     void Spawn한_I는_맨_윗줄에_보이고_바로_회전할_수_있다() {
         Board board = new Board();
         Block i = new IBlock();
-        i.setPosition(spawn.row(i), spawn.column(i));
+        i.setPosition(spawn.getSpawnRow(i), spawn.getSpawnColumn(i));
         assertTrue(board.canPlace(i.rotateRight(), i.getRow(), i.getCol()));
 
-        board.TryPlaceBlock(i);
+        board.tryPlaceBlock(i);
         int[][] cells = board.copyCells();
         for (int col = 3; col <= 6; col++) assertTrue(cells[0][col] != Board.EMPTY);
     }
@@ -74,12 +75,12 @@ public class SpawnAndRotationTest {
     @Test
     void Spawn_칸이_막혀_있으면_유효하지_않다() { // SPN-4
         Board board = new Board();
-        Block cell = new Block(new int[][] {{1}}) {};
-        cell.setPosition(0, 4);
-        board.TryPlaceBlock(cell);
+        Block blocker = cell();
+        blocker.setPosition(0, 4);
+        board.tryPlaceBlock(blocker);
 
         Block t = new TBlock();
-        assertFalse(board.canPlace(t, spawn.row(t), spawn.column(t)));
+        assertFalse(board.canPlace(t, spawn.getSpawnRow(t), spawn.getSpawnColumn(t)));
     }
     //#endregion
 

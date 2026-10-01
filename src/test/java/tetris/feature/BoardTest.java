@@ -1,10 +1,13 @@
 package tetris.feature;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.Arrays;
 import org.junit.jupiter.api.Test;
 import tetris.component.block.Block;
+import tetris.component.block.BlockType;
 import tetris.component.block.IBlock;
 import tetris.component.block.JBlock;
 import tetris.component.block.OBlock;
@@ -60,8 +63,31 @@ class BoardTest {
         for (int[] row : cells) for (int value : row) assertTrue(value == Board.EMPTY); // 벽(-1)이 섞여 있지 않음
     }
 
+    @Test
+    void placeBlockRecordsTheBlockTypeValue() { // LCK-4
+        Board board = new Board();
+        place(board, new OBlock(), 18, 0);
+        place(board, new IBlock(), 18, 4);
+
+        int[][] cells = board.copyCells();
+        assertEquals(BlockType.O.cellValue(), cells[19][0]);
+        assertEquals(BlockType.I.cellValue(), cells[19][4]);
+    }
+
+    @Test
+    void placeBlockOnAnOccupiedCellChangesNothing() {
+        Board board = new Board();
+        place(board, new OBlock(), 18, 0);
+        int[][] before = board.copyCells();
+
+        Block overlapping = new IBlock();
+        overlapping.setPosition(18, 0);
+        assertFalse(board.tryPlaceBlock(overlapping));
+        assertTrue(Arrays.deepEquals(before, board.copyCells()));
+    }
+
     private static void place(Board board, Block block, int row, int col) {
         block.setPosition(row, col);
-        assertTrue(board.TryPlaceBlock(block));
+        assertTrue(board.tryPlaceBlock(block));
     }
 }
