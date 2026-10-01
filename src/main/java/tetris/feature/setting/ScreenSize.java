@@ -15,7 +15,8 @@ public enum ScreenSize {
     }
 
     /** Small -> Medium -> Large -> Small 순환 */
-    public ScreenSize next() {
-        throw new UnsupportedOperationException("TODO");
+    public ScreenSize getNextSize() {
+        ScreenSize[] sizes = values();
+        return sizes[(ordinal() + 1) % sizes.length];
     }
 }
