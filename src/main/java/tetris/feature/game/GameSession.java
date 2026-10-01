@@ -71,15 +71,19 @@ public class GameSession {
 
     // ── 조작 (PLAYING에서만 유효, 실패는 무시) ──
     public void moveLeft() {
-        // 왼쪽 1칸. 불가하면 무시, 점수 0
+        if (state != GameState.PLAYING) return;
+        shift(-1);
     }
 
     public void moveRight() {
-        // 오른쪽 1칸. 불가하면 무시, 점수 0
+        if (state != GameState.PLAYING) return;
+        shift(1);
     }
 
+    /** Soft Drop: 자동 낙하와 같은 하강 시도. 낙하 타이머는 리셋하지 않는다 (TMR-4) */
     public void moveDown() {
-        // Soft Drop: 1칸 하강 시도 (성공 +Level, 실패 Lock)
+        if (state != GameState.PLAYING) return;
+        descendOrLock();
     }
 
     public void rotateRight() {
@@ -90,13 +94,10 @@ public class GameSession {
         // board.getDropDistance(currentBlock)만큼 이동 -> +칸수 x Level -> 즉시 Lock
     }
 
-    /** 자동 낙하 1회 = 하강 시도 (§3.1). 실패하면 LockPolicy 판단으로 Lock. PLAYING이 아니면 무시 (TMR-2) */
+    /** 자동 낙하 1회 = 하강 시도 (§3.1). PLAYING이 아니면 무시 (TMR-2) */
     public void tick() {
         if (state != GameState.PLAYING) return;
-
-        boolean descended = tryDescend();
-        if (lockPolicy.shouldLock(!descended)) lockCurrentBlock();
-        if (state == GameState.PLAYING) listener.onChanged(snapshot());
+        descendOrLock();
     }
 
     // ── Pause / Quit ─────────────────────────
@@ -145,6 +146,23 @@ public class GameSession {
     }
 
     // ── 명세 4장 파이프라인 (내부) ────────────
+    // 좌우 이동. 실패하면 아무것도 바꾸지 않고 알리지도 않는다 (§3.1)
+    private void shift(int deltaCol) {
+        int row = currentBlock.getRow();
+        int col = currentBlock.getCol() + deltaCol;
+        if (!board.canPlace(currentBlock, row, col)) return;
+
+        currentBlock.setPosition(row, col);
+        listener.onChanged(snapshot());
+    }
+
+    // Tick과 Soft Drop 공통. 하강에 실패하면 LockPolicy 판단으로 Lock
+    private void descendOrLock() {
+        boolean descended = tryDescend();
+        if (lockPolicy.shouldLock(!descended)) lockCurrentBlock();
+        if (state == GameState.PLAYING) listener.onChanged(snapshot());
+    }
+
     /** 성공하면 한 칸 내리고 +Level (SCR-1). 실패하면 아무것도 바꾸지 않는다 (SCR-4) */
     private boolean tryDescend() {
         int row = currentBlock.getRow() + 1;
