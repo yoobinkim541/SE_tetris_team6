@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+  pull-requests: write   # PR 댓글 작성용
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # gradlew가 저장소에 없으므로 Gradle을 직접 설치한다 (wrapper를 추가하면 gradle-version 줄과 gradle 명령을 ./gradlew로 교체)
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
+
+      - name: Test
+        run: gradle test --no-daemon
+
+      # 실행 결과 요약(테스트 수·커버리지 %)을 summary.md로 만들어 Actions Summary와 PR 댓글에 쓴다
+      - name: Summary (tests and coverage)
+        if: always()
+        run: |
+          python3 - <<'EOF' > summary.md
+          import glob, xml.etree.ElementTree as ET
+
+          total = failed = skipped = 0
+          rows = []
+          for path in sorted(glob.glob('build/test-results/test/*.xml')):
+              s = ET.parse(path).getroot()
+              t, f, e, k = (int(s.get(a)) for a in ('tests', 'failures', 'errors', 'skipped'))
+              total += t; failed += f + e; skipped += k
+              rows.append((s.get('name').split('.')[-1], t, f + e, k))
+
+          print('## Test results')
+          print(f'**{total - failed - skipped} passed / {failed} failed / {skipped} skipped (total {total})**\n')
+          print('| Test class | Tests | Failed | Skipped |')
+          print('|---|---|---|---|')
+          for name, t, f, k in rows:
+              print(f'| {name} | {t} | {f} | {k} |')
+
+          print('\n## Coverage (JaCoCo)')
+          try:
+              root = ET.parse('build/reports/jacoco/test/jacocoTestReport.xml').getroot()
+              print('| Metric | Covered | Total | % |')
+              print('|---|---|---|---|')
+              for c in root.findall('counter'):
+                  cov, miss = int(c.get('covered')), int(c.get('missed'))
+                  print(f"| {c.get('type')} | {cov} | {cov + miss} | {100 * cov / (cov + miss):.1f}% |")
+          except FileNotFoundError:
+              print('Coverage report not found.')
+          EOF
+          cat summary.md >> "$GITHUB_STEP_SUMMARY"
+
+      # PR이면 같은 댓글을 갱신하고, 없으면 새로 만든다 (fork PR은 토큰이 읽기 전용이라 실패해도 CI는 막지 않는다)
+      - name: Comment on PR
+        if: always() && github.event_name == 'pull_request'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh pr comment "${{ github.event.pull_request.number }}" --body-file summary.md --edit-last --create-if-none
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: build/reports/tests/test
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report
+          path: build/reports/jacoco/test/html
