@@ -573,7 +573,6 @@ src/test/java/tetris/feature/
 | `getSpawnColumn(block)` | Spawn 앵커 열 `⌊(10−n)/2⌋` (SPN-1) | 시그니처 |
 | `placeAtSpawn(block)` | Spawn 위치(row 0, rotation 0)에 놓기. 충돌이면 false = Game Over (SPN-3, SPN-4) | 시그니처 |
 | `getDropDistance(block)` | Hard Drop 거리 | 시그니처 |
-| `getCell(row, col)` | 한 칸 조회 | 시그니처 |
 | `copyCells()` | 20x10 복사본 (UI/스냅샷용) | 시그니처 |
 
 내부 배열은 상하좌우로 `Board.MARGIN`(2)칸씩 늘린 24x14다(위: 빈 숨은 줄, 아래·좌우: 벽 `-1`). 논리 좌표 → 배열 인덱스 변환은 Board 안에서만 한다. 이전 이름(`CanPlace`, `PlaceBlock`, `GetFullRowCount`, `ClearLines`)은 위 이름으로 바꿨다.
