@@ -1,6 +1,7 @@
 package tetris.feature;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
@@ -12,6 +13,7 @@ import tetris.feature.GameTestSupport.RecordingListener;
 import tetris.feature.game.GameSession;
 import tetris.feature.game.GameSnapshot;
 import tetris.feature.game.GameState;
+import tetris.feature.rule.BlockGenerator;
 
 /** PAU-1~3, RST-1, QIT-1, TMR-3, GameState 전이표 (정지 중 tick 무시, Resume 타이머 재시작, Restart 초기화, Quit 저장 안 함) */
 public class GameSessionFlowTest {
@@ -233,6 +235,49 @@ public class GameSessionFlowTest {
         session.pause();
 
         assertEquals(GameState.ENDED, session.getState());
+    }
+    //#endregion
+
+    //#region 생성자·보호 조건
+    @Test
+    void 생성자에_null을_넘기면_예외() {
+        BlockGenerator generator = GameTestSupport.sequence(new OBlock());
+
+        assertThrows(IllegalArgumentException.class, () -> new GameSession(null, clock, listener));
+        assertThrows(IllegalArgumentException.class, () -> new GameSession(generator, null, listener));
+        assertThrows(IllegalArgumentException.class, () -> new GameSession(generator, clock, null));
+    }
+
+    @Test
+    void end를_두_번_불러도_한_번만_처리한다() {
+        GameSession session = newSession();
+        session.end();
+        int stops = clock.stops;
+        session.end();
+
+        assertEquals(stops, clock.stops);
+        assertEquals(GameState.ENDED, session.getState());
+    }
+
+    @Test
+    void 확인창이_이미_떠_있으면_requestQuit을_다시_불러도_무시된다() {
+        GameSession session = newSession();
+        session.requestQuit();
+        int stops = clock.stops;
+        session.requestQuit();
+        session.cancelQuit(); // 처음 requestQuit 기준으로 한 번만 복귀
+
+        assertEquals(stops, clock.stops);
+        assertEquals(GameState.PLAYING, session.getState());
+    }
+
+    @Test
+    void 시작_전_LOADING_상태에서는_requestQuit이_무시된다() {
+        GameSession session = new GameSession(GameTestSupport.sequence(new OBlock()), clock, listener);
+        session.requestQuit();
+        session.confirmQuit();
+
+        assertEquals(GameState.LOADING, session.getState());
     }
     //#endregion
 }

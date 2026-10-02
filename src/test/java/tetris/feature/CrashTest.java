@@ -165,4 +165,16 @@ public class CrashTest {
         assertEquals(ROWS - 2, dropToBottom(at(new IBlock(), 0, 3)));
     }
     //#endregion
+
+    //#region CanPlace(Block)
+    @Test
+    void CanPlace는_블록의_현재_위치로_판정한다() {
+        Block block = at(new OBlock(), 0, 3);
+        assertEquals(CrashDetector.CanPlace(board, block.getShape(), 0, 3), CrashDetector.CanPlace(board, block));
+
+        block.setPosition(ROWS, 3); // 보드 아래 밖
+        assertEquals(CrashDetector.CanPlace(board, block.getShape(), ROWS, 3), CrashDetector.CanPlace(board, block));
+        assertFalse(CrashDetector.CanPlace(board, block));
+    }
+    //#endregion
 }
