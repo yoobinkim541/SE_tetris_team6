@@ -1,6 +1,7 @@
 package tetris.feature;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -72,6 +73,12 @@ public class BlockGenerationTest {
     void Random이_null이면_예외() {
         assertThrows(IllegalArgumentException.class, () -> new RandomBlockGenerator(null));
     }
+
+    @Test
+    void 기본_생성자로도_블록을_만든다() {
+        assertNotNull(new RandomBlockGenerator().next());
+    }
+
     //#endregion
 
     //#region NextBlockQueue
