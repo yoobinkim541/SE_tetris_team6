@@ -28,6 +28,8 @@ public class GameSession {
     private GameState state = GameState.LOADING;
     private long score;
     private int lines; // 누적 삭제 줄 (표시용)
+    private boolean quitPending;                  // Quit 확인창이 떠 있는 동안 true
+    private GameState stateBeforeQuit;            // 확인창을 띄우기 전 상태 (No 선택 시 복귀용)
 
     private final SpawnPolicy spawnPolicy = new SpawnPolicy();
     private final RotationPolicy rotationPolicy = new BasicRotationPolicy();
@@ -56,18 +58,28 @@ public class GameSession {
         levelPolicy.reset();
         nextQueue = new NextBlockQueue(generator, PREVIEW_COUNT);
         currentBlock = null;
+        quitPending = false;
+        stateBeforeQuit = null;
 
         state = GameState.PLAYING; // Spawn 충돌 시 PLAYING -> GAME_OVER 전이가 되도록 먼저 전환
         spawnNextBlock();
         if (state == GameState.PLAYING) listener.onChanged(snapshot());
     }
 
+    /** PAUSED -> LOADING -> 새 세션 (RST-1). 점수는 저장하지 않는다. Pause 메뉴에서만 가능 */
     public void restart() {
-        // PAUSED -> LOADING -> 새 세션 (RST-1). 점수는 저장하지 않음
+        if (state != GameState.PAUSED || quitPending) return;
+        start();
     }
 
+    /** -> ENDED. 타이머 정지, 세션 폐기. 이미 ENDED이면 무시 */
     public void end() {
-        // -> ENDED. 타이머 정지, 세션 폐기
+        if (state == GameState.ENDED) return;
+        clock.stop();
+        currentBlock = null;
+        quitPending = false;
+        stateBeforeQuit = null;
+        state = GameState.ENDED;
     }
 
     // ── 조작 (PLAYING에서만 유효, 실패는 무시) ──
@@ -93,19 +105,17 @@ public class GameSession {
         if (rotationPolicy.rotate(board, currentBlock)) listener.onChanged(snapshot());
     }
 
+    /** 내려갈 수 있는 만큼 한 번에 내리고 +칸수 x Level (SCR-2) 후 즉시 Lock. 점수는 Level이 바뀔 수 있는 Lock 전에 더한다 */
     public void hardDrop() {
-        // board.getDropDistance(currentBlock)만큼 이동 -> +칸수 x Level -> 즉시 Lock
-        if(state != GameState.PLAYING) return;
+        if (state != GameState.PLAYING) return;
 
-        int dist = board.getDropDistance(currentBlock);
-        currentBlock.setPosition(currentBlock.getRow() + dist, currentBlock.getCol());
+        int distance = board.getDropDistance(currentBlock);
+        currentBlock.setPosition(currentBlock.getRow() + distance, currentBlock.getCol());
+        score += scoringPolicy.hardDropScore(distance, levelPolicy.getLevel());
+
         lockCurrentBlock();
-        listener.onChanged(snapshot());
-        
-        score += scoringPolicy.hardDropScore(dist,levelPolicy.getLevel());
-        
+        if (state == GameState.PLAYING) listener.onChanged(snapshot());
     }
-
 
     /** 자동 낙하 1회 = 하강 시도 (§3.1). PLAYING이 아니면 무시 (TMR-2) */
     public void tick() {
@@ -114,32 +124,55 @@ public class GameSession {
     }
 
     // ── Pause / Quit ─────────────────────────
+    /** PLAYING -> PAUSED, 타이머 정지 (PAU-1) */
     public void pause() {
-        // PLAYING -> PAUSED, 타이머 정지
+        if (state != GameState.PLAYING) return;
+        clock.stop();
+        state = GameState.PAUSED;
+        listener.onChanged(snapshot());
     }
 
+    /** PAUSED -> PLAYING, 타이머를 전체 간격으로 재시작 (TMR-3). Quit 확인창이 떠 있으면 무시 */
     public void resume() {
-        // PAUSED -> PLAYING, 타이머를 전체 간격으로 재시작 (TMR-3)
+        if (state != GameState.PAUSED || quitPending) return;
+        state = GameState.PLAYING;
+        clock.start(levelPolicy.fallIntervalMillis());
+        listener.onChanged(snapshot());
     }
 
+    /** Pause 키: PLAYING이면 pause(), PAUSED면 resume(). 그 외 상태는 무시 */
     public void togglePause() {
-        // Pause 키: PLAYING이면 pause(), PAUSED면 resume(). 그 외 상태는 무시 (KEY: Pause 키는 최초 눌림만)
+        if (state == GameState.PLAYING) pause();
+        else if (state == GameState.PAUSED) resume();
     }
 
+    /** Quit 키: 확인창 동안 게임 정지 (QIT-1). PLAYING·PAUSED에서만 유효 */
     public void requestQuit() {
-        // Quit 키: 확인창 동안 게임 정지 (QIT-1)
+        if (quitPending) return;
+        if (state != GameState.PLAYING && state != GameState.PAUSED) return;
+        stateBeforeQuit = state;
+        quitPending = true;
+        pause();
     }
 
+    /** Quit 확인 Yes: 세션 폐기 -> ENDED (점수는 저장하지 않음) */
     public void confirmQuit() {
-        // Quit 확인 Yes: 세션 폐기 -> ENDED (점수는 저장하지 않음)
+        if (!quitPending) return;
+        end();
     }
 
+    /** Quit 확인 No: Quit 키를 누르기 전 상태로 복귀. PLAYING이었다면 타이머를 전체 간격으로 재시작 (TMR-3) */
     public void cancelQuit() {
-        // Quit 확인 No: 이전 상태로 복귀
+        if (!quitPending) return;
+        quitPending = false;
+        GameState previous = stateBeforeQuit;
+        stateBeforeQuit = null;
+        if (previous == GameState.PLAYING) resume();
     }
 
+    /** 창 포커스 이탈: PLAYING이면 자동 Pause (PAU-3) */
     public void onFocusLost() {
-        // 창 포커스 이탈: PLAYING이면 자동 Pause (PAU-3)
+        pause();
     }
 
     // ── 조회 ─────────────────────────────────

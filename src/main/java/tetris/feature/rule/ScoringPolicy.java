@@ -10,7 +10,9 @@ public class ScoringPolicy {
 
     /** Hard Drop 점수 = cells × level */
     public long hardDropScore(int cells, int level) {
-        throw new UnsupportedOperationException("TODO");
+        if (cells < 0) throw new IllegalArgumentException("cells should be 0 or more. Value : " + cells);
+        if (level < 1) throw new IllegalArgumentException("level should be 1 or more. Value : " + level);
+        return (long) cells * level;
     }
 
     /** 줄 삭제 보너스: 1줄 100, 2줄 300, 3줄 500, 4줄 800, 0줄 0 (Level 무관) */

@@ -17,6 +17,18 @@ public class ScoringPolicyTest {
     }
 
     @Test
+    void 하드_드롭은_이동한_칸수_곱하기_Level() { // SCR-2
+        assertEquals(0L, scoring.hardDropScore(0, 5));
+        assertEquals(24L, scoring.hardDropScore(8, 3));
+    }
+
+    @Test
+    void 하드_드롭_입력이_범위를_벗어나면_예외() {
+        assertThrows(IllegalArgumentException.class, () -> scoring.hardDropScore(-1, 1));
+        assertThrows(IllegalArgumentException.class, () -> scoring.hardDropScore(1, 0));
+    }
+
+    @Test
     void 줄_삭제_보너스는_Level과_무관하게_100_300_500_800() { // SCR-3
         assertEquals(0L, scoring.lineClearBonus(0));
         assertEquals(100L, scoring.lineClearBonus(1));
