@@ -6,6 +6,6 @@ public enum GameAction {
 
     /** 키를 누르고 있을 때 반복 처리되는지 (좌/우/Soft Drop만 true. 명세 7.3) */
     public boolean isRepeatable() {
-        throw new UnsupportedOperationException("TODO");
+        return this == MOVE_LEFT || this == MOVE_RIGHT || this == SOFT_DROP;
     }
 }
