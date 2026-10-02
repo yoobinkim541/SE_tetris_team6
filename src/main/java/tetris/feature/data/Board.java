@@ -126,12 +126,16 @@ public class Board {
 
     /** Hard Drop 거리:블록을 아래로 몇 칸 내릴 수 있는지 (0 이상). 상태를 바꾸지 않는다 */
     public int getDropDistance(Block block) {
-        throw new UnsupportedOperationException("TODO");
-    }
 
-    /** 한 칸의 값 (0..7). 범위 밖이면 IllegalArgumentException */
-    public int getCell(int row, int col) {
-        throw new UnsupportedOperationException("TODO");
+        if(block == null) throw new IllegalArgumentException("block can not be null");
+
+        int cnt = 0;
+        while(true) {
+            if(!canPlace(block,block.getRow() + cnt + 1,block.getCol())) break;
+            cnt++;
+        }
+        return cnt;
+
     }
 
     /** UI/스냅샷용 보이는 영역 20x10 복사본 (숨은 줄·벽 제외). 수정해도 게임에 영향이 없다 */

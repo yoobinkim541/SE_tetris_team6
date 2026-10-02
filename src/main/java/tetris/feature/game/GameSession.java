@@ -95,7 +95,17 @@ public class GameSession {
 
     public void hardDrop() {
         // board.getDropDistance(currentBlock)만큼 이동 -> +칸수 x Level -> 즉시 Lock
+        if(state != GameState.PLAYING) return;
+
+        int dist = board.getDropDistance(currentBlock);
+        currentBlock.setPosition(currentBlock.getRow() + dist, currentBlock.getCol());
+        lockCurrentBlock();
+        listener.onChanged(snapshot());
+        
+        score += scoringPolicy.hardDropScore(dist,levelPolicy.getLevel());
+        
     }
+
 
     /** 자동 낙하 1회 = 하강 시도 (§3.1). PLAYING이 아니면 무시 (TMR-2) */
     public void tick() {

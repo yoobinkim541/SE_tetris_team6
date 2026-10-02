@@ -3,6 +3,7 @@ package tetris.feature;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import java.util.Arrays;
 import org.junit.jupiter.api.Test;
@@ -84,6 +85,56 @@ class BoardTest {
         overlapping.setPosition(18, 0);
         assertFalse(board.tryPlaceBlock(overlapping));
         assertTrue(Arrays.deepEquals(before, board.copyCells()));
+    }
+
+    @Test
+    void dropDistanceOnEmptyBoardIsDistanceToFloor() {
+        Board board = new Board();
+        Block block = new OBlock();
+        block.setPosition(0, 4);
+        assertEquals(18, board.getDropDistance(block)); // O는 2칸 높이: 앵커 row 0 -> 18(18·19행)까지 18칸
+    }
+
+    @Test
+    void dropDistanceIsZeroWhenBlockIsOnTheFloor() {
+        Board board = new Board();
+        Block block = new OBlock();
+        block.setPosition(Board.HEIGHT - 2, 4); // O는 2칸 높이: 앵커 row 18이면 18·19행을 차지해 바닥에 닿음
+        assertEquals(0, board.getDropDistance(block));
+    }
+
+    @Test
+    void dropDistanceStopsOnTopOfStackedBlocks() {
+        Board board = new Board();
+        place(board, new OBlock(), Board.HEIGHT - 2, 0); // 맨 아래 18·19행의 col 0·1을 차지
+        Block block = new OBlock();
+        block.setPosition(0, 0);
+        assertEquals(16, board.getDropDistance(block));  // 앵커 row 16에서 멈춤 (16·17행)
+    }
+
+    @Test
+    void dropDistanceIgnoresStackedBlocksInOtherColumns() {
+        Board board = new Board();
+        place(board, new OBlock(), Board.HEIGHT - 2, 0);
+        Block block = new OBlock();
+        block.setPosition(0, 4);
+        assertEquals(18, board.getDropDistance(block));
+    }
+
+    @Test
+    void dropDistanceDoesNotMoveTheBlock() {
+        Board board = new Board();
+        Block block = new OBlock();
+        block.setPosition(3, 4);
+        board.getDropDistance(block);
+        assertEquals(3, block.getRow());
+        assertEquals(4, block.getCol());
+    }
+
+    @Test
+    void dropDistanceRejectsNullBlock() {
+        Board board = new Board();
+        assertThrows(IllegalArgumentException.class, () -> board.getDropDistance(null));
     }
 
     private static void place(Board board, Block block, int row, int col) {
