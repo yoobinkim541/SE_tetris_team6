@@ -11,7 +11,6 @@ import java.util.List;
  */
 public class Scoreboard {
     public static final int MAX_ENTRIES = 10;
-    private static final int MAX_NAME_LENGTH = 10;
 
     private final List<ScoreEntry> entries = new ArrayList<>();
 
@@ -49,15 +48,6 @@ public class Scoreboard {
     /** Reset Scoreboard: 전체 삭제 */
     public void clear() {
         entries.clear();
-    }
-
-    /** trim 후 1~10자, 한글/영문/숫자와 문자 사이 공백만 허용 */
-    public static boolean isValidName(String name) {
-        if (name == null) return false;
-
-        String trimmed = name.trim();
-        if (trimmed.isEmpty() || trimmed.length() > MAX_NAME_LENGTH) return false;
-        return trimmed.matches("[가-힣ㄱ-ㅎㅏ-ㅣA-Za-z0-9 ]+");
     }
 
     private void trimToMax() {
