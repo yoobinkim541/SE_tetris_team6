@@ -4,6 +4,7 @@
 ## 목차
 1. [Project Overview](#1-project-overview)
 2. [Git Convention](#2-git-convention)
+3. [빌드·실행·배포](#3-빌드실행배포)
 
 
 ---
@@ -84,5 +85,27 @@ data: 반도체 산업 키워드 목록 업데이트
 ## 관련 Issue
 - Closes #
 ```
+
+---
+
+## 3. 빌드·실행·배포
+
+### 요구 환경
+- Windows 11, JDK 21 이상 (개발·빌드용)
+- 배포 패키지로 실행할 때는 JRE가 들어 있어 Java 설치가 필요 없습니다.
+
+### 명령어
+| 목적 | 명령 (Windows) | 결과 |
+|---|---|---|
+| 실행 | `.\gradlew.bat run` | 게임 창 실행 |
+| 테스트 | `.\gradlew.bat test` | 단위·비기능 테스트 + JaCoCo 리포트 (`build/reports/jacoco/test/html`) |
+| 배포 패키지 | `.\gradlew.bat packageApp` | `build/distributions/SE-Tetris-windows.zip` |
+
+배포 zip을 풀고 `SE Tetris\SE Tetris.exe`를 더블클릭하면 실행됩니다. GitHub Actions의 **Package** 워크플로(`main` 반영, `v*` 태그, 수동 실행)에서도 같은 zip을 아티팩트로 받을 수 있습니다.
+
+### 사용자 데이터
+- 위치: `%APPDATA%\SETetrisTeam6\`
+- `settings.json`: 화면 크기, 색맹 모드, 조작키 / `scoreboard.json`: Top 10 기록
+- 파일 형식과 손상 시 처리: `docs/requirements-spec-v1.2.md` §12
 
 ---

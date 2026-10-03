@@ -248,12 +248,10 @@ public class MainFrame extends JFrame {
         return saveScoreboard();
     }
 
-    // 저장 계층(feature/save)이 아직 구현 전이면 UnsupportedOperationException이 난다. 그동안은 저장을 건너뛴다
+    // 저장 중 예상 못 한 예외도 실패로 보고 게임은 계속한다 (SET-4)
     private boolean saveSettings() {
         try {
             return settingsRepository.save(settings);
-        } catch (UnsupportedOperationException e) {
-            return true;
         } catch (RuntimeException e) {
             return false;
         }
@@ -262,26 +260,39 @@ public class MainFrame extends JFrame {
     private boolean saveScoreboard() {
         try {
             return scoreboardRepository.save(scoreboard);
-        } catch (UnsupportedOperationException e) {
-            return true;
         } catch (RuntimeException e) {
             return false;
         }
     }
 
-    // 사용 가능한 화면(작업 표시줄 제외)에 창이 들어가는 가장 큰 셀 크기. 설정값은 바꾸지 않는다
+    // 사용 가능한 화면(작업 표시줄 제외)에 맞춘 실제 셀 크기. 설정값은 바꾸지 않는다 (RND-3)
     private int fitCellSize(int desired) {
         if (!isDisplayable()) pack(); // 창 테두리 크기(insets)는 pack 이후에 알 수 있다
         Insets insets = getInsets();
         Rectangle available = GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
-        int cell = desired;
+        int largestFit = largestFittingCell(available.width - insets.left - insets.right,
+                available.height - insets.top - insets.bottom);
+        return scaledCellSize(desired, largestFit);
+    }
+
+    /** 주어진 공간(창 테두리 제외)에 게임 화면이 들어가는 가장 큰 셀 크기. Large 크기가 상한, MIN_CELL_PIXELS가 하한 */
+    static int largestFittingCell(int width, int height) {
+        int cell = ScreenSize.LARGE.cellPixels();
         while (cell > MIN_CELL_PIXELS) {
             Dimension size = GamePanel.preferredSizeFor(cell);
-            boolean fits = size.width + insets.left + insets.right <= available.width
-                    && size.height + insets.top + insets.bottom <= available.height;
-            if (fits) break;
+            if (size.width <= width && size.height <= height) break;
             cell--;
         }
         return cell;
+    }
+
+    /**
+     * Large가 화면에 들어가면 설정 크기 그대로. 안 들어가면 세 크기를 같은 비율로 줄여 Small &lt; Medium &lt; Large 구분을 유지한다.
+     * (Large만 줄이면 1080p·배율 150% 노트북에서 Large 31 px ≈ Medium 30 px가 되어 크기가 사실상 2가지가 된다)
+     */
+    static int scaledCellSize(int desired, int largestFit) {
+        int largest = ScreenSize.LARGE.cellPixels();
+        if (largestFit >= largest) return desired;
+        return Math.max(MIN_CELL_PIXELS, desired * largestFit / largest);
     }
 }
