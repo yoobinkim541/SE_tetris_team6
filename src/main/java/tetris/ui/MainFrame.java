@@ -248,12 +248,10 @@ public class MainFrame extends JFrame {
         return saveScoreboard();
     }
 
-    // 저장 계층(feature/save)이 아직 구현 전이면 UnsupportedOperationException이 난다. 그동안은 저장을 건너뛴다
+    // 저장 중 예상 못 한 예외도 실패로 보고 게임은 계속한다 (SET-4)
     private boolean saveSettings() {
         try {
             return settingsRepository.save(settings);
-        } catch (UnsupportedOperationException e) {
-            return true;
         } catch (RuntimeException e) {
             return false;
         }
@@ -262,8 +260,6 @@ public class MainFrame extends JFrame {
     private boolean saveScoreboard() {
         try {
             return scoreboardRepository.save(scoreboard);
-        } catch (UnsupportedOperationException e) {
-            return true;
         } catch (RuntimeException e) {
             return false;
         }
