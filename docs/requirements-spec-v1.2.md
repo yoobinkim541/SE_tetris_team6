@@ -690,11 +690,13 @@ Spawn 위치 계산은 Board에서 빠져 `SpawnPolicy.getSpawnRow/getSpawnColum
 - **CI-1** 트리거: Pull Request와 `main` 변경. 단계: Java 21 → Gradle 빌드 → JUnit → 비기능 테스트 → JaCoCo → Line Coverage ≥ 70%. 빌드·테스트·비기능 테스트·커버리지 중 하나라도 실패하면 CI를 실패로 한다. **[확정]** 커버리지 게이트는 `jacocoTestCoverageVerification`(LINE, 최소 0.70)으로 만들고 리포트를 아티팩트로 올린다. **[제안]**
   - **현재 상태 (2026-10-04)**: `.github/workflows/ci.yml`은 `main`·`develop` push와 두 브랜치 대상 PR에서 Java 21 + Gradle 8.10.2로 `gradle test`를 돌리고, 테스트 수·JaCoCo 커버리지 요약을 Actions Summary와 PR 댓글에 남기며, 테스트·커버리지 리포트를 아티팩트로 올린다. **커버리지 70% 게이트(`jacocoTestCoverageVerification`)와 UI 제외 규칙은 아직 없다.** §15.2 확인 후 추가한다.
 - **CD-1** `main` 또는 릴리스 태그에서 `windows-latest` 러너 → Gradle 릴리스 빌드 → `jpackage` → 아티팩트/Release 업로드. **[확정]**
-- **DEP-1 [확인]** 산출물 형태:
-  - **권장**: `jpackage --type app-image`로 만든 폴더(`SE Tetris.exe` 포함)를 **zip으로 배포**. 설치 도구(WiX)가 필요 없어 CI가 단순하다.
+  - 구현: `.github/workflows/package.yml` — `main` push, `v*` 태그, 수동 실행(workflow_dispatch)에서 `gradlew packageApp`을 돌려 `SE-Tetris-windows.zip`을 아티팩트로 올린다. `v*` 태그면 GitHub Release에도 첨부한다.
+- **DEP-1 [확정]** 산출물 형태 (교수자 확인 Q4는 남아 있음):
+  - **채택**: `jpackage --type app-image`로 만든 폴더(`SE Tetris.exe` 포함, JRE 포함)를 **zip으로 배포**. 설치 도구(WiX)가 필요 없어 CI가 단순하다.
+  - 만드는 법: `gradlew packageApp` → `build/distributions/SE-Tetris-windows.zip`. 압축을 풀고 `SE Tetris\SE Tetris.exe`를 더블클릭한다. 아이콘: `src/main/packaging/tetris.ico`.
   - 대안: `--type exe`/`msi` 설치형은 WiX 설치가 필요하다.
   - 어느 쪽이든 "별도 Java 설치·명령어 입력 없이 더블클릭 실행"과 "아이콘 포함" 조건을 만족해야 한다.
-- **DEP-2** 콘솔 창 없이 실행한다(`--win-console` 사용 안 함). 번들 런타임에 `java.desktop`이 포함되는지, Jackson이 비모듈 JAR이라 `jlink` 대상 모듈에 영향이 없는지 **첫 패키징에서 확인**한다. **[제안]**
+- **DEP-2** 콘솔 창 없이 실행한다(`--win-console` 사용 안 함). **[확정]** 2026-10-04 첫 패키징에서 jpackage 기본 런타임(Jackson 포함)으로 `SE Tetris.exe`가 실행되어 게임 창이 뜨는 것을 확인했다(zip 약 58 MB).
 - **DEP-3** README에 다음을 기록한다: 요구 환경, 빌드·테스트·패키징 명령, 사용자 데이터 경로(`%APPDATA%\SETetrisTeam6\`), 설정·스코어보드 파일 형식(§12.1). **[확정 + 제안]**
 
 ---
@@ -724,7 +726,7 @@ Q2가 특히 중요하다. 답이 "실제 행·열 수 변경"이라면 v1.0 §2
 | T6 | SET-5: Reset Settings 확인창 | 사용 | **사용** |
 | T7 | §7.2: 지정 가능한 키 집합 | 제시한 목록 | **제시한 목록** (`KeyMap.isAssignable`: A–Z, 0–9, 방향키, Space) |
 
-T1~T7은 모두 2026-10-04 구현 기준으로 확정했다. T2만 최초 권장과 다르다. 남은 열린 항목은 교수자 질문 Q1~Q4와 §15.2 커버리지 범위, §16 배포(DEP-1, DEP-2)다.
+T1~T7은 모두 2026-10-04 구현 기준으로 확정했다. T2만 최초 권장과 다르다. 남은 열린 항목은 교수자 질문 Q1~Q4와 §15.2 커버리지 범위, CI 커버리지 게이트(§16 CI-1)다.
 
 ---
 
