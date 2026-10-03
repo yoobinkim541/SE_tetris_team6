@@ -124,18 +124,13 @@ public class Board {
         }
     }
 
-    /** Hard Drop 거리:블록을 아래로 몇 칸 내릴 수 있는지 (0 이상). 상태를 바꾸지 않는다 */
+    /** Hard Drop 거리: 블록을 아래로 몇 칸 내릴 수 있는지 (0 이상). 상태를 바꾸지 않는다 */
     public int getDropDistance(Block block) {
+        if (block == null) throw new IllegalArgumentException("block cannot be null");
 
-        if(block == null) throw new IllegalArgumentException("block can not be null");
-
-        int cnt = 0;
-        while(true) {
-            if(!canPlace(block,block.getRow() + cnt + 1,block.getCol())) break;
-            cnt++;
-        }
-        return cnt;
-
+        int distance = 0;
+        while (canPlace(block, block.getRow() + distance + 1, block.getCol())) distance++;
+        return distance;
     }
 
     /** UI/스냅샷용 보이는 영역 20x10 복사본 (숨은 줄·벽 제외). 수정해도 게임에 영향이 없다 */
