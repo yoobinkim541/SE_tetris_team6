@@ -2,14 +2,11 @@ package tetris.feature.save;
 
 import tetris.feature.score.Scoreboard;
 
-/** scoreboard.json 입출력 (PER-1~5). 무효 항목은 버리고, 손상 파일은 *.corrupt로 옮기는 것을 권장. */
-public class ScoreboardRepository {
-    public LoadResult<Scoreboard> load() {
-        throw new UnsupportedOperationException("TODO");
-    }
+/** 스코어보드 저장소. 구현이 JSON 파일인지는 쓰는 쪽이 알 필요가 없다 */
+public interface ScoreboardRepository {
+    /** 없음/손상/일부 무효 시 가능한 만큼 살린 스코어보드를 돌려주고 warnings에 사유를 담는다 */
+    LoadResult<Scoreboard> load();
 
-    /** 원자적 저장. 실패하면 false */
-    public boolean save(Scoreboard scoreboard) {
-        throw new UnsupportedOperationException("TODO");
-    }
+    /** 실패하면 false */
+    boolean save(Scoreboard scoreboard);
 }
