@@ -160,38 +160,38 @@ public class ScoreboardTest {
     //#region 이름 규칙 (NAM-1~3)
     @Test
     void 한글_영문_숫자와_내부_공백은_허용한다() { // NAM-1
-        assertTrue(Scoreboard.isValidName("홍길동"));
-        assertTrue(Scoreboard.isValidName("ABC"));
-        assertTrue(Scoreboard.isValidName("abc123"));
-        assertTrue(Scoreboard.isValidName("A B"));
-        assertTrue(Scoreboard.isValidName("ㄱㅏ")); // 한글 자모
+        assertTrue(ScoreEntry.isValidName("홍길동"));
+        assertTrue(ScoreEntry.isValidName("ABC"));
+        assertTrue(ScoreEntry.isValidName("abc123"));
+        assertTrue(ScoreEntry.isValidName("A B"));
+        assertTrue(ScoreEntry.isValidName("ㄱㅏ")); // 한글 자모
     }
 
     @Test
     void 앞뒤_공백은_제거한_뒤_검사한다() { // NAM-2
-        assertTrue(Scoreboard.isValidName("  홍길동  "));
-        assertTrue(Scoreboard.isValidName("1234567890   ")); // trim 후 10자
+        assertTrue(ScoreEntry.isValidName("  홍길동  "));
+        assertTrue(ScoreEntry.isValidName("1234567890   ")); // trim 후 10자
     }
 
     @Test
     void 길이는_trim_후_1자_이상_10자_이하() { // NAM-2
-        assertTrue(Scoreboard.isValidName("A"));
-        assertTrue(Scoreboard.isValidName("ABCDEFGHIJ"));
-        assertFalse(Scoreboard.isValidName("ABCDEFGHIJK"));
+        assertTrue(ScoreEntry.isValidName("A"));
+        assertTrue(ScoreEntry.isValidName("ABCDEFGHIJ"));
+        assertFalse(ScoreEntry.isValidName("ABCDEFGHIJK"));
     }
 
     @Test
     void 빈_문자열_공백만_있는_이름_null은_금지한다() { // NAM-3
-        assertFalse(Scoreboard.isValidName(""));
-        assertFalse(Scoreboard.isValidName("   "));
-        assertFalse(Scoreboard.isValidName(null));
+        assertFalse(ScoreEntry.isValidName(""));
+        assertFalse(ScoreEntry.isValidName("   "));
+        assertFalse(ScoreEntry.isValidName(null));
     }
 
     @Test
     void 특수문자와_이모지는_금지한다() { // NAM-1
-        assertFalse(Scoreboard.isValidName("A!"));
-        assertFalse(Scoreboard.isValidName("a_b"));
-        assertFalse(Scoreboard.isValidName("😀")); // 이모지
+        assertFalse(ScoreEntry.isValidName("A!"));
+        assertFalse(ScoreEntry.isValidName("a_b"));
+        assertFalse(ScoreEntry.isValidName("😀")); // 이모지
     }
 
     @Test
