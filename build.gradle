@@ -26,6 +26,7 @@ application {
 test {
     useJUnitPlatform()
     finalizedBy jacocoTestReport
+    systemProperty 'java.awt.headless', 'true' // CI(화면 없음)와 같은 조건으로 UI 렌더링 테스트를 돌린다
 }
 
 jacocoTestReport {
@@ -35,9 +36,23 @@ jacocoTestReport {
     }
 }
 
+// 커버리지 게이트 (요구사항 p17, 명세 §16 CI-1): Line Coverage 70% 미만이면 check가 실패한다
+jacocoTestCoverageVerification {
+    violationRules {
+        rule {
+            limit {
+                counter = 'LINE'
+                minimum = 0.70
+            }
+        }
+    }
+}
+check.dependsOn jacocoTestCoverageVerification
+
 if (providers.gradleProperty('skipCoverage').isPresent()) {
     test.jacoco.enabled = false
     jacocoTestReport.enabled = false
+    jacocoTestCoverageVerification.enabled = false
 }
 
 // ── 배포 패키지 (요구사항 p18, 명세 §16 DEP-1·2) ─────────────────────

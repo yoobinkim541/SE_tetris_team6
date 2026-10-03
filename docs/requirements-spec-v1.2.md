@@ -49,7 +49,7 @@
 | 16 | UI 언어 혼용 (메뉴는 한글, Pause/Settings는 영문) | `Messages`에 모으고 한글로 통일. 게임 용어만 영문 | 확정 | §9 |
 | 17 | Reset Settings에 확인창이 있는지 | Reset Scoreboard와 동일하게 확인창 제공 | 확정 | §10 |
 | 18 | JSON 값 검증, 부분 손상, 원자적 저장, 손상 파일 처리 | 검증 규칙·오류 처리표 확정 | 확정 | §12 |
-| 19 | 커버리지 70% 측정 대상 vs "UI를 억지로 테스트하지 않는다" | 측정 범위(제외 패키지)를 명시하고 교수자에게 확인 | 확인 | §15 |
+| 19 | 커버리지 70% 측정 대상 vs "UI를 억지로 테스트하지 않는다" | 제외 없이 전체 코드를 측정하고, UI는 화면 없이 그려 픽셀로 검증한다. Line 70% 미만이면 CI 실패 | 확정 | §15 |
 | 20 | jpackage 산출물 형태 (app-image vs 설치형 exe/msi) | app-image(zip)를 기본 산출물로. 설치형은 선택 | 확인 | §16 |
 | 21 | 보드 크기 3종 요구를 "셀 표시 크기 3종"으로 해석해도 되는지 | 교수자 확인 필요 | 확인 | §17 |
 | 22 | 창 닫기(X)·메인 메뉴 '게임 종료'·창 포커스 이탈 | 동작 정의 | 확정 | §8 |
@@ -660,16 +660,17 @@ Spawn 위치 계산은 Board에서 빠져 `SpawnPolicy.getSpawnRow/getSpawnColum
 | 스코어보드 | 진입 조건, 동점 삽입, 10개 제한, §11.1 이름 표 (SBD-2~5, NAM-1~4) |
 | 저장 | §12.2 표의 모든 행을 임시 디렉터리로 재현, 원자적 교체 (PER-*) |
 | UI 로직 | 키 반복 규칙·Pause 중 메뉴 키 우선·rebind (KEY-5, KEY-8, §7.3), 이름 필터 (NAM-1, NAM-4), 메뉴 순환·설정 화면, `Messages`·팔레트. 그리기 코드는 테스트하지 않는다 |
+| UI 렌더링 | 화면 없이(headless) `BufferedImage`에 그려 픽셀 검사: 종류별 블록 색(RND-4), 색맹 팔레트(RND-6), 숨은 줄 미표시(G-4), Next 표시, Pause 오버레이, 신규 기록 강조, 화면 크기 3종 구분(RND-3). `RenderingTest`, `ScreenSizeFitTest` |
 
 **스코어보드 검증 예시**: 10개 중 10위가 500점일 때 새 점수 500은 진입 불가, 501은 진입하고 기존 10위는 밀려난다. 기존 700점이 있을 때 새 700점은 그 뒤에 들어간다.
 
-### 15.2 커버리지 **[확인]**
+### 15.2 커버리지 **[확정]**
 
 - 목표: 직접 작성한 코드의 **Line Coverage 70% 이상**(JaCoCo). **[확정]**
-- v1.0에는 "단순 Swing 출력 코드를 억지로 테스트하지 않는다"고 되어 있는데, 분모에서 UI를 뺄지 넣을지 정하지 않았다. 권장 측정 범위:
-  - **포함**: `feature.*`, `component.block.*`, 저장 계층, 정책 클래스
-  - **제외**: `tetris.ui.*`의 그리기·레이아웃 코드, `Main`
-  - 제외 범위는 교수자에게 확인한다(§17). 제외 규칙은 JaCoCo 설정에 명시하고 README에 남긴다.
+- 측정 범위: **제외 없이 전체**(`tetris.*`, UI·`Main` 포함). 최초 v1.1은 UI 그리기 코드 제외를 권장했으나(교수자 확인 Q3), 그리기 코드도 화면 없이 `BufferedImage`에 그려 픽셀로 검증하는 테스트(§15.1 UI 렌더링)를 두어 제외 없이 목표를 넘겼다. 따라서 Q3는 답을 기다리지 않아도 된다.
+  - 테스트 JVM은 `java.awt.headless=true`로 돌려 로컬과 CI(화면 없음)를 같은 조건으로 맞춘다.
+  - `JFrame`을 만드는 `MainFrame` 생성·화면 전환과 `Main`은 headless에서 만들 수 없어 측정되지 않는다. 화면 크기 계산은 정적 메서드로 분리해 테스트한다.
+- 게이트: `jacocoTestCoverageVerification`(LINE, 최소 0.70)을 `check`에 연결했고 CI는 `gradle check`를 돌린다. 2026-10-04 측정 **88.1%** (1,482 / 1,682줄).
 
 ### 15.3 비기능 테스트 **[확정]**
 
@@ -689,7 +690,7 @@ Spawn 위치 계산은 Board에서 빠져 `SpawnPolicy.getSpawnRow/getSpawnColum
 ## 16. CI/CD·배포
 
 - **CI-1** 트리거: Pull Request와 `main` 변경. 단계: Java 21 → Gradle 빌드 → JUnit → 비기능 테스트 → JaCoCo → Line Coverage ≥ 70%. 빌드·테스트·비기능 테스트·커버리지 중 하나라도 실패하면 CI를 실패로 한다. **[확정]** 커버리지 게이트는 `jacocoTestCoverageVerification`(LINE, 최소 0.70)으로 만들고 리포트를 아티팩트로 올린다. **[제안]**
-  - **현재 상태 (2026-10-04)**: `.github/workflows/ci.yml`은 `main`·`develop` push와 두 브랜치 대상 PR에서 Java 21 + Gradle 8.10.2로 `gradle test`를 돌리고, 테스트 수·JaCoCo 커버리지 요약을 Actions Summary와 PR 댓글에 남기며, 테스트·커버리지 리포트를 아티팩트로 올린다. **커버리지 70% 게이트(`jacocoTestCoverageVerification`)와 UI 제외 규칙은 아직 없다.** §15.2 확인 후 추가한다.
+  - **현재 상태 (2026-10-04)**: `.github/workflows/ci.yml`은 `main`·`develop` push와 두 브랜치 대상 PR에서 Java 21로 `gradle check`(테스트 + Line 70% 게이트)를 돌리고, 테스트 수·JaCoCo 커버리지 요약을 Actions Summary와 PR 댓글에 남기며, 테스트·커버리지 리포트를 아티팩트로 올린다. 비기능 테스트는 `RandomInputStressTest`(§15.3)로 같은 단계에서 돈다.
 - **CD-1** `main` 또는 릴리스 태그에서 `windows-latest` 러너 → Gradle 릴리스 빌드 → `jpackage` → 아티팩트/Release 업로드. **[확정]**
   - 구현: `.github/workflows/package.yml` — `main` push, `v*` 태그, 수동 실행(workflow_dispatch)에서 `gradlew packageApp`을 돌려 `SE-Tetris-windows.zip`을 아티팩트로 올린다. `v*` 태그면 GitHub Release에도 첨부한다.
 - **DEP-1 [확정]** 산출물 형태 (교수자 확인 Q4는 남아 있음):
@@ -710,7 +711,7 @@ Spawn 위치 계산은 Board에서 빠져 `SpawnPolicy.getSpawnRow/getSpawnColum
 |--:|---|---|
 | Q1 | "텍스트 기반 테트리스"를 Swing GUI 창에서 색상+문자로 표현해도 되는가? 콘솔 환경 구현 제한이 있는가? (v1.0 §47) | 허용되면 Swing 유지 |
 | Q2 | "보드 크기 3종 이상" 요구를 **논리 20×10은 고정하고 셀 표시 크기 3종**으로 충족해도 되는가? 아니면 실제 행·열 수가 달라져야 하는가? | 셀 크기 3종. 원 요구사항의 20×10 규정과도 일치 |
-| Q3 | Line Coverage 70% 측정에서 Swing UI 클래스를 분모에서 제외해도 되는가? | 제외 (§15.2) |
+| Q3 | Line Coverage 70% 측정에서 Swing UI 클래스를 분모에서 제외해도 되는가? | 제외 없이 88.1%로 충족해 질문 불필요 (§15.2) |
 | Q4 | 배포물은 jpackage app-image(zip)도 인정되는가, 설치형이어야 하는가? | app-image zip 허용 (§16 DEP-1) |
 
 Q2가 특히 중요하다. 답이 "실제 행·열 수 변경"이라면 v1.0 §2가 바뀌고 Board, Spawn, 테스트 범위가 모두 영향을 받는다.
@@ -727,7 +728,7 @@ Q2가 특히 중요하다. 답이 "실제 행·열 수 변경"이라면 v1.0 §2
 | T6 | SET-5: Reset Settings 확인창 | 사용 | **사용** |
 | T7 | §7.2: 지정 가능한 키 집합 | 제시한 목록 | **제시한 목록** (`KeyMap.isAssignable`: A–Z, 0–9, 방향키, Space) |
 
-T1~T7은 모두 2026-10-04 구현 기준으로 확정했다. T2만 최초 권장과 다르다. 남은 열린 항목은 교수자 질문 Q1~Q4와 §15.2 커버리지 범위, CI 커버리지 게이트(§16 CI-1)다.
+T1~T7은 모두 2026-10-04 구현 기준으로 확정했다. T2만 최초 권장과 다르다. 남은 열린 항목은 교수자 질문 Q1, Q2, Q4다(Q3는 §15.2로 불필요).
 
 ---
 
