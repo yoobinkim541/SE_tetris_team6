@@ -5,3 +5,4 @@ build/
 out/
 bin/
 .vscode/
+debug.log
