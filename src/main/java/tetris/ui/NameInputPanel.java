@@ -16,7 +16,7 @@ import javax.swing.text.AttributeSet;
 import javax.swing.text.BadLocationException;
 import javax.swing.text.DocumentFilter;
 import javax.swing.text.StyleConstants;
-import tetris.feature.score.Scoreboard;
+import tetris.feature.score.ScoreEntry;
 
 /** 이름 입력 (Top 10 진입 시에만). 10자 제한은 DocumentFilter로 입력 중에 적용 (NAM-4). Esc 무동작. */
 public class NameInputPanel extends JPanel {
@@ -66,7 +66,7 @@ public class NameInputPanel extends JPanel {
 
     private void submit() {
         String name = field.getText();
-        if (!Scoreboard.isValidName(name)) { // NAM-3: 빈 이름·공백만 있는 이름은 저장하지 않고 안내
+        if (!ScoreEntry.isValidName(name)) { // NAM-3: 빈 이름·공백만 있는 이름은 저장하지 않고 안내
             hintLabel.setText(Messages.get("name.invalid"));
             return;
         }
@@ -95,7 +95,7 @@ public class NameInputPanel extends JPanel {
         return new NameFilter();
     }
 
-    /** NAM-1. Scoreboard.isValidName의 허용 문자와 같다 */
+    /** NAM-1. ScoreEntry.isValidName의 허용 문자와 같다 */
     static boolean isAllowedChar(char c) {
         return (c >= '가' && c <= '힣') || (c >= 'ㄱ' && c <= 'ㅎ') || (c >= 'ㅏ' && c <= 'ㅣ')
                 || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == ' ';
