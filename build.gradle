@@ -4,10 +4,8 @@ plugins {
     id 'jacoco'
 }
 
-java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
-    }
+tasks.withType(JavaCompile).configureEach {
+    options.release = 21
 }
 
 repositories {
@@ -15,6 +13,8 @@ repositories {
 }
 
 dependencies {
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.22.3' // 저장 계층(feature.save)에서만 사용 (PER-3)
+
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
@@ -26,4 +26,88 @@ application {
 test {
     useJUnitPlatform()
     finalizedBy jacocoTestReport
+    systemProperty 'java.awt.headless', 'true' // CI(화면 없음)와 같은 조건으로 UI 렌더링 테스트를 돌린다
+}
+
+jacocoTestReport {
+    reports {
+        xml.required = true   // CI가 커버리지 수치를 읽는 용도
+        html.required = true
+    }
+}
+
+// 커버리지 게이트 (요구사항 p17, 명세 §16 CI-1): Line Coverage 70% 미만이면 check가 실패한다
+jacocoTestCoverageVerification {
+    violationRules {
+        rule {
+            limit {
+                counter = 'LINE'
+                minimum = 0.70
+            }
+        }
+    }
+}
+check.dependsOn jacocoTestCoverageVerification
+
+if (providers.gradleProperty('skipCoverage').isPresent()) {
+    test.jacoco.enabled = false
+    jacocoTestReport.enabled = false
+    jacocoTestCoverageVerification.enabled = false
+}
+
+// ── 배포 패키지 (요구사항 p18, 명세 §16 DEP-1·2) ─────────────────────
+// gradlew packageApp → build/distributions/SE-Tetris-windows.zip
+// 압축을 풀고 "SE Tetris\SE Tetris.exe"를 더블클릭하면 실행된다. JRE가 들어 있어 Java 설치·명령어 입력이 필요 없다.
+// jpackage는 Gradle을 실행한 JDK(21 이상)의 것을 쓰고, 패키지는 그 OS용으로 만들어진다 (대상: Windows).
+def appName = 'SE Tetris'
+def appIcon = file('src/main/packaging/tetris.ico')
+def packageInput = layout.buildDirectory.dir('jpackage/input')
+def packageImage = layout.buildDirectory.dir('jpackage/image')
+
+jar {
+    manifest {
+        attributes 'Main-Class': 'tetris.Main'
+    }
+}
+
+// 실행 jar와 의존 라이브러리(Jackson)를 jpackage 입력 폴더 하나에 모은다
+tasks.register('jpackageInput', Sync) {
+    from jar
+    from configurations.runtimeClasspath
+    into packageInput
+}
+
+tasks.register('jpackageImage', Exec) {
+    group = 'distribution'
+    description = 'jpackage로 JRE를 포함한 app-image(아이콘 포함 실행 파일)를 만든다'
+    dependsOn 'jpackageInput'
+    inputs.dir(packageInput)
+    inputs.file(appIcon)
+    outputs.dir(packageImage)
+
+    doFirst {
+        def imageDir = packageImage.get().asFile
+        imageDir.deleteDir() // jpackage는 대상 폴더가 이미 있으면 실패한다
+        def exe = System.getProperty('os.name').toLowerCase().contains('win') ? '.exe' : ''
+        commandLine file("${System.getProperty('java.home')}/bin/jpackage${exe}"),
+                '--type', 'app-image',
+                '--name', appName,
+                '--app-version', '1.0.0',
+                '--vendor', 'SE Team6',
+                '--input', packageInput.get().asFile,
+                '--main-jar', jar.archiveFileName.get(),
+                '--main-class', 'tetris.Main',
+                '--icon', appIcon,
+                '--dest', imageDir
+        // --win-console을 쓰지 않아 실행 시 콘솔 창이 뜨지 않는다 (DEP-2)
+    }
+}
+
+tasks.register('packageApp', Zip) {
+    group = 'distribution'
+    description = '배포용 zip (build/distributions/SE-Tetris-windows.zip)'
+    dependsOn 'jpackageImage'
+    from packageImage
+    archiveFileName = 'SE-Tetris-windows.zip'
+    destinationDirectory = layout.buildDirectory.dir('distributions')
 }
