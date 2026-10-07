@@ -49,7 +49,7 @@
 | 16 | UI 언어 혼용 (메뉴는 한글, Pause/Settings는 영문) | `Messages`에 모으고 한글로 통일. 게임 용어만 영문 | 확정 | §9 |
 | 17 | Reset Settings에 확인창이 있는지 | Reset Scoreboard와 동일하게 확인창 제공 | 확정 | §10 |
 | 18 | JSON 값 검증, 부분 손상, 원자적 저장, 손상 파일 처리 | 검증 규칙·오류 처리표 확정 | 확정 | §12 |
-| 19 | 커버리지 70% 측정 대상 vs "UI를 억지로 테스트하지 않는다" | 측정 범위(제외 패키지)를 명시하고 교수자에게 확인 | 확인 | §15 |
+| 19 | 커버리지 70% 측정 대상 vs "UI를 억지로 테스트하지 않는다" | 제외 없이 전체 코드를 측정하고, UI는 화면 없이 그려 픽셀로 검증한다. Line 70% 미만이면 CI 실패 | 확정 | §15 |
 | 20 | jpackage 산출물 형태 (app-image vs 설치형 exe/msi) | app-image(zip)를 기본 산출물로. 설치형은 선택 | 확인 | §16 |
 | 21 | 보드 크기 3종 요구를 "셀 표시 크기 3종"으로 해석해도 되는지 | 교수자 확인 필요 | 확인 | §17 |
 | 22 | 창 닫기(X)·메인 메뉴 '게임 종료'·창 포커스 이탈 | 동작 정의 | 확정 | §8 |
@@ -489,7 +489,8 @@ Name      : Enter 저장
 
 - **RND-2** 창은 크기 조절을 막고(`setResizable(false)`), 화면 크기 변경 시 `pack()` 후 화면 중앙에 다시 배치한다. 보드 오른쪽에 정보 패널(Next, Score, Level, State, Key Guide)을 두며 패널 폭·글자 크기는 셀 크기에 비례한다. **[확정]**
 - **RND-3 [확정]** (T3) Large는 보드만 800 px이고 제목 표시줄과 여백을 더하면 약 860 px다. Windows 11 노트북(1080p, 배율 125~150%)에서는 사용 가능 높이가 약 720~820 px라 그대로면 **화면 밖으로 잘린다**.
-  - 창(테두리 포함)이 작업 표시줄을 뺀 사용 가능 화면에 맞지 않으면 **실제 셀 크기를 1 px씩 줄여** 맞는 최대값으로 표시한다. 최소 12 px. 설정값은 `LARGE`로 유지한다. 담당: `MainFrame.applyScreenSize`.
+  - 먼저 창(테두리 포함)이 작업 표시줄을 뺀 사용 가능 화면에 들어가는 가장 큰 셀 크기 `fit`(최대 40 px)을 구한다. Large(40 px)가 들어가면 세 크기를 그대로 쓰고, 안 들어가면 **세 크기를 같은 비율 `fit / 40`으로 함께 줄인다**(최소 12 px). 설정값은 바꾸지 않는다. 담당: `MainFrame.largestFittingCell`, `MainFrame.scaledCellSize`.
+  - 예: 1080p·배율 150%(사용 가능 높이 약 688 px)에서 `fit = 31` → Small 15 / Medium 23 / Large 31 px. Large만 줄이면 Large 31 ≈ Medium 30이 되어 요구사항 p12 "최소 3가지 크기"가 사실상 깨지므로 함께 줄인다.
   - 창 배치: `[여백][보드 10c][여백][정보 6c][여백] × [여백][보드 20c][여백]`, 여백 = c/2. 모든 화면이 이 크기를 공유한다.
 
 ### 13.2 색과 글자
@@ -659,16 +660,17 @@ Spawn 위치 계산은 Board에서 빠져 `SpawnPolicy.getSpawnRow/getSpawnColum
 | 스코어보드 | 진입 조건, 동점 삽입, 10개 제한, §11.1 이름 표 (SBD-2~5, NAM-1~4) |
 | 저장 | §12.2 표의 모든 행을 임시 디렉터리로 재현, 원자적 교체 (PER-*) |
 | UI 로직 | 키 반복 규칙·Pause 중 메뉴 키 우선·rebind (KEY-5, KEY-8, §7.3), 이름 필터 (NAM-1, NAM-4), 메뉴 순환·설정 화면, `Messages`·팔레트. 그리기 코드는 테스트하지 않는다 |
+| UI 렌더링 | 화면 없이(headless) `BufferedImage`에 그려 픽셀 검사: 종류별 블록 색(RND-4), 색맹 팔레트(RND-6), 숨은 줄 미표시(G-4), Next 표시, Pause 오버레이, 신규 기록 강조, 화면 크기 3종 구분(RND-3). `RenderingTest`, `ScreenSizeFitTest` |
 
 **스코어보드 검증 예시**: 10개 중 10위가 500점일 때 새 점수 500은 진입 불가, 501은 진입하고 기존 10위는 밀려난다. 기존 700점이 있을 때 새 700점은 그 뒤에 들어간다.
 
-### 15.2 커버리지 **[확인]**
+### 15.2 커버리지 **[확정]**
 
 - 목표: 직접 작성한 코드의 **Line Coverage 70% 이상**(JaCoCo). **[확정]**
-- v1.0에는 "단순 Swing 출력 코드를 억지로 테스트하지 않는다"고 되어 있는데, 분모에서 UI를 뺄지 넣을지 정하지 않았다. 권장 측정 범위:
-  - **포함**: `feature.*`, `component.block.*`, 저장 계층, 정책 클래스
-  - **제외**: `tetris.ui.*`의 그리기·레이아웃 코드, `Main`
-  - 제외 범위는 교수자에게 확인한다(§17). 제외 규칙은 JaCoCo 설정에 명시하고 README에 남긴다.
+- 측정 범위: **제외 없이 전체**(`tetris.*`, UI·`Main` 포함). 최초 v1.1은 UI 그리기 코드 제외를 권장했으나(교수자 확인 Q3), 그리기 코드도 화면 없이 `BufferedImage`에 그려 픽셀로 검증하는 테스트(§15.1 UI 렌더링)를 두어 제외 없이 목표를 넘겼다. 따라서 Q3는 답을 기다리지 않아도 된다.
+  - 테스트 JVM은 `java.awt.headless=true`로 돌려 로컬과 CI(화면 없음)를 같은 조건으로 맞춘다.
+  - `JFrame`을 만드는 `MainFrame` 생성·화면 전환과 `Main`은 headless에서 만들 수 없어 측정되지 않는다. 화면 크기 계산은 정적 메서드로 분리해 테스트한다.
+- 게이트: `jacocoTestCoverageVerification`(LINE, 최소 0.70)을 `check`에 연결했고 CI는 `gradle check`를 돌린다. 2026-10-04 측정 **88.1%** (1,482 / 1,682줄).
 
 ### 15.3 비기능 테스트 **[확정]**
 
@@ -676,23 +678,27 @@ Spawn 위치 계산은 Board에서 빠져 `SpawnPolicy.getSpawnRow/getSpawnColum
 
 - 예외가 없다.
 - 보드의 모든 값이 `0..7` 범위다.
-- 현재 블록이 고정 칸과 겹치지 않고, 값 있는 칸이 모두 보드 안에 있다.
-- Score는 감소하지 않고, Level은 1 이상이며 감소하지 않는다.
+- 현재 블록이 고정 칸과 겹치지 않고, 값 있는 칸이 모두 보드 안(숨은 줄 2행 포함, §3.1)에 있다.
+- Score는 감소하지 않고, Level은 1 이상이며 감소하지 않는다(같은 게임 안에서).
 
-소요 시간은 로그로 남기되, **시간 임계값 단언은 구현 후 실제 측정한 뒤에** 넣는다(v1.0 방침 유지).
+구현: `RandomInputStressTest` — 시드 5개(1, 42, 2026, 7777, 123456789) × 20,000회 = 총 100,000회. 소요 시간은 테스트 출력(`[stress] ... ns/op`)으로 남긴다.
+
+**성능 기준 [확정]** (요구사항 p4·p15 "적절한 성능", p8 "즉시 반응"): 입력 1회 평균 처리 시간 **1 ms 미만**을 단언한다. 2026-10-04 실측은 약 0.4~1.5 μs/회로, 기준은 화면 한 프레임(약 16 ms)보다 충분히 짧고 느린 CI 러너에서도 흔들리지 않게 넉넉히 잡았다.
 
 ---
 
 ## 16. CI/CD·배포
 
 - **CI-1** 트리거: Pull Request와 `main` 변경. 단계: Java 21 → Gradle 빌드 → JUnit → 비기능 테스트 → JaCoCo → Line Coverage ≥ 70%. 빌드·테스트·비기능 테스트·커버리지 중 하나라도 실패하면 CI를 실패로 한다. **[확정]** 커버리지 게이트는 `jacocoTestCoverageVerification`(LINE, 최소 0.70)으로 만들고 리포트를 아티팩트로 올린다. **[제안]**
-  - **현재 상태 (2026-10-04)**: `.github/workflows/ci.yml`은 `main`·`develop` push와 두 브랜치 대상 PR에서 Java 21 + Gradle 8.10.2로 `gradle test`를 돌리고, 테스트 수·JaCoCo 커버리지 요약을 Actions Summary와 PR 댓글에 남기며, 테스트·커버리지 리포트를 아티팩트로 올린다. **커버리지 70% 게이트(`jacocoTestCoverageVerification`)와 UI 제외 규칙은 아직 없다.** §15.2 확인 후 추가한다.
+  - **현재 상태 (2026-10-04)**: `.github/workflows/ci.yml`은 `main`·`develop` push와 두 브랜치 대상 PR에서 Java 21로 `gradle check`(테스트 + Line 70% 게이트)를 돌리고, 테스트 수·JaCoCo 커버리지 요약을 Actions Summary와 PR 댓글에 남기며, 테스트·커버리지 리포트를 아티팩트로 올린다. 비기능 테스트는 `RandomInputStressTest`(§15.3)로 같은 단계에서 돈다.
 - **CD-1** `main` 또는 릴리스 태그에서 `windows-latest` 러너 → Gradle 릴리스 빌드 → `jpackage` → 아티팩트/Release 업로드. **[확정]**
-- **DEP-1 [확인]** 산출물 형태:
-  - **권장**: `jpackage --type app-image`로 만든 폴더(`SE Tetris.exe` 포함)를 **zip으로 배포**. 설치 도구(WiX)가 필요 없어 CI가 단순하다.
+  - 구현: `.github/workflows/package.yml` — `main` push, `v*` 태그, 수동 실행(workflow_dispatch)에서 `gradlew packageApp`을 돌려 `SE-Tetris-windows.zip`을 아티팩트로 올린다. `v*` 태그면 GitHub Release에도 첨부한다.
+- **DEP-1 [확정]** 산출물 형태 (교수자 확인 Q4는 남아 있음):
+  - **채택**: `jpackage --type app-image`로 만든 폴더(`SE Tetris.exe` 포함, JRE 포함)를 **zip으로 배포**. 설치 도구(WiX)가 필요 없어 CI가 단순하다.
+  - 만드는 법: `gradlew packageApp` → `build/distributions/SE-Tetris-windows.zip`. 압축을 풀고 `SE Tetris\SE Tetris.exe`를 더블클릭한다. 아이콘: `src/main/packaging/tetris.ico`.
   - 대안: `--type exe`/`msi` 설치형은 WiX 설치가 필요하다.
   - 어느 쪽이든 "별도 Java 설치·명령어 입력 없이 더블클릭 실행"과 "아이콘 포함" 조건을 만족해야 한다.
-- **DEP-2** 콘솔 창 없이 실행한다(`--win-console` 사용 안 함). 번들 런타임에 `java.desktop`이 포함되는지, Jackson이 비모듈 JAR이라 `jlink` 대상 모듈에 영향이 없는지 **첫 패키징에서 확인**한다. **[제안]**
+- **DEP-2** 콘솔 창 없이 실행한다(`--win-console` 사용 안 함). **[확정]** 2026-10-04 첫 패키징에서 jpackage 기본 런타임(Jackson 포함)으로 `SE Tetris.exe`가 실행되어 게임 창이 뜨는 것을 확인했다(zip 약 58 MB).
 - **DEP-3** README에 다음을 기록한다: 요구 환경, 빌드·테스트·패키징 명령, 사용자 데이터 경로(`%APPDATA%\SETetrisTeam6\`), 설정·스코어보드 파일 형식(§12.1). **[확정 + 제안]**
 
 ---
@@ -705,7 +711,7 @@ Spawn 위치 계산은 Board에서 빠져 `SpawnPolicy.getSpawnRow/getSpawnColum
 |--:|---|---|
 | Q1 | "텍스트 기반 테트리스"를 Swing GUI 창에서 색상+문자로 표현해도 되는가? 콘솔 환경 구현 제한이 있는가? (v1.0 §47) | 허용되면 Swing 유지 |
 | Q2 | "보드 크기 3종 이상" 요구를 **논리 20×10은 고정하고 셀 표시 크기 3종**으로 충족해도 되는가? 아니면 실제 행·열 수가 달라져야 하는가? | 셀 크기 3종. 원 요구사항의 20×10 규정과도 일치 |
-| Q3 | Line Coverage 70% 측정에서 Swing UI 클래스를 분모에서 제외해도 되는가? | 제외 (§15.2) |
+| Q3 | Line Coverage 70% 측정에서 Swing UI 클래스를 분모에서 제외해도 되는가? | 제외 없이 88.1%로 충족해 질문 불필요 (§15.2) |
 | Q4 | 배포물은 jpackage app-image(zip)도 인정되는가, 설치형이어야 하는가? | app-image zip 허용 (§16 DEP-1) |
 
 Q2가 특히 중요하다. 답이 "실제 행·열 수 변경"이라면 v1.0 §2가 바뀌고 Board, Spawn, 테스트 범위가 모두 영향을 받는다.
@@ -722,7 +728,7 @@ Q2가 특히 중요하다. 답이 "실제 행·열 수 변경"이라면 v1.0 §2
 | T6 | SET-5: Reset Settings 확인창 | 사용 | **사용** |
 | T7 | §7.2: 지정 가능한 키 집합 | 제시한 목록 | **제시한 목록** (`KeyMap.isAssignable`: A–Z, 0–9, 방향키, Space) |
 
-T1~T7은 모두 2026-10-04 구현 기준으로 확정했다. T2만 최초 권장과 다르다. 남은 열린 항목은 교수자 질문 Q1~Q4와 §15.2 커버리지 범위, §16 배포(DEP-1, DEP-2)다.
+T1~T7은 모두 2026-10-04 구현 기준으로 확정했다. T2만 최초 권장과 다르다. 남은 열린 항목은 교수자 질문 Q1, Q2, Q4다(Q3는 §15.2로 불필요).
 
 ---
 
