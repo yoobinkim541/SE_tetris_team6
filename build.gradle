@@ -13,7 +13,8 @@ repositories {
 }
 
 dependencies {
-    implementation 'com.fasterxml.jackson.core:jackson-databind:2.17.2'  // settings.json, scoreboard.json (PER-3: save 패키지에서만 사용)
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.22.3' // 저장 계층(feature.save)에서만 사용 (PER-3)
+
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
