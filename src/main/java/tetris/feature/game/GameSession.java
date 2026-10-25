@@ -38,11 +38,23 @@ public class GameSession {
     private final ScoringPolicy scoringPolicy = new ScoringPolicy();
     private final GameClock clock;
     private final GameListener listener;
+    private final GameMode mode;
+    private final Difficulty difficulty;
 
+    /** 일반 모드·NORMAL 난이도 */
     public GameSession(BlockGenerator generator, GameClock clock, GameListener listener) {
+        this(GameMode.CLASSIC, Difficulty.NORMAL, generator, clock, listener);
+    }
+
+    /** 모드와 난이도는 한 판이 끝날 때까지 바뀌지 않는다 (DIF-5, MOD-2) */
+    public GameSession(GameMode mode, Difficulty difficulty, BlockGenerator generator, GameClock clock, GameListener listener) {
+        if (mode == null) throw new IllegalArgumentException("mode cannot be null");
+        if (difficulty == null) throw new IllegalArgumentException("difficulty cannot be null");
         if (generator == null) throw new IllegalArgumentException("generator cannot be null");
         if (clock == null) throw new IllegalArgumentException("clock cannot be null");
         if (listener == null) throw new IllegalArgumentException("listener cannot be null");
+        this.mode = mode;
+        this.difficulty = difficulty;
         this.generator = generator;
         this.clock = clock;
         this.listener = listener;
@@ -180,6 +192,14 @@ public class GameSession {
         return state;
     }
 
+    public GameMode getMode() {
+        return mode;
+    }
+
+    public Difficulty getDifficulty() {
+        return difficulty;
+    }
+
     public GameSnapshot snapshot() {
         return new GameSnapshot(
                 board.copyCells(),
@@ -188,7 +208,12 @@ public class GameSession {
                 score,
                 levelPolicy.getLevel(),
                 lines,
-                state);
+                state,
+                mode,
+                difficulty,
+                List.of(),
+                0,
+                List.of());
     }
 
     // ── 명세 4장 파이프라인 (내부) ────────────
