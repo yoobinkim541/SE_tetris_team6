@@ -245,22 +245,51 @@ public class GameSession {
         return true;
     }
 
-    /** §4 LOCK. Level은 L5와 다음 Spawn의 S3에서만 바뀐다 (PIPE-1) */
+    /** 한 번의 Lock에서 지워질 줄 R (§5 L2). 아이템이 지우는 칸 C는 아이템 구현 때 여기에 더한다 */
+    private record ClearPlan(List<Integer> rows) {
+        int rowCount() {
+            return rows.size();
+        }
+    }
+
+    /** §5 LOCK. Level은 L6과 다음 Spawn의 S3에서만 바뀐다 (PIPE-1) */
     private void lockCurrentBlock() {
-        if (!board.tryPlaceBlock(currentBlock))                                          // L1
-            throw new IllegalStateException("current block is not at a placeable position");
-            
-        currentBlock = null; // 보드에 들어간 블록을 스냅샷이 두 번 그리지 않도록
-
-        List<Integer> fullRows = board.findFullRows();                                // L2
-        int clearedRows = fullRows.size();
-
-        board.clearRows(fullRows);                                                    // L3
-        score += scoringPolicy.lineClearBonus(clearedRows);                               // L4
-        lines += clearedRows;
-        levelPolicy.onLinesCleared(clearedRows);                                          // L5
+        placeCurrentBlock();                          // L1
+        ClearPlan plan = collectClearTargets();       // L2
+        applyClear(plan);                             // L4 (L3 CLEARING 대기는 애니메이션 구현 때 이 사이에 들어간다)
+        awardClearScore(plan);                        // L5
+        updateCounters(plan);                         // L6
 
         spawnNextBlock();
+    }
+
+    /** L1: 현재 블록 칸을 보드에 기록 */
+    private void placeCurrentBlock() {
+        if (!board.tryPlaceBlock(currentBlock))
+            throw new IllegalStateException("current block is not at a placeable position");
+
+        currentBlock = null; // 보드에 들어간 블록을 스냅샷이 두 번 그리지 않도록
+    }
+
+    /** L2: 지울 대상 수집. 보드는 아직 바꾸지 않는다 */
+    private ClearPlan collectClearTargets() {
+        return new ClearPlan(board.findFullRows());
+    }
+
+    /** L4: R의 행을 삭제하고 위 행을 내린다 (CLR-2) */
+    private void applyClear(ClearPlan plan) {
+        board.clearRows(plan.rows());
+    }
+
+    /** L5 */
+    private void awardClearScore(ClearPlan plan) {
+        score += scoringPolicy.lineClearBonus(plan.rowCount());
+    }
+
+    /** L6: 누적 줄과 Level */
+    private void updateCounters(ClearPlan plan) {
+        lines += plan.rowCount();
+        levelPolicy.onLinesCleared(plan.rowCount());
     }
 
     private void spawnNextBlock() {
