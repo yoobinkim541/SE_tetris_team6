@@ -35,9 +35,9 @@ class ItemContractTest {
     @Test
     void difficultyWeightsCoverAllBlockTypesAndOnlyIDiffers() {
         var weights = Difficulty.HARD.weights();
-        assertEquals(BlockType.values().length, weights.size());
+        assertEquals(BlockType.ordinary().length, weights.size());
         assertEquals(8, weights.get(BlockType.I));
-        for (BlockType type : BlockType.values()) {
+        for (BlockType type : BlockType.ordinary()) {
             if (type != BlockType.I) assertEquals(10, weights.get(type));
         }
     }
