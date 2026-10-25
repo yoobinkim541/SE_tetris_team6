@@ -1,12 +1,16 @@
 package tetris.feature.setting;
 
+import tetris.feature.game.Difficulty;
+
 /** 사용자 설정 모델 (SET-1~6). 기존 ColorChange / BoardSizeChange 흡수. 저장은 save 계층 담당 */
 public class Settings {
     private static final ScreenSize DEFAULT_SCREEN_SIZE = ScreenSize.MEDIUM; // SET-6
     private static final boolean DEFAULT_COLOR_BLIND_MODE = false;
+    private static final Difficulty DEFAULT_DIFFICULTY = Difficulty.NORMAL; // DIF-1
 
     private ScreenSize screenSize = DEFAULT_SCREEN_SIZE;
     private boolean colorBlindMode = DEFAULT_COLOR_BLIND_MODE;
+    private Difficulty difficulty = DEFAULT_DIFFICULTY;
     private final KeyMap keyMap = new KeyMap();
 
     public ScreenSize getScreenSize() {
@@ -26,6 +30,15 @@ public class Settings {
         colorBlindMode = enabled;
     }
 
+    public Difficulty getDifficulty() {
+        return difficulty;
+    }
+
+    public void setDifficulty(Difficulty difficulty) {
+        if (difficulty == null) throw new IllegalArgumentException("difficulty cannot be null");
+        this.difficulty = difficulty;
+    }
+
     /** 키 변경은 KeyMap의 검증 메서드(assign, tryReplaceAll)로만 한다 */
     public KeyMap getKeyMap() {
         return keyMap;
@@ -35,6 +48,7 @@ public class Settings {
     public void resetToDefaults() {
         screenSize = DEFAULT_SCREEN_SIZE;
         colorBlindMode = DEFAULT_COLOR_BLIND_MODE;
+        difficulty = DEFAULT_DIFFICULTY;
         keyMap.resetToDefaults();
     }
 }
