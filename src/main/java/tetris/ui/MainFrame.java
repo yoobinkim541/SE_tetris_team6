@@ -197,7 +197,7 @@ public class MainFrame extends JFrame {
     private void requestQuit() {
         if (gamePanel.isConfirmShowing()) return;
         GameState state = session.getState();
-        if (state != GameState.PLAYING && state != GameState.PAUSED) return;
+        if (state != GameState.PLAYING && state != GameState.CLEARING && state != GameState.PAUSED) return;
 
         session.requestQuit();
         showConfirm(new ConfirmDialog(Messages.get("confirm.quit"), () -> {
