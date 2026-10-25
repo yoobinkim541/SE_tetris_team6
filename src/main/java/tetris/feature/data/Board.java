@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.Set;
 import tetris.component.block.Block;
 import tetris.feature.crash.CrashDetector;
+import tetris.feature.item.BoardView;
 
 /**
  * 20x10 논리 보드 (명세 G-1~G-3). 보드 배열의 유일한 변경 지점이다.
@@ -20,7 +21,7 @@ import tetris.feature.crash.CrashDetector;
  * I 블록 회전은 보드 밖으로 최대 2칸 나가므로 MARGIN = 2다.
  * 논리 좌표 -> 배열 인덱스 변환(+MARGIN)은 canPlace와 setCell, 그리고 행 단위 처리(isRowFull·clearRows·copyCells)에서만 한다.
  */
-public class Board {
+public class Board implements BoardView {
     public static final int WIDTH = 10;   // 보이는 영역 열 수
     public static final int HEIGHT = 20;  // 보이는 영역 행 수
     public static final int MARGIN = 2;   // 상하좌우 여유 칸 수
@@ -89,7 +90,15 @@ public class Board {
         return true;
     }
 
+    /** 논리 좌표 (row, col)가 비어 있는지. 숨은 줄 포함, 보드 밖이면 false */
+    @Override
+    public boolean isEmpty(int row, int col) {
+        if (row < -MARGIN || row >= HEIGHT || col < 0 || col >= WIDTH) return false;
+        return board[row + MARGIN][col + MARGIN] == EMPTY;
+    }
+
     /** 한 행의 10칸이 모두 채워졌는지 (row: 0..19). 범위 밖이면 false */
+    @Override
     public boolean isRowFull(int row) {
         if (row < 0 || row >= HEIGHT) return false;           // 숨은 줄·바닥 벽은 검사하지 않음
         return CrashDetector.IsRowFull(board, row + MARGIN);  // 좌우 벽은 WALL(≠0)이라 결과에 영향 없음

@@ -1,5 +1,8 @@
 package tetris.component.block;
 
+import java.util.Optional;
+import tetris.feature.item.ItemType;
+
 public abstract class Block implements Cloneable {
     protected int[][] shape;
     private int row;
@@ -31,6 +34,14 @@ public abstract class Block implements Cloneable {
         this.col = col;
     }
     
+    /**
+     * 모양 격자의 (row, col) 칸에 붙은 아이템 (ITM-3, ITM-4). 일반 블록은 항상 비어 있다.
+     * TODO(C 트랙): 아이템 칸 표시를 shape와 함께 회전·복사하도록 구현한다 (#55).
+     */
+    public Optional<ItemType> itemCellAt(int row, int col) {
+        return Optional.empty();
+    }
+
     // 블록 종류 (보드에 기록할 셀 값 1..7 / 색·문자 결정). 7개 서브클래스가 override한다
     public BlockType getType() {
         throw new UnsupportedOperationException("서브클래스에서 override 필요");
