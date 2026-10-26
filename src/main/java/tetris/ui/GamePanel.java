@@ -166,20 +166,26 @@ public class GamePanel extends JPanel implements GameListener {
         }
 
         Block current = snapshot.currentBlock();
+        for (var cell : snapshot.clearingCells()) {
+            if (cell.row() < 0 || cell.row() >= Board.HEIGHT || cell.col() < 0 || cell.col() >= Board.WIDTH) continue;
+            g.setColor(Color.WHITE);
+            g.fillRect(x + cell.col() * cellSize, y + cell.row() * cellSize, cellSize, cellSize);
+        }
         if (current == null) return;
         int[][] shape = current.getShape();
         for (int r = 0; r < shape.length; r++) {
             for (int c = 0; c < shape[r].length; c++) {
                 int row = current.getRow() + r;
                 if (shape[r][c] == 0 || row < 0) continue; // 보드 위 숨은 줄은 그리지 않는다
-                drawCell(g, x + (current.getCol() + c) * cellSize, y + row * cellSize, cellSize, current.getType());
+                drawCell(g, x + (current.getCol() + c) * cellSize, y + row * cellSize, cellSize, current.getType(), current.itemCellAt(r, c).orElse(null));
             }
         }
     }
 
     private void drawInfo(Graphics2D g, int x, int y) {
         int width = cellSize * INFO_COLUMNS;
-        int labelSize = Math.max(9, cellSize * 9 / 20);
+        boolean compact = cellSize <= 20;
+        int labelSize = compact ? Math.max(6, cellSize / 2) : Math.max(9, cellSize * 9 / 20);
         int valueSize = Math.max(12, cellSize * 4 / 5);
 
         y = drawLabel(g, Messages.get("game.next"), x, y, labelSize);
@@ -193,10 +199,48 @@ public class GamePanel extends JPanel implements GameListener {
         int level = snapshot == null ? 1 : snapshot.level();
         int lines = snapshot == null ? 0 : snapshot.lines();
         String state = snapshot == null ? GameState.LOADING.name() : snapshot.state().name();
-        y = drawValue(g, Messages.get("game.score"), String.valueOf(score), x, y, labelSize, valueSize);
-        y = drawValue(g, Messages.get("game.level"), String.valueOf(level), x, y, labelSize, valueSize);
-        y = drawValue(g, Messages.get("game.lines"), String.valueOf(lines), x, y, labelSize, valueSize);
-        drawValue(g, Messages.get("game.state"), state, x, y, labelSize, labelSize + labelSize / 4);
+        if (compact) {
+            java.util.List<String> rows = new java.util.ArrayList<>();
+            rows.add("SCORE " + score);
+            rows.add("LEVEL " + level + "  LINES " + lines);
+            rows.add("STATE " + state);
+            if (snapshot != null) {
+                rows.add("MODE " + snapshot.mode());
+                rows.add("DIFF " + snapshot.difficulty());
+                if (snapshot.mode() == tetris.feature.game.GameMode.ITEM)
+                    rows.add("NEXT ITEM " + snapshot.nextItemLines());
+                for (var effect : snapshot.effects())
+                    rows.add((effect.type() == tetris.feature.item.ItemType.DOUBLE_SCORE ? "x2 " : "SLOW ")
+                            + effect.remainingBlocks());
+            }
+            g.setFont(Theme.text(labelSize, true));
+            g.setColor(Theme.TEXT);
+            for (String row : rows) {
+                // 큰 점수도 정보 영역 밖으로 넘치지 않도록 이 행에서만 글자 크기를 줄인다.
+                int fontSize = labelSize;
+                g.setFont(Theme.text(fontSize, true));
+                while (g.getFontMetrics().stringWidth(row) > width && fontSize > 3)
+                    g.setFont(Theme.text(--fontSize, true));
+                g.drawString(row, x, y += labelSize + labelSize / 2);
+            }
+        } else {
+            y = drawValue(g, Messages.get("game.score"), String.valueOf(score), x, y, labelSize, valueSize);
+            y = drawValue(g, Messages.get("game.level"), String.valueOf(level), x, y, labelSize, valueSize);
+            y = drawValue(g, Messages.get("game.lines"), String.valueOf(lines), x, y, labelSize, valueSize);
+            y = drawValue(g, Messages.get("game.state"), state, x, y, labelSize, labelSize + labelSize / 4);
+            if (snapshot != null) {
+                g.setFont(Theme.text(labelSize, true));
+                g.setColor(Theme.TEXT);
+                int step = labelSize + labelSize / 2;
+                g.drawString("MODE " + snapshot.mode(), x, y += step);
+                g.drawString("DIFFICULTY " + snapshot.difficulty(), x, y += step);
+                if (snapshot.mode() == tetris.feature.game.GameMode.ITEM)
+                    g.drawString("NEXT ITEM " + snapshot.nextItemLines(), x, y += step);
+                for (var effect : snapshot.effects())
+                    g.drawString((effect.type() == tetris.feature.item.ItemType.DOUBLE_SCORE ? "x2 " : "SLOW ")
+                            + effect.remainingBlocks(), x, y += step);
+            }
+        }
 
         // Key Guide는 보드 아래쪽에 맞춰 붙인다
         int lineHeight = labelSize + labelSize / 2;
@@ -230,22 +274,26 @@ public class GamePanel extends JPanel implements GameListener {
         for (int r = minRow; r <= maxRow; r++) {
             for (int c = minCol; c <= maxCol; c++) {
                 if (shape[r][c] == 0) continue;
-                drawCell(g, startX + (c - minCol) * cellSize, startY + (r - minRow) * cellSize, cellSize, next.getType());
+                drawCell(g, startX + (c - minCol) * cellSize, startY + (r - minRow) * cellSize, cellSize, next.getType(), next.itemCellAt(r, c).orElse(null));
             }
         }
     }
 
     /** 현재 블록·고정 블록·Next 공용: 색 + 문자를 항상 함께 그린다 (RND-4, RND-5) */
     private void drawCell(Graphics2D g, int x, int y, int size, BlockType type) {
-        Color color = palette.color(type, colorBlindMode);
+        drawCell(g, x, y, size, type, null);
+    }
+
+    private void drawCell(Graphics2D g, int x, int y, int size, BlockType type, tetris.feature.item.ItemType item) {
+        Color color = item == null ? palette.color(type, colorBlindMode) : Color.WHITE;
         g.setColor(color);
         g.fillRect(x, y, size, size);
         g.setColor(color.darker());
         g.drawRect(x, y, size - 1, size - 1);
 
         g.setFont(Theme.blockLetter(size * 3 / 5));
-        g.setColor(palette.textColor(color));
-        String letter = String.valueOf(type.letter());
+        g.setColor(item == null ? palette.textColor(color) : Color.BLACK);
+        String letter = item != null ? String.valueOf(item.symbol()) : type == BlockType.W ? "W" : "O";
         int textX = x + (size - g.getFontMetrics().stringWidth(letter)) / 2;
         int textY = y + (size - g.getFontMetrics().getHeight()) / 2 + g.getFontMetrics().getAscent();
         g.drawString(letter, textX, textY);
