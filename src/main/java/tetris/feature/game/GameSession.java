@@ -35,6 +35,7 @@ public class GameSession {
     private GameState stateBeforeQuit;            // 확인창을 띄우기 전 상태 (No 선택 시 복귀용)
     private ClearPlan pendingClear;               // CLEARING 동안 150 ms 뒤에 지울 대상
     private boolean pausedDuringClearing;         // CLEARING에서 Pause했는지. Resume 때 CLEARING으로 돌아간다
+    private boolean crushing;                     // 무게추가 첫 하강에 실패해 분쇄 모드가 됐는지 (ITW-4)
 
     private final SpawnPolicy spawnPolicy = new SpawnPolicy();
     private final RotationPolicy rotationPolicy = new BasicRotationPolicy();
@@ -79,6 +80,7 @@ public class GameSession {
         stateBeforeQuit = null;
         pendingClear = null;
         pausedDuringClearing = false;
+        crushing = false;
 
         state = GameState.PLAYING; // Spawn 충돌 시 PLAYING -> GAME_OVER 전이가 되도록 먼저 전환
         spawnNextBlock();
@@ -131,9 +133,13 @@ public class GameSession {
     public void hardDrop() {
         if (state != GameState.PLAYING) return;
 
-        int distance = board.getDropDistance(currentBlock);
-        currentBlock.setPosition(currentBlock.getRow() + distance, currentBlock.getCol());
-        score += scoringPolicy.hardDropScore(distance, levelPolicy.getLevel());
+        if (currentBlock.isWeight()) {
+            crushToBottom(); // ITW-6, ITW-7: 점수 없음
+        } else {
+            int distance = board.getDropDistance(currentBlock);
+            currentBlock.setPosition(currentBlock.getRow() + distance, currentBlock.getCol());
+            score += scoringPolicy.hardDropScore(distance, levelPolicy.getLevel());
+        }
 
         lockCurrentBlock();
         if (state == GameState.PLAYING) listener.onChanged(snapshot());
@@ -243,6 +249,7 @@ public class GameSession {
     // ── 명세 4장 파이프라인 (내부) ────────────
     // 좌우 이동. 실패하면 아무것도 바꾸지 않고 알리지도 않는다 (§3.1)
     private void shift(int deltaCol) {
+        if (crushing) return; // ITW-4: 분쇄 모드의 무게추는 좌우로 움직이지 않는다
         int row = currentBlock.getRow();
         int col = currentBlock.getCol() + deltaCol;
         if (!board.canPlace(currentBlock, row, col)) return;
@@ -260,6 +267,8 @@ public class GameSession {
 
     /** 성공하면 한 칸 내리고 +Level (SCR-1). 실패하면 아무것도 바꾸지 않는다 (SCR-4) */
     private boolean tryDescend() {
+        if (currentBlock.isWeight()) return tryDescendWeight();
+
         int row = currentBlock.getRow() + 1;
         int col = currentBlock.getCol();
         if (!board.canPlace(currentBlock, row, col)) return false;
@@ -267,6 +276,37 @@ public class GameSession {
         currentBlock.setPosition(row, col);
         score += scoringPolicy.softDropScore(levelPolicy.getLevel());
         return true;
+    }
+
+    /**
+     * 무게추의 하강 시도 (ITW-3~5, ITW-7). 점수는 없다.
+     * 첫 실패 순간부터 분쇄 모드가 되고, 그 순간에도 바로 한 칸 내려가며 겹치는 고정 칸을 지운다.
+     * 바닥에 닿아 더 내려갈 수 없으면 false (이후 Lock으로 고정된다).
+     */
+    private boolean tryDescendWeight() {
+        int row = currentBlock.getRow() + 1;
+        int col = currentBlock.getCol();
+        if (!crushing) {
+            if (board.canPlace(currentBlock, row, col)) {
+                currentBlock.setPosition(row, col);
+                return true;
+            }
+            crushing = true;
+        }
+
+        if (!board.canPlaceThrough(currentBlock, row, col)) return false;
+        board.clearUnder(currentBlock, row, col);
+        currentBlock.setPosition(row, col);
+        return true;
+    }
+
+    /** 무게추 Hard Drop: 분쇄 여부와 관계없이 바닥까지 내려가며 지나는 칸을 모두 지운다 (ITW-6) */
+    private void crushToBottom() {
+        crushing = true;
+        while (board.canPlaceThrough(currentBlock, currentBlock.getRow() + 1, currentBlock.getCol())) {
+            currentBlock.setPosition(currentBlock.getRow() + 1, currentBlock.getCol());
+            board.clearUnder(currentBlock, currentBlock.getRow(), currentBlock.getCol());
+        }
     }
 
     /** 한 번의 Lock에서 지워질 줄 R (§5 L2). 아이템이 지우는 칸 C는 아이템 구현 때 여기에 더한다 */
@@ -362,6 +402,7 @@ public class GameSession {
 
         block.setPosition(row, col);
         currentBlock = block;
+        crushing = false;
         levelPolicy.onBlockSpawned();                                              // S3
         clock.start(levelPolicy.fallIntervalMillis());                             // S4
     }
