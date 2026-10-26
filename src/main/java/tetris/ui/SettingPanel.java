@@ -20,7 +20,7 @@ import tetris.feature.setting.Settings;
  * 유효한 변경은 즉시 적용·저장한다 (SET-3). 저장 실패 시 이번 실행에는 적용하고 안내만 한다 (SET-4).
  */
 public class SettingPanel extends JPanel {
-    private enum Item { SCREEN_SIZE, CONTROL_KEYS, COLOR_BLIND, RESET_SCOREBOARD, RESET_SETTINGS }
+    private enum Item { SCREEN_SIZE, DIFFICULTY, CONTROL_KEYS, COLOR_BLIND, RESET_SCOREBOARD, RESET_SETTINGS }
 
     private static final Item[] ITEMS = Item.values();
     private static final GameAction[] ACTIONS = GameAction.values();
@@ -89,6 +89,7 @@ public class SettingPanel extends JPanel {
         notice = "";
         switch (ITEMS[selected]) {
             case SCREEN_SIZE -> changeScreenSize(1);
+            case DIFFICULTY -> changeScreenSize(1);
             case CONTROL_KEYS -> openControlKeys();
             case COLOR_BLIND -> {
                 settings.setColorBlindMode(!settings.isColorBlindMode());
@@ -183,7 +184,14 @@ public class SettingPanel extends JPanel {
 
     // ←/→ 또는 Enter: Small -> Medium -> Large 순환. 설정 목록의 Screen Size에서만
     private void changeScreenSize(int delta) {
-        if (inControlKeys || ITEMS[selected] != Item.SCREEN_SIZE) return;
+        if (inControlKeys) return;
+        if (ITEMS[selected] == Item.DIFFICULTY) {
+            var values = tetris.feature.game.Difficulty.values();
+            settings.setDifficulty(values[Theme.cycle(settings.getDifficulty().ordinal(), delta, values.length)]);
+            applyChange("");
+            return;
+        }
+        if (ITEMS[selected] != Item.SCREEN_SIZE) return;
         ScreenSize[] sizes = ScreenSize.values();
         settings.setScreenSize(sizes[Theme.cycle(settings.getScreenSize().ordinal(), delta, sizes.length)]);
         applyChange("");
@@ -269,6 +277,7 @@ public class SettingPanel extends JPanel {
     private List<String[]> settingRows() {
         List<String[]> rows = new ArrayList<>();
         rows.add(new String[] {Messages.get("settings.screenSize"), "◀ " + Messages.get("size." + settings.getScreenSize().name()) + " ▶"});
+        rows.add(new String[] {"난이도", "◀ " + settings.getDifficulty().name() + " ▶"});
         rows.add(new String[] {Messages.get("settings.controlKeys"), "›"});
         rows.add(new String[] {Messages.get("settings.colorBlind"),
                 Messages.get(settings.isColorBlindMode() ? "settings.on" : "settings.off")});

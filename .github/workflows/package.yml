@@ -23,7 +23,17 @@ jobs:
           java-version: '21'
 
       - name: Build package
-        run: ./gradlew.bat check releaseJar packageApp --no-daemon
+        run: ./gradlew.bat check guiAcceptance releaseJar packageApp --no-daemon
+
+      - name: Smoke test packaged EXE
+        run: ./scripts/verify-package.ps1
+
+      - name: Upload package verification
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-verification
+          path: build/verification/package-smoke.json
 
       - name: Upload package
         uses: actions/upload-artifact@v4
