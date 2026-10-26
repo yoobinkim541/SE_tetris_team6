@@ -2,6 +2,8 @@
 
 검토 PR: https://github.com/yoobinkim541/SE_tetris_team6/pull/100
 
+구현 커밋 `4c35e37`의 [원격 CI](https://github.com/yoobinkim541/SE_tetris_team6/actions/runs/40335775691)도 Linux test와 Windows 인수·패키징·EXE 실행을 모두 통과했다. `simsgood2`에게 팀 리뷰를 요청했으며 아직 승인·병합은 없다.
+
 | 검증 | 결과 | 범위 |
 |---|---|---|
 | test/check | 861 실행, 854 통과, GUI 7 생략, 실패 0 | develop #98의 350개 강화 회귀와 저장·렌더링 인수 조건 포함 |
@@ -31,7 +33,7 @@ EXE 실행 증거: build/verification/package-smoke.json. 실제 창 제목은 S
 
 - 사용자 2명 평가와 교수자 문의: 사용자가 미진행으로 확인했으며 [기록지](user-playtest.md)와 [문의 초안](professor-confirmation.md)을 준비했다.
 - Windows IME 실제 입력·OS 설정 자체의 배율 변경·실제 Alt+Tab 플레이: 수동 확인이 필요하다. 등록된 포커스 콜백 검증을 실제 Alt+Tab 조작으로 표현하지 않는다.
-- 원격 CI, 팀원 승인·병합, 최종 main Release: 로컬 성공과 구분해 PR에서 확인한다.
+- 원격 CI는 위 링크에서 성공을 확인했다. 팀원 승인·병합과 최종 main Release는 아직 미완료다.
 
 ## 재현
 
