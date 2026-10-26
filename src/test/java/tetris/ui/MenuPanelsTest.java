@@ -82,7 +82,7 @@ public class MenuPanelsTest {
 
     @Test
     void colorBlindToggles() {
-        settingPanel.moveSelection(2);
+        settingPanel.moveSelection(3);
         settingPanel.activateSelected();
         assertTrue(settings.isColorBlindMode());
     }
@@ -126,7 +126,7 @@ public class MenuPanelsTest {
 
     @Test
     void closeControlKeysReturnsToList() {
-        settingPanel.moveSelection(1);
+        settingPanel.moveSelection(2);
         settingPanel.activateSelected(); // Control Keys
         assertTrue(settingPanel.isInControlKeys());
         settingPanel.closeControlKeys();

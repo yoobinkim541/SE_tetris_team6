@@ -11,18 +11,18 @@ import java.time.Instant;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Random;
 import javax.swing.JComponent;
 import javax.swing.JFrame;
 import javax.swing.JPanel;
-import tetris.feature.game.Difficulty;
 import tetris.feature.game.GameClock;
 import tetris.feature.game.GameListener;
-import tetris.feature.game.GameMode;
 import tetris.feature.game.GameSession;
 import tetris.feature.game.GameSnapshot;
 import tetris.feature.game.GameState;
 import tetris.feature.rule.WeightedBlockGenerator;
+import tetris.feature.game.GameMode;
+import tetris.feature.game.Difficulty;
+import java.util.Random;
 import tetris.feature.save.ScoreboardRepository;
 import tetris.feature.save.SettingsRepository;
 import tetris.feature.score.ScoreEntry;
@@ -33,7 +33,7 @@ import tetris.feature.setting.Settings;
 /**
  * 메인 윈도우. CardLayout으로 화면을 전환한다 (명세 9, 13장). 크기 조절 불가.
  * 화면 흐름(Main Menu → Game → GameOver → Name → Scoreboard)과 저장 호출을 이 클래스가 맡는다.
- * 게임 세션은 게임을 시작할 때마다 그때의 설정 난이도로 새로 만든다. Restart는 같은 세션을 다시 시작하므로 난이도가 유지된다.
+ * 게임 세션 객체는 하나를 계속 쓰고 새 게임마다 start()로 초기화한다.
  */
 public class MainFrame extends JFrame {
     /** 앱 화면 흐름 (GameState와 별개) */
@@ -56,8 +56,7 @@ public class MainFrame extends JFrame {
     private final ScoreBoardPanel scoreBoardPanel;
     private final SettingPanel settingPanel;
     private final KeyBindingManager keyBindings;
-    private final GameClock clock = new SwingGameClock(this::onTick);
-    private GameSession session; // 시작 전에도 null이 아니도록 생성자에서 기본 세션을 하나 만들어 둔다
+    private GameSession session;
 
     private Screen currentScreen;
     private ScreenSize appliedScreenSize;
@@ -73,6 +72,7 @@ public class MainFrame extends JFrame {
 
         mainMenuPanel = new MainMenuPanel(List.of(
                 new MenuItem(Messages.get("menu.start"), this::startGame),
+                new MenuItem("아이템 모드", () -> startGame(GameMode.ITEM)),
                 new MenuItem(Messages.get("menu.settings"), this::openSettings),
                 new MenuItem(Messages.get("menu.scoreboard"), this::openScoreboard),
                 new MenuItem(Messages.get("menu.exit"), this::exitApplication)));
@@ -84,7 +84,7 @@ public class MainFrame extends JFrame {
         settingPanel = new SettingPanel(settings, this::onSettingsChanged, this::resetScoreboard,
                 () -> showScreen(Screen.MAIN_MENU));
 
-        session = newSession(GameMode.CLASSIC, settings.getDifficulty(), new Random(), clock, gamePanel);
+        session = createSession(GameMode.CLASSIC);
         keyBindings = new KeyBindingManager(this::requestQuit);
         keyBindings.bindGameKeys(gamePanel, settings.getKeyMap(), session);
 
@@ -145,13 +145,11 @@ public class MainFrame extends JFrame {
     }
 
     private void startGame() {
-        session.end();
-        session = newSession(GameMode.CLASSIC, settings.getDifficulty(), new Random(), clock, gamePanel);
-        keyBindings.bindGameKeys(gamePanel, settings.getKeyMap(), session);
-        keyBindings.setSuspended(false);
-        keyBindings.clearPressedKeys();
-        showScreen(Screen.GAME);
-        session.start();
+        startGame(GameMode.CLASSIC);
+    }
+
+    private GameSession createSession(GameMode mode) {
+        return newSession(mode, settings.getDifficulty(), new Random(), new SwingGameClock(this::onTick), gamePanel);
     }
 
     /**
@@ -162,6 +160,16 @@ public class MainFrame extends JFrame {
     static GameSession newSession(GameMode mode, Difficulty difficulty, Random random, GameClock clock, GameListener listener) {
         Difficulty effective = mode == GameMode.ITEM ? Difficulty.NORMAL : difficulty;
         return new GameSession(mode, effective, new WeightedBlockGenerator(effective.weights(), random), clock, listener);
+    }
+
+    private void startGame(GameMode mode) {
+        session.end();
+        session = createSession(mode);
+        keyBindings.bindGameKeys(gamePanel, settings.getKeyMap(), session);
+        keyBindings.setSuspended(false);
+        keyBindings.clearPressedKeys();
+        showScreen(Screen.GAME);
+        session.start();
     }
 
     private void openSettings() {
@@ -188,21 +196,21 @@ public class MainFrame extends JFrame {
     // GameOver에서 Enter: GAME_OVER -> ENDED, Top 10이면 이름 입력, 아니면 스코어보드 (명세 9)
     private void afterGameOver() {
         session.end();
-        if (scoreboard.qualifies(finalResult.score())) {
+        if (scoreboard.qualifies(finalResult.score(), finalResult.mode(), finalResult.difficulty())) {
             nameInputPanel.prepare(finalResult.score());
             showScreen(Screen.NAME_INPUT);
         } else {
-            scoreBoardPanel.show(scoreboard.entries(), -1, true);
+            scoreBoardPanel.show(scoreboard.entries(), -1, true, finalResult.mode(), finalResult.difficulty());
             showScreen(Screen.SCOREBOARD);
         }
     }
 
     // 이름 확정 즉시 저장 (SBD-6). 저장에 실패해도 이번 실행에서는 순위를 보여준다
     private void submitName(String name) {
-        ScoreEntry entry = new ScoreEntry(name, finalResult.score(), finalResult.level(), finalResult.lines(), Instant.now());
+        ScoreEntry entry = new ScoreEntry(name, finalResult.score(), finalResult.level(), finalResult.lines(), finalResult.mode(), finalResult.difficulty(), Instant.now());
         int rank = scoreboard.add(entry);
         boolean saved = saveScoreboard();
-        scoreBoardPanel.show(scoreboard.entries(), rank, true);
+        scoreBoardPanel.show(scoreboard.entries(), rank, true, finalResult.mode(), finalResult.difficulty());
         if (!saved) scoreBoardPanel.showNotice(Messages.get("scoreboard.saveFailed"));
         showScreen(Screen.SCOREBOARD);
     }
