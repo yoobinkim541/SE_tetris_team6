@@ -6,6 +6,8 @@ import java.awt.event.KeyEvent;
 import java.util.List;
 import javax.swing.JPanel;
 import tetris.feature.score.ScoreEntry;
+import tetris.feature.game.GameMode;
+import tetris.feature.game.Difficulty;
 
 /** 스코어보드 화면. 기존 ScoreBoardScreen 대체. */
 public class ScoreBoardPanel extends JPanel {
@@ -15,6 +17,11 @@ public class ScoreBoardPanel extends JPanel {
     private final Runnable onMainMenu;
     private final Runnable onExit;
     private List<ScoreEntry> entries = List.of();
+    private List<ScoreEntry> allEntries = List.of();
+    private int category = 1;
+    private int highlightedCategory = -1;
+    private int highlightedRank = -1;
+    private static final String[] CATEGORIES = {"CLASSIC EASY", "CLASSIC NORMAL", "CLASSIC HARD", "ITEM NORMAL"};
     private int highlightIndex = -1;
     private boolean afterGame;
     private int selected = MAIN_MENU;
@@ -26,6 +33,8 @@ public class ScoreBoardPanel extends JPanel {
         this.onExit = onExit;
         setBackground(Theme.BACKGROUND);
         setFocusable(true);
+        KeyBindingManager.bindKey(this, KeyEvent.VK_LEFT, () -> changeCategory(-1));
+        KeyBindingManager.bindKey(this, KeyEvent.VK_RIGHT, () -> changeCategory(1));
 
         KeyBindingManager.bindKey(this, KeyEvent.VK_UP, () -> moveSelection(-1));
         KeyBindingManager.bindKey(this, KeyEvent.VK_DOWN, () -> moveSelection(1));
@@ -40,12 +49,32 @@ public class ScoreBoardPanel extends JPanel {
 
     /** afterGame이면 게임 종료 후 화면: 하단에 Main Menu(기본) / Exit 선택지를 표시한다 */
     public void show(List<ScoreEntry> entries, int highlightIndex, boolean afterGame) {
-        this.entries = List.copyOf(entries);
-        this.highlightIndex = highlightIndex;
+        show(entries, highlightIndex, afterGame, GameMode.CLASSIC, Difficulty.NORMAL);
+    }
+
+    public void show(List<ScoreEntry> entries, int highlightIndex, boolean afterGame, GameMode mode, Difficulty difficulty) {
+        this.allEntries = List.copyOf(entries);
+        category = mode == GameMode.ITEM ? 3 : difficulty.ordinal();
+        highlightedCategory = category;
+        highlightedRank = highlightIndex;
+        filterCategory();
         this.afterGame = afterGame;
         this.selected = MAIN_MENU;
         this.notice = "";
         repaint();
+    }
+
+    public void changeCategory(int delta) {
+        category = Theme.cycle(category, delta, CATEGORIES.length);
+        filterCategory();
+        repaint();
+    }
+
+    private void filterCategory() {
+        GameMode mode = category == 3 ? GameMode.ITEM : GameMode.CLASSIC;
+        Difficulty difficulty = category == 3 ? Difficulty.NORMAL : Difficulty.values()[category];
+        entries = allEntries.stream().filter(e -> e.mode() == mode && e.difficulty() == difficulty).toList();
+        highlightIndex = category == highlightedCategory ? highlightedRank : -1;
     }
 
     /** 저장 실패 등 안내 한 줄 */
@@ -76,6 +105,8 @@ public class ScoreBoardPanel extends JPanel {
         g2.setFont(Theme.text(unit * 2, true));
         g2.setColor(Theme.ACCENT);
         Theme.drawCentered(g2, Messages.get("scoreboard.title"), w / 2, unit * 4);
+        g2.setFont(Theme.text(unit, true));
+        Theme.drawCentered(g2, "◀ " + CATEGORIES[category] + " ▶", w / 2, unit * 5);
 
         int rowHeight = unit + unit / 2;
         int top = unit * 6;
