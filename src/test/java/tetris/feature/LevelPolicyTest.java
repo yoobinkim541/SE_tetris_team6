@@ -10,13 +10,16 @@ import tetris.feature.rule.LevelPolicy;
 /** Level 상승(블록 10개·줄 5개, 두 카운터는 따로 셈)과 난이도별 낙하 간격 계산을 검증한다 */
 public class LevelPolicyTest {
     @Test
-    void 낙하_간격은_Level_1부터_4까지_200ms씩_줄고_5부터_250() {
+    void 낙하_간격은_Level_1부터_7까지_100ms씩_줄고_8부터_300() {
         assertEquals(1000, LevelPolicy.fallIntervalMillis(1));
-        assertEquals(800, LevelPolicy.fallIntervalMillis(2));
-        assertEquals(600, LevelPolicy.fallIntervalMillis(3));
-        assertEquals(400, LevelPolicy.fallIntervalMillis(4));
-        assertEquals(250, LevelPolicy.fallIntervalMillis(5));
-        assertEquals(250, LevelPolicy.fallIntervalMillis(50));
+        assertEquals(900, LevelPolicy.fallIntervalMillis(2));
+        assertEquals(800, LevelPolicy.fallIntervalMillis(3));
+        assertEquals(700, LevelPolicy.fallIntervalMillis(4));
+        assertEquals(600, LevelPolicy.fallIntervalMillis(5));
+        assertEquals(500, LevelPolicy.fallIntervalMillis(6));
+        assertEquals(400, LevelPolicy.fallIntervalMillis(7));
+        assertEquals(300, LevelPolicy.fallIntervalMillis(8));
+        assertEquals(300, LevelPolicy.fallIntervalMillis(50));
     }
 
     @Test
@@ -61,7 +64,7 @@ public class LevelPolicyTest {
         policy.onBlockSpawned();    // S3
         assertEquals(3, policy.getLevel());
         assertEquals(0, policy.getBlockCounter());
-        assertEquals(600, policy.fallIntervalMillis());
+        assertEquals(800, policy.fallIntervalMillis());
     }
 
     @Test
@@ -83,16 +86,16 @@ public class LevelPolicyTest {
     }
 
     //#region 난이도별 낙하 간격
-    // 난이도별 기대 간격(ms). 배열 index 0 = Level 1, Level 6부터는 모두 250
-    private static final int[] EASY_INTERVALS = {1000, 840, 680, 520, 360, 250};
-    private static final int[] NORMAL_INTERVALS = {1000, 800, 600, 400, 250, 250};
-    private static final int[] HARD_INTERVALS = {1000, 760, 520, 280, 250, 250};
+    // 난이도별 기대 간격(ms). 배열 index 0 = Level 1
+    private static final int[] EASY_INTERVALS = {1000, 920, 840, 760, 680, 600, 520, 440, 400};
+    private static final int[] NORMAL_INTERVALS = {1000, 900, 800, 700, 600, 500, 400, 300};
+    private static final int[] HARD_INTERVALS = {1000, 880, 760, 640, 520, 400, 280, 250};
 
     private static void assertIntervals(Difficulty difficulty, int[] expected) {
         for (int level = 1; level <= expected.length; level++) {
             assertEquals(expected[level - 1], LevelPolicy.fallIntervalMillis(level, difficulty), difficulty + " Level " + level);
         }
-        assertEquals(250, LevelPolicy.fallIntervalMillis(100, difficulty));
+        assertEquals(difficulty.minIntervalMillis(), LevelPolicy.fallIntervalMillis(100, difficulty));
     }
 
     @Test
@@ -111,15 +114,15 @@ public class LevelPolicyTest {
     }
 
     @Test
-    void NORMAL은_v1_2_식과_모든_Level에서_같다() {
+    void NORMAL은_일관된_식과_모든_Level에서_같다() {
         for (int level = 1; level <= 100; level++) {
-            assertEquals(Math.max(250, 1200 - 200 * level), LevelPolicy.fallIntervalMillis(level, Difficulty.NORMAL), "Level " + level);
+            assertEquals(Math.max(300, 1000 - 100 * (level - 1)), LevelPolicy.fallIntervalMillis(level, Difficulty.NORMAL), "Level " + level);
             assertEquals(LevelPolicy.fallIntervalMillis(level, Difficulty.NORMAL), LevelPolicy.fallIntervalMillis(level));
         }
     }
 
     @Test
-    void 레벨당_감소폭은_EASY_20퍼센트_덜_HARD_20퍼센트_더() { // 요구사항: easy는 20% 덜, hard는 20% 더 빨라진다
+    void 레벨당_감소폭은_EASY_20퍼센트_덜_HARD_20퍼센트_더() { // 요구사항 비율 유지: easy는 20% 덜, hard는 20% 더 빨라진다
         int normalStep = 1000 - LevelPolicy.fallIntervalMillis(2, Difficulty.NORMAL);
         assertEquals(normalStep * 0.8, 1000 - LevelPolicy.fallIntervalMillis(2, Difficulty.EASY), 0.001);
         assertEquals(normalStep * 1.2, 1000 - LevelPolicy.fallIntervalMillis(2, Difficulty.HARD), 0.001);
@@ -134,8 +137,8 @@ public class LevelPolicyTest {
             hard.onBlockSpawned();
         }
         assertEquals(2, easy.getLevel());
-        assertEquals(840, easy.fallIntervalMillis());
-        assertEquals(760, hard.fallIntervalMillis());
+        assertEquals(920, easy.fallIntervalMillis());
+        assertEquals(880, hard.fallIntervalMillis());
     }
 
     @Test
@@ -156,14 +159,14 @@ public class LevelPolicyTest {
         policy.reset();
         assertEquals(1000, policy.fallIntervalMillis());
         for (int i = 0; i < 10; i++) policy.onBlockSpawned();
-        assertEquals(760, policy.fallIntervalMillis());
+        assertEquals(880, policy.fallIntervalMillis());
     }
 
     @Test
     void 기본_생성자는_NORMAL() {
         LevelPolicy policy = new LevelPolicy();
         for (int i = 0; i < 10; i++) policy.onBlockSpawned();
-        assertEquals(800, policy.fallIntervalMillis());
+        assertEquals(900, policy.fallIntervalMillis());
     }
 
     @Test
