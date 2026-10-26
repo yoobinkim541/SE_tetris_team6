@@ -11,13 +11,18 @@ import java.time.Instant;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Random;
 import javax.swing.JComponent;
 import javax.swing.JFrame;
 import javax.swing.JPanel;
+import tetris.feature.game.Difficulty;
+import tetris.feature.game.GameClock;
+import tetris.feature.game.GameListener;
+import tetris.feature.game.GameMode;
 import tetris.feature.game.GameSession;
 import tetris.feature.game.GameSnapshot;
 import tetris.feature.game.GameState;
-import tetris.feature.rule.RandomBlockGenerator;
+import tetris.feature.rule.WeightedBlockGenerator;
 import tetris.feature.save.ScoreboardRepository;
 import tetris.feature.save.SettingsRepository;
 import tetris.feature.score.ScoreEntry;
@@ -28,7 +33,7 @@ import tetris.feature.setting.Settings;
 /**
  * 메인 윈도우. CardLayout으로 화면을 전환한다 (명세 9, 13장). 크기 조절 불가.
  * 화면 흐름(Main Menu → Game → GameOver → Name → Scoreboard)과 저장 호출을 이 클래스가 맡는다.
- * 게임 세션 객체는 하나를 계속 쓰고 새 게임마다 start()로 초기화한다.
+ * 게임 세션은 게임을 시작할 때마다 그때의 설정 난이도로 새로 만든다. Restart는 같은 세션을 다시 시작하므로 난이도가 유지된다.
  */
 public class MainFrame extends JFrame {
     /** 앱 화면 흐름 (GameState와 별개) */
@@ -51,7 +56,8 @@ public class MainFrame extends JFrame {
     private final ScoreBoardPanel scoreBoardPanel;
     private final SettingPanel settingPanel;
     private final KeyBindingManager keyBindings;
-    private final GameSession session;
+    private final GameClock clock = new SwingGameClock(this::onTick);
+    private GameSession session; // 시작 전에도 null이 아니도록 생성자에서 기본 세션을 하나 만들어 둔다
 
     private Screen currentScreen;
     private ScreenSize appliedScreenSize;
@@ -78,7 +84,7 @@ public class MainFrame extends JFrame {
         settingPanel = new SettingPanel(settings, this::onSettingsChanged, this::resetScoreboard,
                 () -> showScreen(Screen.MAIN_MENU));
 
-        session = new GameSession(new RandomBlockGenerator(), new SwingGameClock(this::onTick), gamePanel);
+        session = newSession(GameMode.CLASSIC, settings.getDifficulty(), new Random(), clock, gamePanel);
         keyBindings = new KeyBindingManager(this::requestQuit);
         keyBindings.bindGameKeys(gamePanel, settings.getKeyMap(), session);
 
@@ -139,10 +145,23 @@ public class MainFrame extends JFrame {
     }
 
     private void startGame() {
+        session.end();
+        session = newSession(GameMode.CLASSIC, settings.getDifficulty(), new Random(), clock, gamePanel);
+        keyBindings.bindGameKeys(gamePanel, settings.getKeyMap(), session);
         keyBindings.setSuspended(false);
         keyBindings.clearPressedKeys();
         showScreen(Screen.GAME);
         session.start();
+    }
+
+    /**
+     * 한 판을 진행할 세션을 만든다. 블록은 난이도 가중치를 쓰는 WeightedBlockGenerator로 만들어,
+     * 분포 테스트를 통과한 생성기가 실제 게임에서도 그대로 쓰이게 한다.
+     * 아이템 모드는 항상 NORMAL 규칙이라 가중치도 NORMAL로 맞춘다.
+     */
+    static GameSession newSession(GameMode mode, Difficulty difficulty, Random random, GameClock clock, GameListener listener) {
+        Difficulty effective = mode == GameMode.ITEM ? Difficulty.NORMAL : difficulty;
+        return new GameSession(mode, effective, new WeightedBlockGenerator(effective.weights(), random), clock, listener);
     }
 
     private void openSettings() {
