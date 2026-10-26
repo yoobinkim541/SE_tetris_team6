@@ -3,6 +3,7 @@ package tetris.ui;
 import java.awt.event.KeyEvent;
 import java.util.HashMap;
 import java.util.Map;
+import tetris.feature.game.Difficulty;
 import tetris.feature.setting.GameAction;
 import tetris.feature.setting.KeyMap;
 
@@ -58,6 +59,7 @@ public class Messages {
 
         TEXT.put("settings.title", "설정");
         TEXT.put("settings.screenSize", "화면 크기");
+        TEXT.put("settings.difficulty", "난이도");
         TEXT.put("settings.controlKeys", "조작키");
         TEXT.put("settings.colorBlind", "색맹 모드");
         TEXT.put("settings.resetScoreboard", "스코어보드 초기화");
@@ -75,6 +77,10 @@ public class Messages {
         TEXT.put("size.SMALL", "Small");
         TEXT.put("size.MEDIUM", "Medium");
         TEXT.put("size.LARGE", "Large");
+
+        TEXT.put("difficulty.EASY", "Easy");
+        TEXT.put("difficulty.NORMAL", "Normal");
+        TEXT.put("difficulty.HARD", "Hard");
 
         TEXT.put("action.MOVE_LEFT", "왼쪽 이동");
         TEXT.put("action.MOVE_RIGHT", "오른쪽 이동");
@@ -111,6 +117,10 @@ public class Messages {
 
     public static String actionName(GameAction action) {
         return get("action." + action.name());
+    }
+
+    public static String difficultyName(Difficulty difficulty) {
+        return get("difficulty." + difficulty.name());
     }
 
     /** 키 이름. 방향키는 화살표 기호, 나머지는 KeyMap.displayName (KEY-6) */
