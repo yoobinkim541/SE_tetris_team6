@@ -54,3 +54,13 @@ Restart는 새 `GameModifiers`로 초기화합니다. D와 S는 독립적으로 
 - B는 보드 밖을 제외한 3×3 칸 반환. 완성 행과 중복 제거·실제 삭제·칸 점수 계산은 A가 담당.
 - 기존 `GameModifiersLifecycleTest`, `ModifierSessionTest`를 유지하고 전체 `gradlew test check` 통과.
 - 최신 develop에서 브랜치를 만들고 계약 시그니처 변경이 필요하면 A와 먼저 조율.
+
+## 동시에 작성된 C PR #92·#93·#94 적용 방법
+
+이 문서 작성 중 C PR을 확인했습니다. 효과 클래스와 효과별 테스트는 유지하되 새 계약에 맞춰 아래를 조정합니다.
+
+- `GameModifiers`는 이 계약의 구현을 유지합니다. 기존 `onLockFinished()` 호출은 `beginLock()`/`finishLock()` 순서로, `onBlockSpawned()`는 `onSpawn()`으로 바꿉니다. 새 게임은 새 상태 객체를 사용합니다.
+- C의 직접 효과 테스트도 `beginLock → effect.onLock → 점수 확인 → finishLock`을 따릅니다.
+- S 화면 잔여 수는 현재 블록을 제외합니다. 첫 대상 블록에서 9, 마지막 대상 블록에서 0이며 현재 블록에는 계속 1.5배입니다. 기존 현재 블록 포함 테스트 기대값을 갱신합니다.
+- #93의 `BombEffect`는 `ItemResult.cells`만 반환합니다. `addBonusScore()`·`takeBonusScore()`는 추가하지 않습니다. A가 R과 겹친 칸을 제외한 뒤 실제로 지운 C 칸 수로 점수를 계산하므로, 효과가 미리 점수를 쌓으면 중복 계산이나 대상 합집합과의 불일치가 생깁니다.
+- #95 병합 후 기존 C 브랜치에 최신 develop을 병합하여 `GameModifiers` 충돌에는 이 계약을 유지하고, C 효과 클래스·ItemType 연결·테스트는 보존합니다.
