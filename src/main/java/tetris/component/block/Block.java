@@ -42,6 +42,11 @@ public abstract class Block implements Cloneable {
         return Optional.empty();
     }
 
+    /** 무게추 여부. GameSession의 하강·회전 분기는 이 값 하나로 판단한다 (ARC-3) */
+    public boolean isWeight() {
+        return false;
+    }
+
     // 블록 종류 (보드에 기록할 셀 값 1..7 / 색·문자 결정). 7개 서브클래스가 override한다
     public BlockType getType() {
         throw new UnsupportedOperationException("서브클래스에서 override 필요");
