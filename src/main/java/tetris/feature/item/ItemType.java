@@ -10,10 +10,9 @@ package tetris.feature.item;
  */
 public enum ItemType {
     LINE_CLEAR('L', new LineClearEffect()),
-    // 가정(팀 합의 필요): 아직 구현하지 않은 아이템은 아무 효과 없이 동작한다. 각 Effect 클래스가 생기면 교체한다
     BOMB('B', new BombEffect()),
     DOUBLE_SCORE('D', new DoubleScoreEffect()),
-    SLOW('S', ItemType::noEffectYet);
+    SLOW('S', new SlowEffect());
 
     private final char symbol;
     private final ItemEffect effect;
@@ -30,9 +29,5 @@ public enum ItemType {
     /** 이 아이템이 붙은 블록이 Lock될 때 호출할 효과 */
     public ItemEffect effect() {
         return effect;
-    }
-
-    private static ItemResult noEffectYet(BoardView board, int itemRow, int itemCol, GameModifiers modifiers) {
-        return ItemResult.none();
     }
 }
