@@ -130,6 +130,7 @@ public class LockPipelineTest {
         dropAndLock(session, 19);
         for (int i = 0; i < 4; i++) session.moveRight();  // O: col 8..9
         dropAndLock(session, 18);                          // 19행이 꽉 참
+        session.tick();                                    // CLEARING 150 ms 뒤 삭제 (ANI-3)
 
         GameSnapshot s = session.snapshot();
         assertEquals("..........", AsciiBoard.row(s, 18));

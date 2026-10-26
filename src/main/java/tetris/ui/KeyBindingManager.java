@@ -122,12 +122,12 @@ public class KeyBindingManager {
 
     /**
      * 이 기능의 키를 지금 게임이 받아야 하는지.
-     * PLAYING이면 모두 받는다. PAUSED에서는 Pause·Quit만 받되, 방향키에 지정돼 있으면 Pause 메뉴 이동이 우선한다 (KEY-5)
+     * PLAYING이면 모두 받는다. CLEARING에서도 받되 Pause·Quit 외의 조작은 GameSession이 무시한다 (ANI-2). PAUSED에서는 Pause·Quit만 받되, 방향키에 지정돼 있으면 Pause 메뉴 이동이 우선한다 (KEY-5)
      */
     private boolean accepts(GameAction action) {
         if (suspended) return false;
         GameState state = session.getState();
-        if (state == GameState.PLAYING) return true;
+        if (state == GameState.PLAYING || state == GameState.CLEARING) return true;
         return state == GameState.PAUSED
                 && (action == GameAction.PAUSE || action == GameAction.QUIT)
                 && !isMenuKey(keyMap.keyOf(action));
