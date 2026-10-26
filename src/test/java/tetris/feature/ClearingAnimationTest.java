@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static tetris.feature.GameTestSupport.sequence;
 
+import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import tetris.component.block.IBlock;
@@ -16,6 +17,7 @@ import tetris.feature.GameTestSupport.RecordingListener;
 import tetris.feature.game.GameSession;
 import tetris.feature.game.GameSnapshot;
 import tetris.feature.game.GameState;
+import tetris.feature.item.Cell;
 
 /** ANI-1~4, 명세 4.1: Lock 뒤 줄 삭제는 150 ms CLEARING을 거쳐 tick()에서 마무리된다 */
 class ClearingAnimationTest {
@@ -45,6 +47,25 @@ class ClearingAnimationTest {
         tick(20);
         for (int i = 0; i < 4; i++) session.moveRight();  // O: col 8..9
         tick(19);
+    }
+
+    @Test
+    void CLEARING_중에만_지울_줄의_10칸이_clearingCells에_담긴다() { // ANI-5
+        assertTrue(session.snapshot().clearingCells().isEmpty());
+
+        lockCompletingLine();
+        List<Cell> cells = session.snapshot().clearingCells();
+        assertEquals(10, cells.size());
+        for (int col = 0; col < 10; col++) assertTrue(cells.contains(new Cell(19, col)));
+
+        session.pause();
+        assertTrue(session.snapshot().clearingCells().isEmpty());   // PAUSED는 CLEARING이 아니다
+        session.resume();
+        assertEquals(10, session.snapshot().clearingCells().size());
+
+        session.tick();
+        assertTrue(session.snapshot().clearingCells().isEmpty());
+        assertTrue(listener.changed.get(listener.changed.size() - 1).clearingCells().isEmpty());
     }
 
     @Test

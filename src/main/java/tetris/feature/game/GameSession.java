@@ -1,8 +1,10 @@
 package tetris.feature.game;
 
+import java.util.ArrayList;
 import java.util.List;
 import tetris.component.block.Block;
 import tetris.feature.data.Board;
+import tetris.feature.item.Cell;
 import tetris.feature.rule.BasicRotationPolicy;
 import tetris.feature.rule.BlockGenerator;
 import tetris.feature.rule.ImmediateLockPolicy;
@@ -232,7 +234,7 @@ public class GameSession {
                 state,
                 mode,
                 difficulty,
-                List.of(),
+                state == GameState.CLEARING ? pendingClear.cells() : List.of(), // ANI-5: CLEARING이 아니면 빈 목록
                 0,
                 List.of());
     }
@@ -274,6 +276,14 @@ public class GameSession {
 
         int rowCount() {
             return rows.size();
+        }
+
+        /** 흰색으로 깜빡일 칸 (ANI-1). 지울 줄의 10칸 */
+        List<Cell> cells() {
+            List<Cell> cells = new ArrayList<>();
+            for (int row : rows)
+                for (int col = 0; col < Board.WIDTH; col++) cells.add(new Cell(row, col));
+            return cells;
         }
     }
 
