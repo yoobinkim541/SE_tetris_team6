@@ -20,6 +20,7 @@ import tetris.feature.rule.SpawnPolicy;
  */
 public class GameSession {
     private static final int PREVIEW_COUNT = 1; // NXT-1
+    private static final int CLEAR_ANIMATION_MILLIS = 150; // ANI-1
 
     private final Board board = new Board();
     private final BlockGenerator generator;
@@ -30,6 +31,8 @@ public class GameSession {
     private int lines; // 누적 삭제 줄 (표시용)
     private boolean quitPending;                  // Quit 확인창이 떠 있는 동안 true
     private GameState stateBeforeQuit;            // 확인창을 띄우기 전 상태 (No 선택 시 복귀용)
+    private ClearPlan pendingClear;               // CLEARING 동안 150 ms 뒤에 지울 대상
+    private boolean pausedDuringClearing;         // CLEARING에서 Pause했는지. Resume 때 CLEARING으로 돌아간다
 
     private final SpawnPolicy spawnPolicy = new SpawnPolicy();
     private final RotationPolicy rotationPolicy = new BasicRotationPolicy();
@@ -72,6 +75,8 @@ public class GameSession {
         currentBlock = null;
         quitPending = false;
         stateBeforeQuit = null;
+        pendingClear = null;
+        pausedDuringClearing = false;
 
         state = GameState.PLAYING; // Spawn 충돌 시 PLAYING -> GAME_OVER 전이가 되도록 먼저 전환
         spawnNextBlock();
@@ -91,6 +96,8 @@ public class GameSession {
         currentBlock = null;
         quitPending = false;
         stateBeforeQuit = null;
+        pendingClear = null;
+        pausedDuringClearing = false;
         state = GameState.ENDED;
     }
 
@@ -131,37 +138,51 @@ public class GameSession {
 
     /** 자동 낙하 1회 = 하강 시도 (§3.1). PLAYING이 아니면 무시 (TMR-2) */
     public void tick() {
+        if (state == GameState.CLEARING) {
+            finishClearing(); // 150 ms가 지났다 (ANI-3)
+            return;
+        }
         if (state != GameState.PLAYING) return;
         descendOrLock();
     }
 
     // ── Pause / Quit ─────────────────────────
-    /** PLAYING -> PAUSED, 타이머 정지 (PAU-1) */
+    /** PLAYING 또는 CLEARING -> PAUSED, 타이머 정지 (PAU-1) */
     public void pause() {
-        if (state != GameState.PLAYING) return;
+        if (state != GameState.PLAYING && state != GameState.CLEARING) return;
+        pausedDuringClearing = state == GameState.CLEARING;
         clock.stop();
         state = GameState.PAUSED;
         listener.onChanged(snapshot());
     }
 
-    /** PAUSED -> PLAYING, 타이머를 전체 간격으로 재시작 (TMR-3). Quit 확인창이 떠 있으면 무시 */
+    /**
+     * PAUSED -> PLAYING, 타이머를 전체 간격으로 재시작 (TMR-3). Quit 확인창이 떠 있으면 무시.
+     * CLEARING에서 Pause했다면 CLEARING으로 돌아가 150 ms를 처음부터 다시 센다 (ANI-2)
+     */
     public void resume() {
         if (state != GameState.PAUSED || quitPending) return;
-        state = GameState.PLAYING;
-        clock.start(levelPolicy.fallIntervalMillis());
+        if (pausedDuringClearing) {
+            state = GameState.CLEARING;
+            clock.start(CLEAR_ANIMATION_MILLIS);
+        } else {
+            state = GameState.PLAYING;
+            clock.start(levelPolicy.fallIntervalMillis());
+        }
+        pausedDuringClearing = false;
         listener.onChanged(snapshot());
     }
 
-    /** Pause 키: PLAYING이면 pause(), PAUSED면 resume(). 그 외 상태는 무시 */
+    /** Pause 키: PLAYING·CLEARING이면 pause(), PAUSED면 resume(). 그 외 상태는 무시 */
     public void togglePause() {
-        if (state == GameState.PLAYING) pause();
+        if (state == GameState.PLAYING || state == GameState.CLEARING) pause();
         else if (state == GameState.PAUSED) resume();
     }
 
-    /** Quit 키: 확인창 동안 게임 정지 (QIT-1). PLAYING·PAUSED에서만 유효 */
+    /** Quit 키: 확인창 동안 게임 정지 (QIT-1). PLAYING·CLEARING·PAUSED에서만 유효 */
     public void requestQuit() {
         if (quitPending) return;
-        if (state != GameState.PLAYING && state != GameState.PAUSED) return;
+        if (state != GameState.PLAYING && state != GameState.CLEARING && state != GameState.PAUSED) return;
         stateBeforeQuit = state;
         quitPending = true;
         pause();
@@ -173,13 +194,13 @@ public class GameSession {
         end();
     }
 
-    /** Quit 확인 No: Quit 키를 누르기 전 상태로 복귀. PLAYING이었다면 타이머를 전체 간격으로 재시작 (TMR-3) */
+    /** Quit 확인 No: Quit 키를 누르기 전 상태로 복귀. PLAYING·CLEARING이었다면 타이머를 다시 시작 (TMR-3) */
     public void cancelQuit() {
         if (!quitPending) return;
         quitPending = false;
         GameState previous = stateBeforeQuit;
         stateBeforeQuit = null;
-        if (previous == GameState.PLAYING) resume();
+        if (previous == GameState.PLAYING || previous == GameState.CLEARING) resume();
     }
 
     /** 창 포커스 이탈: PLAYING이면 자동 Pause (PAU-3) */
@@ -245,22 +266,77 @@ public class GameSession {
         return true;
     }
 
-    /** §4 LOCK. Level은 L5와 다음 Spawn의 S3에서만 바뀐다 (PIPE-1) */
+    /** 한 번의 Lock에서 지워질 줄 R (§5 L2). 아이템이 지우는 칸 C는 아이템 구현 때 여기에 더한다 */
+    private record ClearPlan(List<Integer> rows) {
+        boolean isEmpty() {
+            return rows.isEmpty();
+        }
+
+        int rowCount() {
+            return rows.size();
+        }
+    }
+
+    /** §5 LOCK. Level은 L6과 다음 Spawn의 S3에서만 바뀐다 (PIPE-1) */
     private void lockCurrentBlock() {
-        if (!board.tryPlaceBlock(currentBlock))                                          // L1
-            throw new IllegalStateException("current block is not at a placeable position");
-            
-        currentBlock = null; // 보드에 들어간 블록을 스냅샷이 두 번 그리지 않도록
+        placeCurrentBlock();                          // L1
+        ClearPlan plan = collectClearTargets();       // L2
+        if (plan.isEmpty()) {                         // ANI-4: 지울 대상이 없으면 CLEARING을 거치지 않는다
+            finishLock(plan);
+            return;
+        }
 
-        List<Integer> fullRows = board.findFullRows();                                // L2
-        int clearedRows = fullRows.size();
+        pendingClear = plan;                          // L3: 150 ms 뒤 tick()에서 finishClearing()이 이어서 수행
+        state = GameState.CLEARING;
+        clock.start(CLEAR_ANIMATION_MILLIS);
+        listener.onChanged(snapshot());
+    }
 
-        board.clearRows(fullRows);                                                    // L3
-        score += scoringPolicy.lineClearBonus(clearedRows);                               // L4
-        lines += clearedRows;
-        levelPolicy.onLinesCleared(clearedRows);                                          // L5
+    /** CLEARING의 150 ms가 지난 뒤 L4부터 이어서 수행하고 Spawn한다 */
+    private void finishClearing() {
+        ClearPlan plan = pendingClear;
+        pendingClear = null;
+        state = GameState.PLAYING; // Spawn 충돌이면 PLAYING -> GAME_OVER 전이가 되도록 먼저 전환
+        finishLock(plan);
+        if (state == GameState.PLAYING) listener.onChanged(snapshot());
+    }
+
+    /** L4~L6 후 Spawn */
+    private void finishLock(ClearPlan plan) {
+        applyClear(plan);                             // L4
+        awardClearScore(plan);                        // L5
+        updateCounters(plan);                         // L6
 
         spawnNextBlock();
+    }
+
+    /** L1: 현재 블록 칸을 보드에 기록 */
+    private void placeCurrentBlock() {
+        if (!board.tryPlaceBlock(currentBlock))
+            throw new IllegalStateException("current block is not at a placeable position");
+
+        currentBlock = null; // 보드에 들어간 블록을 스냅샷이 두 번 그리지 않도록
+    }
+
+    /** L2: 지울 대상 수집. 보드는 아직 바꾸지 않는다 */
+    private ClearPlan collectClearTargets() {
+        return new ClearPlan(board.findFullRows());
+    }
+
+    /** L4: R의 행을 삭제하고 위 행을 내린다 (CLR-2) */
+    private void applyClear(ClearPlan plan) {
+        board.clearRows(plan.rows());
+    }
+
+    /** L5 */
+    private void awardClearScore(ClearPlan plan) {
+        score += scoringPolicy.lineClearBonus(plan.rowCount());
+    }
+
+    /** L6: 누적 줄과 Level */
+    private void updateCounters(ClearPlan plan) {
+        lines += plan.rowCount();
+        levelPolicy.onLinesCleared(plan.rowCount());
     }
 
     private void spawnNextBlock() {
