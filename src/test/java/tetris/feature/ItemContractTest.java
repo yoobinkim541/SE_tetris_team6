@@ -60,11 +60,11 @@ class ItemContractTest {
     }
 
     @Test
-    void sessionKeepsGivenModeAndDifficulty() {
+    void itemSessionUsesNormalDifficulty() {
         GameSession session = new GameSession(GameMode.ITEM, Difficulty.HARD,
                 GameTestSupport.sequence(new OBlock()), new GameTestSupport.RecordingClock(), new GameTestSupport.RecordingListener());
         assertEquals(GameMode.ITEM, session.getMode());
-        assertEquals(Difficulty.HARD, session.getDifficulty());
+        assertEquals(Difficulty.NORMAL, session.getDifficulty());
     }
 
     @Test
