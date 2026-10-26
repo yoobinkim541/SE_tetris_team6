@@ -258,7 +258,8 @@ public class GameSession {
                 difficulty,
                 state == GameState.CLEARING ? pendingClear.flashCells() : List.of(), // ANI-5: CLEARING이 아니면 빈 목록
                 mode == GameMode.ITEM ? 10 - lines % 10 : 0,
-                modifiers.effects());
+                modifiers.effects(),
+                board.copyItemCells());
     }
 
     // ── 명세 4장 파이프라인 (내부) ────────────
