@@ -12,7 +12,7 @@
 
 ## 최종 제출 조건
 
-- [ ] 최신 커밋의 원격 CI 초록
+- [x] [구현 커밋 4c35e37의 Linux·Windows CI 성공](https://github.com/yoobinkim541/SE_tetris_team6/actions/runs/40335775691)
 - [ ] 팀원 1명 이상 리뷰 승인 후 develop 병합
 - [ ] [실제 사용자 A/B 평가](user-playtest.md) 완료, P0/P1=0 확인
 - [ ] 실제 한글 IME·운영체제 배율 환경에서 수동 플레이 결과 기록
