@@ -103,6 +103,7 @@ data: 반도체 산업 키워드 목록 업데이트
 ### 명령어
 | 목적 | 명령 (Windows) | 결과 |
 |---|---|---|
+| 더블클릭 실행 | `.\run.bat` 더블클릭 | 게임 창 즉시 실행 |
 | 실행 | `.\gradlew.bat run` | 게임 창 실행 |
 | 테스트 | `.\gradlew.bat test` | 단위·비기능 테스트 + JaCoCo 리포트 (`build/reports/jacoco/test/html`) |
 | 배포 패키지 | `.\gradlew.bat packageApp` | `build/distributions/SE-Tetris-windows.zip` |
