@@ -1,10 +1,16 @@
 package tetris.feature.game;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
 import tetris.component.block.Block;
 import tetris.feature.data.Board;
 import tetris.feature.item.Cell;
+import tetris.feature.item.GameModifiers;
+import tetris.feature.item.ItemResult;
+import tetris.feature.item.ItemType;
 import tetris.feature.rule.BasicRotationPolicy;
 import tetris.feature.rule.BlockGenerator;
 import tetris.feature.rule.ImmediateLockPolicy;
@@ -23,6 +29,7 @@ import tetris.feature.rule.SpawnPolicy;
 public class GameSession {
     private static final int PREVIEW_COUNT = 1; // NXT-1
     private static final int CLEAR_ANIMATION_MILLIS = 150; // ANI-1
+    private static final int CELL_CLEAR_SCORE = 10;        // 아이템이 지운 고정 칸당 점수 (ITB-4)
 
     private final Board board = new Board();
     private final BlockGenerator generator;
@@ -35,6 +42,7 @@ public class GameSession {
     private GameState stateBeforeQuit;            // 확인창을 띄우기 전 상태 (No 선택 시 복귀용)
     private ClearPlan pendingClear;               // CLEARING 동안 150 ms 뒤에 지울 대상
     private boolean pausedDuringClearing;         // CLEARING에서 Pause했는지. Resume 때 CLEARING으로 돌아간다
+    private GameModifiers modifiers = new GameModifiers(); // 지속 효과 (D, S). start()마다 새로 만든다
     private boolean crushing;                     // 무게추가 첫 하강에 실패해 분쇄 모드가 됐는지 (ITW-4)
 
     private final SpawnPolicy spawnPolicy = new SpawnPolicy();
@@ -81,6 +89,7 @@ public class GameSession {
         pendingClear = null;
         pausedDuringClearing = false;
         crushing = false;
+        modifiers = new GameModifiers();
 
         state = GameState.PLAYING; // Spawn 충돌 시 PLAYING -> GAME_OVER 전이가 되도록 먼저 전환
         spawnNextBlock();
@@ -241,7 +250,7 @@ public class GameSession {
                 state,
                 mode,
                 difficulty,
-                state == GameState.CLEARING ? pendingClear.cells() : List.of(), // ANI-5: CLEARING이 아니면 빈 목록
+                state == GameState.CLEARING ? pendingClear.flashCells() : List.of(), // ANI-5: CLEARING이 아니면 빈 목록
                 0,
                 List.of());
     }
@@ -310,28 +319,33 @@ public class GameSession {
     }
 
     /** 한 번의 Lock에서 지워질 줄 R (§5 L2). 아이템이 지우는 칸 C는 아이템 구현 때 여기에 더한다 */
-    private record ClearPlan(List<Integer> rows) {
+    private record ClearPlan(List<Integer> rows, Set<Cell> cells) {
         boolean isEmpty() {
-            return rows.isEmpty();
+            return rows.isEmpty() && cells.isEmpty();
         }
 
         int rowCount() {
             return rows.size();
         }
 
-        /** 흰색으로 깜빡일 칸 (ANI-1). 지울 줄의 10칸 */
-        List<Cell> cells() {
-            List<Cell> cells = new ArrayList<>();
-            for (int row : rows)
-                for (int col = 0; col < Board.WIDTH; col++) cells.add(new Cell(row, col));
-            return cells;
+        /** 흰색으로 깜빡일 보이는 칸 (ANI-1). 지울 줄의 10칸과 아이템이 지울 칸. 숨은 줄은 그리지 않는다 */
+        List<Cell> flashCells() {
+            List<Cell> flash = new ArrayList<>();
+            for (int row : rows) {
+                if (row < 0) continue;
+                for (int col = 0; col < Board.WIDTH; col++) flash.add(new Cell(row, col));
+            }
+            for (Cell cell : cells) {
+                if (cell.row() >= 0) flash.add(cell);
+            }
+            return flash;
         }
     }
 
     /** §5 LOCK. Level은 L6과 다음 Spawn의 S3에서만 바뀐다 (PIPE-1) */
     private void lockCurrentBlock() {
-        placeCurrentBlock();                          // L1
-        ClearPlan plan = collectClearTargets();       // L2
+        Block placed = placeCurrentBlock();           // L1
+        ClearPlan plan = collectClearTargets(placed); // L2
         if (plan.isEmpty()) {                         // ANI-4: 지울 대상이 없으면 CLEARING을 거치지 않는다
             finishLock(plan);
             return;
@@ -354,34 +368,65 @@ public class GameSession {
 
     /** L4~L6 후 Spawn */
     private void finishLock(ClearPlan plan) {
-        applyClear(plan);                             // L4
-        awardClearScore(plan);                        // L5
+        int clearedCells = applyClear(plan);          // L4
+        awardClearScore(plan, clearedCells);          // L5
         updateCounters(plan);                         // L6
 
         spawnNextBlock();
     }
 
     /** L1: 현재 블록 칸을 보드에 기록 */
-    private void placeCurrentBlock() {
+    private Block placeCurrentBlock() {
         if (!board.tryPlaceBlock(currentBlock))
             throw new IllegalStateException("current block is not at a placeable position");
 
+        Block placed = currentBlock;
         currentBlock = null; // 보드에 들어간 블록을 스냅샷이 두 번 그리지 않도록
+        return placed;
     }
 
-    /** L2: 지울 대상 수집. 보드는 아직 바꾸지 않는다 */
-    private ClearPlan collectClearTargets() {
-        return new ClearPlan(board.findFullRows());
+    /**
+     * L2: 지울 대상 수집. 보드는 아직 바꾸지 않는다.
+     * R = 완성 행 ∪ 아이템이 지우려는 행(같은 행은 한 번만), C = 아이템이 지우려는 칸 − R에 속한 칸 (PIPE-5, ITL-3)
+     */
+    private ClearPlan collectClearTargets(Block placed) {
+        Set<Integer> rows = new TreeSet<>(board.findFullRows());
+        Set<Cell> cells = new HashSet<>();
+        collectItemTargets(placed, rows, cells);
+
+        rows.removeIf(row -> row < -Board.MARGIN || row >= Board.HEIGHT); // 보드 밖 행은 무시
+        cells.removeIf(cell -> rows.contains(cell.row()));
+        return new ClearPlan(new ArrayList<>(rows), cells);
     }
 
-    /** L4: R의 행을 삭제하고 위 행을 내린다 (CLR-2) */
-    private void applyClear(ClearPlan plan) {
-        board.clearRows(plan.rows());
+    // Lock한 블록의 아이템 칸마다 효과를 불러 지울 행·칸을 모은다. 아이템 칸의 보드 좌표 = 블록 위치 + 격자 위치
+    private void collectItemTargets(Block placed, Set<Integer> rows, Set<Cell> cells) {
+        int[][] shape = placed.getShape();
+        for (int r = 0; r < shape.length; r++) {
+            for (int c = 0; c < shape[r].length; c++) {
+                if (shape[r][c] == 0) continue;
+
+                ItemType item = placed.itemCellAt(r, c).orElse(null);
+                if (item == null) continue;
+
+                ItemResult result = item.effect().onLock(board, placed.getRow() + r, placed.getCol() + c, modifiers);
+                rows.addAll(result.rows());
+                cells.addAll(result.cells());
+            }
+        }
     }
 
-    /** L5 */
-    private void awardClearScore(ClearPlan plan) {
+    /** L4: C의 칸을 비우고(위 칸은 내려오지 않음) R의 행을 삭제해 위 행을 내린다 (CLR-2). 실제로 지운 C의 칸 수를 돌려준다 */
+    private int applyClear(ClearPlan plan) {
+        int clearedCells = board.clearCells(plan.cells());
+        board.removeRows(plan.rows());
+        return clearedCells;
+    }
+
+    /** L5: 줄 삭제 점수 + 아이템이 지운 고정 칸당 10점 (§8.6) */
+    private void awardClearScore(ClearPlan plan, int clearedCells) {
         score += scoringPolicy.lineClearBonus(plan.rowCount());
+        score += (long) clearedCells * CELL_CLEAR_SCORE;
     }
 
     /** L6: 누적 줄과 Level */
