@@ -39,7 +39,6 @@ public class JsonSettingsRepository implements SettingsRepository {
     @Override
     public boolean save(Settings settings) {
         ObjectNode root = JsonFile.newRoot();
-        root.put("difficulty", settings.getDifficulty().name());
         root.put("screenSize", settings.getScreenSize().name());
         root.put("colorBlindMode", settings.isColorBlindMode());
         root.put("difficulty", settings.getDifficulty().name());
@@ -51,16 +50,6 @@ public class JsonSettingsRepository implements SettingsRepository {
     private LoadResult<Settings> loadFields(JsonNode root) {
         Settings settings = new Settings();
         List<String> warnings = new ArrayList<>();
-        JsonNode difficulty = root.get("difficulty");
-        if (!isAbsent(difficulty)) {
-            try {
-                if (!difficulty.isTextual()) throw new IllegalArgumentException();
-                settings.setDifficulty(tetris.feature.game.Difficulty.valueOf(difficulty.asText()));
-            } catch (IllegalArgumentException invalid) {
-                warnings.add("난이도 설정이 올바르지 않아 NORMAL을 사용합니다.");
-            }
-        }
-
         applyScreenSize(root.get("screenSize"), settings, warnings);
         applyColorBlindMode(root.get("colorBlindMode"), settings, warnings);
         applyDifficulty(root.get("difficulty"), settings, warnings);
