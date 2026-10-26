@@ -28,6 +28,13 @@ public class Messages {
         TEXT.put("game.lines", "LINES");
         TEXT.put("game.state", "STATE");
         TEXT.put("game.keys", "KEYS");
+        TEXT.put("game.effects", "지속 효과");
+        TEXT.put("effect.DOUBLE_SCORE.tag", "x2");
+        TEXT.put("effect.DOUBLE_SCORE.desc", "점수 2배");
+        TEXT.put("effect.SLOW.tag", "SLOW");
+        TEXT.put("effect.SLOW.desc", "낙하 1.5배");
+        TEXT.put("effect.blocks", "%d블록");
+        TEXT.put("effect.thisBlock", "이번 블록");
 
         TEXT.put("pause.title", "PAUSED");
         TEXT.put("pause.resume", "계속하기");
