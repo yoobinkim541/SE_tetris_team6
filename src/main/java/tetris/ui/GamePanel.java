@@ -161,7 +161,8 @@ public class GamePanel extends JPanel implements GameListener {
             for (int col = 0; col < cells[row].length; col++) {
                 int value = cells[row][col];
                 if (value <= 0) continue;
-                drawCell(g, x + col * cellSize, y + row * cellSize, cellSize, BlockType.values()[value - 1]);
+                tetris.feature.item.ItemType item = snapshot.lockedItems().get(new tetris.feature.item.Cell(row, col));
+                drawCell(g, x + col * cellSize, y + row * cellSize, cellSize, BlockType.values()[value - 1], item);
             }
         }
 

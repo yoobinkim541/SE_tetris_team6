@@ -3,13 +3,16 @@ package tetris.feature.data;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import tetris.component.block.Block;
 import tetris.feature.crash.CrashDetector;
 import tetris.feature.item.BoardView;
 import tetris.feature.item.Cell;
+import tetris.feature.item.ItemType;
 
 /**
  * 20x10 논리 보드 (명세 G-1~G-3). 보드 배열의 유일한 변경 지점이다.
@@ -33,6 +36,8 @@ public class Board implements BoardView {
     public static final int WALL = -1;
 
     private final int[][] board;
+    // 고정된 칸에 남아 있는 아이템 문자 (D·S처럼 Lock 뒤에도 칸이 남는 아이템). board와 같은 배열 인덱스, 없으면 null
+    private final ItemType[][] items = new ItemType[ARRAY_ROWS][ARRAY_COLS];
 
     public Board() {
         board = createDefaultBoard();
@@ -55,6 +60,7 @@ public class Board implements BoardView {
     public void reset() {
         for (int row = 0; row < MARGIN + HEIGHT; row++) {
             Arrays.fill(board[row], MARGIN, MARGIN + WIDTH, EMPTY);
+            Arrays.fill(items[row], null);
         }
     }
 
@@ -98,15 +104,17 @@ public class Board implements BoardView {
                 if (board[arrayRow][arrayCol] == WALL || board[arrayRow][arrayCol] == EMPTY) continue;
 
                 board[arrayRow][arrayCol] = EMPTY;
+                items[arrayRow][arrayCol] = null;
                 cleared++;
             }
         }
         return cleared;
     }
 
-    // 논리 좌표 (row, col)의 칸에 값을 쓴다
-    private void setCell(int row, int col, int value) {
+    // 논리 좌표 (row, col)의 칸에 값과 아이템 문자를 쓴다. 칸이 바뀌면 이전 아이템 문자는 남지 않는다
+    private void setCell(int row, int col, int value, ItemType item) {
         board[row + MARGIN][col + MARGIN] = value;
+        items[row + MARGIN][col + MARGIN] = item;
     }
 
     /** Lock: 블록 칸을 종류 값(1..7)으로 기록한다 (LCK-4). 놓을 수 없는 위치면 아무것도 바꾸지 않고 false */
@@ -121,7 +129,7 @@ public class Board implements BoardView {
             for (int _col = 0; _col < shape[_row].length; _col++) {
                 if(shape[_row][_col] == 0) continue;
 
-                setCell(block.getRow() + _row, block.getCol() + _col, value);
+                setCell(block.getRow() + _row, block.getCol() + _col, value, block.itemCellAt(_row, _col).orElse(null));
             }
         }
 
@@ -179,7 +187,7 @@ public class Board implements BoardView {
             if (cell.row() < -MARGIN || cell.row() >= HEIGHT || cell.col() < 0 || cell.col() >= WIDTH) continue;
             if (board[cell.row() + MARGIN][cell.col() + MARGIN] == EMPTY) continue;
 
-            setCell(cell.row(), cell.col(), EMPTY);
+            setCell(cell.row(), cell.col(), EMPTY, null);
             cleared++;
         }
         return cleared;
@@ -192,10 +200,12 @@ public class Board implements BoardView {
         for (int readRow = MARGIN + HEIGHT - 1; readRow >= 0; readRow--) {
             if (completed.contains(readRow)) continue;
             System.arraycopy(board[readRow], MARGIN, board[writeRow], MARGIN, WIDTH);
+            System.arraycopy(items[readRow], MARGIN, items[writeRow], MARGIN, WIDTH);
             writeRow--;
         }
         while (writeRow >= 0) {
             Arrays.fill(board[writeRow], MARGIN, MARGIN + WIDTH, EMPTY);
+            Arrays.fill(items[writeRow], null);
             writeRow--;
         }
     }
@@ -218,5 +228,20 @@ public class Board implements BoardView {
         }
         
         return copy;
+    }
+
+    /**
+     * UI/스냅샷용: 보이는 영역(row 0..19)의 고정 칸 중 아이템 문자가 남아 있는 칸. 키는 논리 좌표다.
+     * 칸이 지워지거나 행이 내려가면 문자도 함께 지워지거나 내려간다. 수정할 수 없는 복사본이다
+     */
+    public Map<Cell, ItemType> copyItemCells() {
+        Map<Cell, ItemType> result = new HashMap<>();
+        for (int row = 0; row < HEIGHT; row++) {
+            for (int col = 0; col < WIDTH; col++) {
+                ItemType item = items[row + MARGIN][col + MARGIN];
+                if (item != null) result.put(new Cell(row, col), item);
+            }
+        }
+        return Map.copyOf(result);
     }
 }
