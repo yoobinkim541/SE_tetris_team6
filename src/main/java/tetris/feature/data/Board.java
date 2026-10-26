@@ -2,12 +2,14 @@ package tetris.feature.data;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import tetris.component.block.Block;
 import tetris.feature.crash.CrashDetector;
 import tetris.feature.item.BoardView;
+import tetris.feature.item.Cell;
 
 /**
  * 20x10 논리 보드 (명세 G-1~G-3). 보드 배열의 유일한 변경 지점이다.
@@ -66,6 +68,42 @@ public class Board implements BoardView {
         return CrashDetector.CanPlace(board, shape, row + MARGIN, col + MARGIN);
     }
 
+    /** 무게추 분쇄용: 벽(좌우·바닥)만 막고 고정 칸은 무시한 채 놓을 수 있는지. 상태를 바꾸지 않는다 (ITW-4) */
+    public boolean canPlaceThrough(Block block, int row, int col) {
+        int[][] shape = block.getShape();
+        for (int r = 0; r < shape.length; r++) {
+            for (int c = 0; c < shape[r].length; c++) {
+                if (shape[r][c] == 0) continue;
+
+                int arrayRow = row + r + MARGIN;
+                int arrayCol = col + c + MARGIN;
+                if (arrayRow < 0 || arrayRow >= ARRAY_ROWS || arrayCol < 0 || arrayCol >= ARRAY_COLS) return false;
+                if (board[arrayRow][arrayCol] == WALL) return false;
+            }
+        }
+        return true;
+    }
+
+    /** 무게추 분쇄: 블록 모양이 (row, col)에서 덮는 고정 칸을 모두 비운다(위 칸은 내려오지 않는다). 지운 칸 수를 돌려준다 */
+    public int clearUnder(Block block, int row, int col) {
+        int[][] shape = block.getShape();
+        int cleared = 0;
+        for (int r = 0; r < shape.length; r++) {
+            for (int c = 0; c < shape[r].length; c++) {
+                if (shape[r][c] == 0) continue;
+
+                int arrayRow = row + r + MARGIN;
+                int arrayCol = col + c + MARGIN;
+                if (arrayRow < 0 || arrayRow >= ARRAY_ROWS || arrayCol < 0 || arrayCol >= ARRAY_COLS) continue;
+                if (board[arrayRow][arrayCol] == WALL || board[arrayRow][arrayCol] == EMPTY) continue;
+
+                board[arrayRow][arrayCol] = EMPTY;
+                cleared++;
+            }
+        }
+        return cleared;
+    }
+
     // 논리 좌표 (row, col)의 칸에 값을 쓴다
     private void setCell(int row, int col, int value) {
         board[row + MARGIN][col + MARGIN] = value;
@@ -119,7 +157,36 @@ public class Board implements BoardView {
         for (int row : targets) {
             if (isRowFull(row)) completed.add(row + MARGIN);
         }
+        removeArrayRows(completed);
+    }
 
+    /**
+     * 꽉 차 있지 않아도 주어진 행을 삭제하고 위쪽 행을 아래로 내린다 (줄 삭제 아이템, ITL-2).
+     * 숨은 줄(-MARGIN..-1)도 지울 수 있다. 범위 밖 행은 무시한다
+     */
+    public void removeRows(Collection<Integer> targets) {
+        Set<Integer> removed = new HashSet<>();
+        for (int row : targets) {
+            if (row >= -MARGIN && row < HEIGHT) removed.add(row + MARGIN);
+        }
+        removeArrayRows(removed);
+    }
+
+    /** 주어진 칸(논리 좌표)의 고정 칸을 비운다. 위 칸은 내려오지 않는다. 실제로 지운 칸 수를 돌려준다 (빈 칸·보드 밖은 세지 않음) */
+    public int clearCells(Collection<Cell> cells) {
+        int cleared = 0;
+        for (Cell cell : cells) {
+            if (cell.row() < -MARGIN || cell.row() >= HEIGHT || cell.col() < 0 || cell.col() >= WIDTH) continue;
+            if (board[cell.row() + MARGIN][cell.col() + MARGIN] == EMPTY) continue;
+
+            setCell(cell.row(), cell.col(), EMPTY);
+            cleared++;
+        }
+        return cleared;
+    }
+
+    // 배열 인덱스 기준으로 주어진 행들을 빼고 나머지를 아래로 모은다.
+    private void removeArrayRows(Set<Integer> completed) {
         // 배열 인덱스 기준. 숨은 줄까지 함께 내리고, 좌우 벽 열은 건드리지 않는다
         int writeRow = MARGIN + HEIGHT - 1;
         for (int readRow = MARGIN + HEIGHT - 1; readRow >= 0; readRow--) {

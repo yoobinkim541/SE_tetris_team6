@@ -36,7 +36,7 @@ public enum Difficulty {
     /** 블록 종류별 가중치. WeightedBlockGenerator의 입력 (GEN-4) */
     public Map<BlockType, Integer> weights() {
         Map<BlockType, Integer> weights = new EnumMap<>(BlockType.class);
-        for (BlockType type : BlockType.values()) weights.put(type, OTHER_WEIGHT);
+        for (BlockType type : BlockType.ordinary()) weights.put(type, OTHER_WEIGHT);
         weights.put(BlockType.I, iWeight);
         return weights;
     }

@@ -35,9 +35,9 @@ class ItemContractTest {
     @Test
     void difficultyWeightsCoverAllBlockTypesAndOnlyIDiffers() {
         var weights = Difficulty.HARD.weights();
-        assertEquals(BlockType.values().length, weights.size());
+        assertEquals(BlockType.ordinary().length, weights.size());
         assertEquals(8, weights.get(BlockType.I));
-        for (BlockType type : BlockType.values()) {
+        for (BlockType type : BlockType.ordinary()) {
             if (type != BlockType.I) assertEquals(10, weights.get(type));
         }
     }
@@ -60,11 +60,11 @@ class ItemContractTest {
     }
 
     @Test
-    void sessionKeepsGivenModeAndDifficulty() {
+    void itemSessionUsesNormalDifficulty() {
         GameSession session = new GameSession(GameMode.ITEM, Difficulty.HARD,
                 GameTestSupport.sequence(new OBlock()), new GameTestSupport.RecordingClock(), new GameTestSupport.RecordingListener());
         assertEquals(GameMode.ITEM, session.getMode());
-        assertEquals(Difficulty.HARD, session.getDifficulty());
+        assertEquals(Difficulty.NORMAL, session.getDifficulty());
     }
 
     @Test

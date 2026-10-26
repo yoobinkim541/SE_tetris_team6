@@ -60,7 +60,7 @@ public class MessagesAndPaletteTest {
     void sevenDistinctColorsInEachMode() {
         for (boolean colorBlind : new boolean[] {false, true}) {
             Set<Color> colors = new HashSet<>();
-            for (BlockType type : BlockType.values()) colors.add(palette.color(type, colorBlind));
+            for (BlockType type : BlockType.ordinary()) colors.add(palette.color(type, colorBlind));
             assertEquals(7, colors.size());
         }
         assertNotEquals(palette.color(BlockType.S, false), palette.color(BlockType.S, true));

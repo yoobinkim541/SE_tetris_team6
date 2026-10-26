@@ -70,6 +70,18 @@ jar {
     }
 }
 
+// Release용 JAR에는 런타임 의존성도 포함한다.
+tasks.register('releaseJar', Jar) {
+    group = 'distribution'
+    archiveFileName = 'SE-Tetris.jar'
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    manifest { attributes 'Main-Class': application.mainClass.get() }
+    from sourceSets.main.output
+    dependsOn configurations.runtimeClasspath
+    from { configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
+    exclude 'META-INF/*.SF', 'META-INF/*.RSA', 'META-INF/*.DSA'
+}
+
 // 실행 jar와 의존 라이브러리(Jackson)를 jpackage 입력 폴더 하나에 모은다
 tasks.register('jpackageInput', Sync) {
     from jar

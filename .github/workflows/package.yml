@@ -23,7 +23,7 @@ jobs:
           java-version: '21'
 
       - name: Build package
-        run: ./gradlew.bat packageApp --no-daemon
+        run: ./gradlew.bat check releaseJar packageApp --no-daemon
 
       - name: Upload package
         uses: actions/upload-artifact@v4
@@ -31,8 +31,15 @@ jobs:
           name: SE-Tetris-windows
           path: build/distributions/SE-Tetris-windows.zip
 
+      - name: Upload executable JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: SE-Tetris-jar
+          path: build/libs/SE-Tetris.jar
+          if-no-files-found: error
+
       - name: Attach to release
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "${{ github.ref_name }}" build/distributions/SE-Tetris-windows.zip --title "${{ github.ref_name }}" --generate-notes
+        run: gh release create "${{ github.ref_name }}" build/distributions/SE-Tetris-windows.zip build/libs/SE-Tetris.jar --title "${{ github.ref_name }}" --generate-notes
