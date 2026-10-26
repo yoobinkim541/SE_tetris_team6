@@ -45,6 +45,22 @@ class RequirementsVisualAuditTest {
         Graphics2D graphics = image.createGraphics();
         panel.paint(graphics);
         graphics.dispose();
+        if (Boolean.getBoolean("audit.screenshots")) {
+            try {
+                java.nio.file.Path directory = java.nio.file.Path.of("build", "screenshots");
+                java.nio.file.Files.createDirectories(directory);
+                Block block = snapshot.currentBlock() != null ? snapshot.currentBlock() : snapshot.nextBlock();
+                String kind = block == null ? snapshot.state().name() : block.getType().name();
+                if (block != null) {
+                    for (int r = 0; r < block.getShape().length; r++)
+                        for (int c = 0; c < block.getShape()[r].length; c++)
+                            if (block.itemCellAt(r, c).isPresent()) kind = block.itemCellAt(r, c).get().name();
+                }
+                String filename = kind + (snapshot.currentBlock() != null ? "-current" : "-next")
+                        + (colorBlind ? "-colorblind" : "-default") + ".png";
+                javax.imageio.ImageIO.write(image, "png", directory.resolve(filename).toFile());
+            } catch (java.io.IOException error) { throw new AssertionError(error); }
+        }
         return image;
     }
 

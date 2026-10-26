@@ -17,7 +17,10 @@ import javax.swing.JPanel;
 import tetris.feature.game.GameSession;
 import tetris.feature.game.GameSnapshot;
 import tetris.feature.game.GameState;
-import tetris.feature.rule.RandomBlockGenerator;
+import tetris.feature.rule.WeightedBlockGenerator;
+import tetris.feature.game.GameMode;
+import tetris.feature.game.Difficulty;
+import java.util.Random;
 import tetris.feature.save.ScoreboardRepository;
 import tetris.feature.save.SettingsRepository;
 import tetris.feature.score.ScoreEntry;
@@ -51,7 +54,7 @@ public class MainFrame extends JFrame {
     private final ScoreBoardPanel scoreBoardPanel;
     private final SettingPanel settingPanel;
     private final KeyBindingManager keyBindings;
-    private final GameSession session;
+    private GameSession session;
 
     private Screen currentScreen;
     private ScreenSize appliedScreenSize;
@@ -67,6 +70,7 @@ public class MainFrame extends JFrame {
 
         mainMenuPanel = new MainMenuPanel(List.of(
                 new MenuItem(Messages.get("menu.start"), this::startGame),
+                new MenuItem("아이템 모드", () -> startGame(GameMode.ITEM)),
                 new MenuItem(Messages.get("menu.settings"), this::openSettings),
                 new MenuItem(Messages.get("menu.scoreboard"), this::openScoreboard),
                 new MenuItem(Messages.get("menu.exit"), this::exitApplication)));
@@ -78,7 +82,7 @@ public class MainFrame extends JFrame {
         settingPanel = new SettingPanel(settings, this::onSettingsChanged, this::resetScoreboard,
                 () -> showScreen(Screen.MAIN_MENU));
 
-        session = new GameSession(new RandomBlockGenerator(), new SwingGameClock(this::onTick), gamePanel);
+        session = createSession(GameMode.CLASSIC);
         keyBindings = new KeyBindingManager(this::requestQuit);
         keyBindings.bindGameKeys(gamePanel, settings.getKeyMap(), session);
 
@@ -139,6 +143,19 @@ public class MainFrame extends JFrame {
     }
 
     private void startGame() {
+        startGame(GameMode.CLASSIC);
+    }
+
+    private GameSession createSession(GameMode mode) {
+        Difficulty difficulty = mode == GameMode.ITEM ? Difficulty.NORMAL : settings.getDifficulty();
+        return new GameSession(mode, difficulty, new WeightedBlockGenerator(difficulty.weights(), new Random()),
+                new SwingGameClock(this::onTick), gamePanel);
+    }
+
+    private void startGame(GameMode mode) {
+        session.end();
+        session = createSession(mode);
+        keyBindings.bindGameKeys(gamePanel, settings.getKeyMap(), session);
         keyBindings.setSuspended(false);
         keyBindings.clearPressedKeys();
         showScreen(Screen.GAME);
@@ -169,21 +186,21 @@ public class MainFrame extends JFrame {
     // GameOver에서 Enter: GAME_OVER -> ENDED, Top 10이면 이름 입력, 아니면 스코어보드 (명세 9)
     private void afterGameOver() {
         session.end();
-        if (scoreboard.qualifies(finalResult.score())) {
+        if (scoreboard.qualifies(finalResult.score(), finalResult.mode(), finalResult.difficulty())) {
             nameInputPanel.prepare(finalResult.score());
             showScreen(Screen.NAME_INPUT);
         } else {
-            scoreBoardPanel.show(scoreboard.entries(), -1, true);
+            scoreBoardPanel.show(scoreboard.entries(), -1, true, finalResult.mode(), finalResult.difficulty());
             showScreen(Screen.SCOREBOARD);
         }
     }
 
     // 이름 확정 즉시 저장 (SBD-6). 저장에 실패해도 이번 실행에서는 순위를 보여준다
     private void submitName(String name) {
-        ScoreEntry entry = new ScoreEntry(name, finalResult.score(), finalResult.level(), finalResult.lines(), Instant.now());
+        ScoreEntry entry = new ScoreEntry(name, finalResult.score(), finalResult.level(), finalResult.lines(), finalResult.mode(), finalResult.difficulty(), Instant.now());
         int rank = scoreboard.add(entry);
         boolean saved = saveScoreboard();
-        scoreBoardPanel.show(scoreboard.entries(), rank, true);
+        scoreBoardPanel.show(scoreboard.entries(), rank, true, finalResult.mode(), finalResult.difficulty());
         if (!saved) scoreBoardPanel.showNotice(Messages.get("scoreboard.saveFailed"));
         showScreen(Screen.SCOREBOARD);
     }

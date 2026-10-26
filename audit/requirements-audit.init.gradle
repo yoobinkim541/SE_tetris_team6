@@ -18,6 +18,7 @@ allprojects {
             def gui = project.findProperty('auditGui') == 'true'
             systemProperty 'java.awt.headless', String.valueOf(!gui)
             systemProperty 'audit.gui', String.valueOf(gui)
+            systemProperty 'audit.screenshots', String.valueOf(project.findProperty('auditScreenshots') == 'true')
             testLogging { events 'failed', 'skipped' }
         }
     }

@@ -24,9 +24,24 @@ application {
 }
 
 test {
+    // 저장·픽셀 인수 조건도 기본 CI에서 회귀 검증한다.
     useJUnitPlatform()
     finalizedBy jacocoTestReport
     systemProperty 'java.awt.headless', 'true' // CI(화면 없음)와 같은 조건으로 UI 렌더링 테스트를 돌린다
+}
+
+sourceSets.test.java.srcDir 'audit/java'
+
+tasks.register('guiAcceptance', Test) {
+    group = 'verification'
+    description = '실제 Windows 화면의 메뉴·세션·결과 저장 연결 검증'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform()
+    filter { includeTestsMatching 'tetris.ui.ProductionWiringAuditTest' }
+    systemProperty 'java.awt.headless', 'false'
+    systemProperty 'audit.gui', 'true'
+    systemProperty 'sun.java2d.uiScale', providers.gradleProperty('guiScale').getOrElse('1.0')
 }
 
 jacocoTestReport {
@@ -62,7 +77,7 @@ if (providers.gradleProperty('skipCoverage').isPresent()) {
 def appName = 'SE Tetris'
 def appIcon = file('src/main/packaging/tetris.ico')
 def packageInput = layout.buildDirectory.dir('jpackage/input')
-def packageImage = layout.buildDirectory.dir('jpackage/image')
+def packageImage = layout.buildDirectory.dir('jpackage/image-v2')
 
 jar {
     manifest {
@@ -99,7 +114,20 @@ tasks.register('jpackageImage', Exec) {
 
     doFirst {
         def imageDir = packageImage.get().asFile
-        imageDir.deleteDir() // jpackage는 대상 폴더가 이미 있으면 실패한다
+        def buildRoot = layout.buildDirectory.get().asFile.canonicalFile.toPath()
+        def imagePath = imageDir.canonicalFile.toPath()
+        if (!imagePath.startsWith(buildRoot) || imagePath == buildRoot) {
+            throw new GradleException("패키지 정리 경로는 build 하위여야 합니다: ${imagePath}")
+        }
+        // jpackage가 Windows launcher에 설정한 ReadOnly 속성은 재패키징 전에 해제한다.
+        if (System.getProperty('os.name').toLowerCase().contains('win')) {
+            fileTree(imageDir).files.each { generatedFile ->
+                java.nio.file.Files.setAttribute(generatedFile.toPath(), 'dos:readonly', false)
+            }
+        }
+        if (imageDir.exists() && !imageDir.deleteDir()) {
+            throw new GradleException("패키지 출력 폴더를 지울 수 없습니다. 실행 중인 패키지를 종료하고 다시 시도하세요: ${imageDir}")
+        }
         def exe = System.getProperty('os.name').toLowerCase().contains('win') ? '.exe' : ''
         commandLine file("${System.getProperty('java.home')}/bin/jpackage${exe}"),
                 '--type', 'app-image',
