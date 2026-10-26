@@ -24,6 +24,48 @@ import tetris.feature.item.ItemType;
 public class BombItemTest {
     private final BombEffect bomb = new BombEffect();
 
+    private static Block row(ItemType item) {
+        int[][] shape = new int[10][10];
+        java.util.Arrays.fill(shape[0], 1);
+        Block block = new Block(shape) {
+            @Override public tetris.component.block.BlockType getType() {
+                return tetris.component.block.BlockType.I;
+            }
+        };
+        block.attachItem(0, 4, item);
+        return block;
+    }
+
+    @Test
+    void 실제_B_Lock의_칸_점수는_D_중에도_한번만_더한다() {
+        Block bombCell = GameTestSupport.cell();
+        bombCell.attachItem(0, 0, ItemType.BOMB);
+        var session = GameTestSupport.startedSession(row(ItemType.DOUBLE_SCORE), bombCell,
+                new tetris.component.block.OBlock());
+        session.hardDrop();
+        session.tick();
+        assertEquals(ItemType.DOUBLE_SCORE, session.snapshot().effects().getFirst().type());
+        session.hardDrop();
+        long beforeClear = session.snapshot().score();
+        assertEquals(1, session.snapshot().clearingCells().size());
+        session.tick();
+        assertEquals(10, session.snapshot().score() - beforeClear);
+        assertEquals(1, session.snapshot().lines());
+        for (int[] cells : session.snapshot().cells())
+            for (int cell : cells) assertEquals(0, cell);
+    }
+
+    @Test
+    void 실제_B가_완성한_행은_행_점수만_받는다() {
+        var session = GameTestSupport.startedSession(row(ItemType.BOMB), new tetris.component.block.OBlock());
+        session.hardDrop();
+        long beforeClear = session.snapshot().score();
+        assertEquals(10, session.snapshot().clearingCells().size());
+        session.tick();
+        assertEquals(100, session.snapshot().score() - beforeClear);
+        assertEquals(1, session.snapshot().lines());
+    }
+
     private static void fill(Board board, int row, int col) {
         Block cell = GameTestSupport.cell();
         cell.setPosition(row, col);
@@ -53,7 +95,7 @@ public class BombItemTest {
 
         assertEquals(square(10, 4), result.cells());
         assertTrue(result.rows().isEmpty());
-        assertEquals(90, modifiers.takeBonusScore());
+        assertEquals(90, board.clearCells(result.cells()) * 10L);
     }
 
     @Test
@@ -67,7 +109,7 @@ public class BombItemTest {
         ItemResult result = bomb.onLock(board, 10, 4, modifiers);
 
         assertEquals(Set.of(new Cell(10, 4), new Cell(11, 3), new Cell(9, 5)), result.cells());
-        assertEquals(30, modifiers.takeBonusScore());
+        assertEquals(30, board.clearCells(result.cells()) * 10L);
     }
 
     @Test
@@ -79,7 +121,7 @@ public class BombItemTest {
         ItemResult result = bomb.onLock(board, Board.HEIGHT - 1, 0, modifiers);
 
         assertEquals(Set.of(new Cell(18, 0), new Cell(18, 1), new Cell(19, 0), new Cell(19, 1)), result.cells());
-        assertEquals(40, modifiers.takeBonusScore());
+        assertEquals(40, board.clearCells(result.cells()) * 10L);
     }
 
     @Test
@@ -128,7 +170,7 @@ public class BombItemTest {
 
         assertTrue(result.cells().stream().noneMatch(cell -> cell.row() == 16));
         assertEquals(6, result.cells().size());
-        assertEquals(60, modifiers.takeBonusScore());
+        assertEquals(60, board.clearCells(result.cells()) * 10L);
     }
 
     @Test
@@ -149,9 +191,9 @@ public class BombItemTest {
         GameModifiers modifiers = new GameModifiers();
         new DoubleScoreEffect().onLock(new Board(), 0, 0, modifiers);
 
-        bomb.onLock(board, 10, 4, modifiers);
+        ItemResult result = bomb.onLock(board, 10, 4, modifiers);
 
-        assertEquals(90, modifiers.takeBonusScore());
+        assertEquals(90, board.clearCells(result.cells()) * 10L);
         assertEquals(2, modifiers.scoreMultiplier());
     }
 
@@ -170,24 +212,21 @@ public class BombItemTest {
         Set<Cell> expected = square(15, 4);
         expected.removeIf(cell -> cell.row() == 15);
         assertEquals(expected, result.cells());
-        assertEquals(60, modifiers.takeBonusScore());
+        assertEquals(60, board.clearCells(result.cells()) * 10L);
     }
 
     @Test
-    void 추가_점수는_쌓이고_꺼내면_비워지고_reset하면_사라진다() {
+    void 반복_호출은_같은_대상만_반환하고_보드와_지속효과를_바꾸지_않는다() {
         Board board = new Board();
         fill(board, 10, 4);
         fill(board, 3, 3);
         GameModifiers modifiers = new GameModifiers();
 
-        bomb.onLock(board, 10, 4, modifiers); // 1칸
-        bomb.onLock(board, 3, 3, modifiers);  // 1칸
-        assertEquals(20, modifiers.takeBonusScore());
-        assertEquals(0, modifiers.takeBonusScore());
-
-        bomb.onLock(board, 10, 4, modifiers);
-        modifiers.reset();
-        assertEquals(0, modifiers.takeBonusScore());
+        ItemResult first = bomb.onLock(board, 10, 4, modifiers);
+        assertEquals(first, bomb.onLock(board, 10, 4, modifiers));
+        assertEquals(1, bomb.onLock(board, 3, 3, modifiers).cells().size());
+        assertTrue(modifiers.effects().isEmpty());
+        assertTrue(!board.isEmpty(10, 4) && !board.isEmpty(3, 3));
     }
 
     @Test
