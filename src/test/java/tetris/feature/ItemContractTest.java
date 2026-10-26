@@ -27,9 +27,12 @@ class ItemContractTest {
         assertEquals(12, Difficulty.EASY.iWeight());
         assertEquals(10, Difficulty.NORMAL.iWeight());
         assertEquals(8, Difficulty.HARD.iWeight());
-        assertEquals(160, Difficulty.EASY.levelStepMillis());
-        assertEquals(200, Difficulty.NORMAL.levelStepMillis());
-        assertEquals(240, Difficulty.HARD.levelStepMillis());
+        assertEquals(80, Difficulty.EASY.levelStepMillis());
+        assertEquals(100, Difficulty.NORMAL.levelStepMillis());
+        assertEquals(120, Difficulty.HARD.levelStepMillis());
+        assertEquals(400, Difficulty.EASY.minIntervalMillis());
+        assertEquals(300, Difficulty.NORMAL.minIntervalMillis());
+        assertEquals(250, Difficulty.HARD.minIntervalMillis());
     }
 
     @Test
@@ -47,7 +50,6 @@ class ItemContractTest {
         GameSession session = GameTestSupport.startedSession(new OBlock());
         assertEquals(GameMode.CLASSIC, session.getMode());
         assertEquals(Difficulty.NORMAL, session.getDifficulty());
-
         GameSnapshot snapshot = session.snapshot();
         assertEquals(GameMode.CLASSIC, snapshot.mode());
         assertEquals(Difficulty.NORMAL, snapshot.difficulty());

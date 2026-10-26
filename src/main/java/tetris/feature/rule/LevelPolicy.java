@@ -5,14 +5,13 @@ import tetris.feature.game.Difficulty;
 /**
  * 현재 Level과 Level 상승 카운터를 관리하고, Level·난이도에 맞는 블록 낙하 간격을 계산한다.
  * Level은 줄을 지웠을 때(onLinesCleared)와 블록이 새로 나왔을 때(onBlockSpawned)에만 바뀐다.
- * 난이도는 Level이 오를 때 빨라지는 폭만 바꾸고, Level이 오르는 조건은 모든 난이도가 같다.
+ * 난이도는 Level이 오를 때 빨라지는 폭과 최소 간격(최고 레벨 속도)을 정한다.
  */
 public class LevelPolicy {
     private static final int BLOCKS_PER_LEVEL = 10;
     private static final int LINES_PER_LEVEL = 5;
     private static final int MAX_LINES_AT_ONCE = 4; // 블록 하나는 최대 4줄을 채운다
     private static final int FIRST_LEVEL_INTERVAL_MILLIS = 1000; // Level 1은 난이도와 관계없이 1초에 한 칸
-    private static final int MIN_INTERVAL_MILLIS = 250;
 
     private final Difficulty difficulty;
     private int level;
@@ -33,14 +32,14 @@ public class LevelPolicy {
 
     /**
      * 주어진 Level·난이도의 낙하 간격(ms). Level 1에서 1000이고, Level이 하나 오를 때마다
-     * 난이도의 감소폭(EASY 160, NORMAL 200, HARD 240)만큼 줄어들며 250 아래로는 내려가지 않는다.
-     * NORMAL은 1차 때 쓰던 간격과 모든 Level에서 같다. level이 1 미만이면 IllegalArgumentException.
+     * 난이도의 감소폭(EASY 80, NORMAL 100, HARD 120)만큼 줄어들며 난이도별 최소 간격 아래로는 내려가지 않는다.
+     * level이 1 미만이면 IllegalArgumentException.
      */
     public static int fallIntervalMillis(int level, Difficulty difficulty) {
         if (level < 1) throw new IllegalArgumentException("level should be 1 or more. Value : " + level);
         if (difficulty == null) throw new IllegalArgumentException("difficulty cannot be null");
         long interval = FIRST_LEVEL_INTERVAL_MILLIS - (long) difficulty.levelStepMillis() * (level - 1);
-        return (int) Math.max(MIN_INTERVAL_MILLIS, interval);
+        return (int) Math.max(difficulty.minIntervalMillis(), interval);
     }
 
     /** NORMAL 난이도 기준 낙하 간격(ms) */
