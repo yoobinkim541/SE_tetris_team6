@@ -11,7 +11,7 @@ package tetris.feature.item;
 public enum ItemType {
     LINE_CLEAR('L', new LineClearEffect()),
     // 가정(팀 합의 필요): 아직 구현하지 않은 아이템은 아무 효과 없이 동작한다. 각 Effect 클래스가 생기면 교체한다
-    BOMB('B', ItemType::noEffectYet),
+    BOMB('B', new BombEffect()),
     DOUBLE_SCORE('D', new DoubleScoreEffect()),
     SLOW('S', ItemType::noEffectYet);
 
