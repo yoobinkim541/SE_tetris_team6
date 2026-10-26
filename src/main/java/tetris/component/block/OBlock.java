@@ -7,4 +7,9 @@ public class OBlock extends Block {
             {1, 1}
         });
     }
+
+    @Override
+    public BlockType getType() {
+        return BlockType.O;
+    }
 }
