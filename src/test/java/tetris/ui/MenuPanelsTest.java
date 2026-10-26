@@ -8,6 +8,7 @@ import java.awt.event.KeyEvent;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import tetris.feature.game.Difficulty;
 import tetris.feature.setting.GameAction;
 import tetris.feature.setting.ScreenSize;
 import tetris.feature.setting.Settings;
@@ -78,6 +79,71 @@ public class MenuPanelsTest {
         settingPanel.activateSelected();
         assertEquals(ScreenSize.SMALL, settings.getScreenSize());
         assertEquals(2, saves);
+    }
+
+    @Test
+    void difficultyCyclesWithEnterAndSaves() {
+        settingPanel.moveSelection(1); // Difficulty (Screen Size 바로 아래)
+        settingPanel.activateSelected();
+        assertEquals(Difficulty.HARD, settings.getDifficulty());
+        settingPanel.activateSelected();
+        assertEquals(Difficulty.EASY, settings.getDifficulty());
+        settingPanel.activateSelected();
+        assertEquals(Difficulty.NORMAL, settings.getDifficulty());
+        assertEquals(3, saves);
+        assertEquals(ScreenSize.MEDIUM, settings.getScreenSize());
+    }
+
+    @Test
+    void difficultyCyclesWithArrowKeysAndSaves() {
+        settingPanel.moveSelection(1);
+        settingPanel.changeValue(-1);
+        assertEquals(Difficulty.EASY, settings.getDifficulty());
+        settingPanel.changeValue(-1);
+        assertEquals(Difficulty.HARD, settings.getDifficulty());
+        settingPanel.changeValue(1);
+        assertEquals(Difficulty.EASY, settings.getDifficulty());
+        assertEquals(3, saves);
+    }
+
+    @Test
+    void arrowKeysChangeOnlyTheSelectedCyclingItem() {
+        settingPanel.changeValue(1); // Screen Size
+        assertEquals(ScreenSize.LARGE, settings.getScreenSize());
+        assertEquals(Difficulty.NORMAL, settings.getDifficulty());
+
+        settingPanel.moveSelection(3); // Color Blind: ←/→로는 바뀌지 않는다
+        settingPanel.changeValue(1);
+        assertFalse(settings.isColorBlindMode());
+        assertEquals(1, saves);
+
+        settingPanel.openControlKeys(); // 하위 화면에서는 무시
+        settingPanel.changeValue(1);
+        assertEquals(1, saves);
+    }
+
+    @Test
+    void difficultySaveFailureShowsWarningButKeepsValue() {
+        SettingPanel failing = new SettingPanel(settings, () -> false, () -> true, () -> { });
+        failing.moveSelection(1);
+        failing.activateSelected();
+        assertEquals(Difficulty.HARD, settings.getDifficulty());
+        assertEquals(Messages.get("settings.saveFailed"), failing.getNotice());
+    }
+
+    @Test
+    void resetSettingsRestoresNormalDifficulty() {
+        settings.setDifficulty(Difficulty.HARD);
+        settings.resetToDefaults();
+        assertEquals(Difficulty.NORMAL, settings.getDifficulty());
+    }
+
+    @Test
+    void difficultyLabelsComeFromMessages() {
+        assertEquals("난이도", Messages.get("settings.difficulty"));
+        assertEquals("Easy", Messages.difficultyName(Difficulty.EASY));
+        assertEquals("Normal", Messages.difficultyName(Difficulty.NORMAL));
+        assertEquals("Hard", Messages.difficultyName(Difficulty.HARD));
     }
 
     @Test
