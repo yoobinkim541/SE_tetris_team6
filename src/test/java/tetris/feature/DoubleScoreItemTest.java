@@ -20,11 +20,38 @@ import tetris.feature.item.ItemType;
  * D 블록 자신의 Lock부터 다음 블록 10개까지 11번 2배, 다시 얻으면 10으로 되돌림, 4배로 겹치지 않음.
  */
 public class DoubleScoreItemTest {
+    @Test
+    void 실제_D_블록이_획득_Lock과_이후_10_Lock의_행_점수만_두배로_만든다() {
+        tetris.component.block.Block[] blocks = new tetris.component.block.Block[14];
+        for (int i = 0; i < blocks.length; i++) {
+            int[][] shape = new int[10][10];
+            java.util.Arrays.fill(shape[0], 1);
+            blocks[i] = new tetris.component.block.Block(shape) {
+                @Override public tetris.component.block.BlockType getType() {
+                    return tetris.component.block.BlockType.I;
+                }
+            };
+        }
+        blocks[0].attachItem(0, 4, ItemType.DOUBLE_SCORE);
+        var session = GameTestSupport.startedSession(blocks);
+        for (int lock = 0; lock < 12; lock++) {
+            long before = session.snapshot().score();
+            int level = session.snapshot().level();
+            session.hardDrop();
+            long afterDrop = session.snapshot().score();
+            assertEquals(19L * level, afterDrop - before); // 하강 점수는 두배가 아니다
+            session.tick();
+            assertEquals(lock < 11 ? 200 : 100, session.snapshot().score() - afterDrop);
+        }
+        assertTrue(session.snapshot().effects().isEmpty());
+    }
+
     // GameSession이 Lock 하나를 처리하는 순서를 흉내 낸다: 효과 실행 → 배율 읽기(점수 계산) → Lock 끝
     private static int lockAndReadMultiplier(GameModifiers modifiers, boolean withDoubleScoreItem) {
+        modifiers.beginLock();
         if (withDoubleScoreItem) new DoubleScoreEffect().onLock(new Board(), 10, 4, modifiers);
         int multiplier = modifiers.scoreMultiplier();
-        modifiers.onLockFinished();
+        modifiers.finishLock();
         return multiplier;
     }
 
@@ -91,11 +118,11 @@ public class DoubleScoreItemTest {
     void reset하면_효과가_꺼진다() {
         GameModifiers modifiers = new GameModifiers();
         new DoubleScoreEffect().onLock(new Board(), 0, 0, modifiers);
-        modifiers.reset();
+        modifiers = new GameModifiers();
 
         assertEquals(1, modifiers.scoreMultiplier());
         assertTrue(modifiers.effects().isEmpty());
-        modifiers.onLockFinished(); // 켜진 직후 표시가 남아 있지 않아야 한다
+        modifiers.finishLock(); // 켜진 직후 표시가 남아 있지 않아야 한다
         assertEquals(1, modifiers.scoreMultiplier());
     }
 
