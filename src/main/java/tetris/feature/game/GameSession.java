@@ -123,6 +123,7 @@ public class GameSession {
     /** 실패하면 모양·위치·회전 상태를 바꾸지 않는다 (ROT-3) */
     public void rotateRight() {
         if (state != GameState.PLAYING) return;
+        if (currentBlock.isWeight()) return; // ITW-1: 무게추는 회전하지 않는다
         if (rotationPolicy.rotate(board, currentBlock)) listener.onChanged(snapshot());
     }
 

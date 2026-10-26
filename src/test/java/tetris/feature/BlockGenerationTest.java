@@ -53,7 +53,7 @@ public class BlockGenerationTest {
     void 고정_시드로_7종이_모두_등장() {
         Set<BlockType> seen = EnumSet.noneOf(BlockType.class);
         seen.addAll(draw(new RandomBlockGenerator(new Random(42)), 100));
-        assertEquals(EnumSet.allOf(BlockType.class), seen);
+        assertEquals(EnumSet.copyOf(Arrays.asList(BlockType.ordinary())), seen); // 무게추 W는 일반 생성 대상이 아니다
     }
 
     @Test
