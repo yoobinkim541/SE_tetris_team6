@@ -10,13 +10,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.BooleanSupplier;
 import javax.swing.JPanel;
+import tetris.feature.game.Difficulty;
 import tetris.feature.setting.GameAction;
 import tetris.feature.setting.KeyMap;
 import tetris.feature.setting.ScreenSize;
 import tetris.feature.setting.Settings;
 
 /**
- * 설정 화면 (SET-2): Screen Size / Control Keys / Color Blind / Reset Scoreboard / Reset Settings. 기존 SettingScreen 대체.
+ * 설정 화면 (SET-2, SET-8): Screen Size / Difficulty / Control Keys / Color Blind / Reset Scoreboard / Reset Settings. 기존 SettingScreen 대체.
  * 유효한 변경은 즉시 적용·저장한다 (SET-3). 저장 실패 시 이번 실행에는 적용하고 안내만 한다 (SET-4).
  */
 public class SettingPanel extends JPanel {
@@ -58,8 +59,8 @@ public class SettingPanel extends JPanel {
         BooleanSupplier listActive = () -> confirmDialog == null && capturing == null;
         KeyBindingManager.bindKey(this, KeyEvent.VK_UP, listActive, () -> moveSelection(-1));
         KeyBindingManager.bindKey(this, KeyEvent.VK_DOWN, listActive, () -> moveSelection(1));
-        KeyBindingManager.bindKey(this, KeyEvent.VK_LEFT, listActive, () -> changeScreenSize(-1));
-        KeyBindingManager.bindKey(this, KeyEvent.VK_RIGHT, listActive, () -> changeScreenSize(1));
+        KeyBindingManager.bindKey(this, KeyEvent.VK_LEFT, listActive, () -> changeValue(-1));
+        KeyBindingManager.bindKey(this, KeyEvent.VK_RIGHT, listActive, () -> changeValue(1));
         KeyBindingManager.bindKey(this, KeyEvent.VK_ENTER, listActive, this::activateSelected);
         KeyBindingManager.bindKey(this, KeyEvent.VK_ESCAPE, listActive, this::back);
     }
@@ -89,7 +90,7 @@ public class SettingPanel extends JPanel {
         notice = "";
         switch (ITEMS[selected]) {
             case SCREEN_SIZE -> changeScreenSize(1);
-            case DIFFICULTY -> changeScreenSize(1);
+            case DIFFICULTY -> changeDifficulty(1);
             case CONTROL_KEYS -> openControlKeys();
             case COLOR_BLIND -> {
                 settings.setColorBlindMode(!settings.isColorBlindMode());
@@ -182,18 +183,28 @@ public class SettingPanel extends JPanel {
         return notice;
     }
 
-    // ←/→ 또는 Enter: Small -> Medium -> Large 순환. 설정 목록의 Screen Size에서만
-    private void changeScreenSize(int delta) {
+    /** ←/→: 선택한 항목이 순환형(Screen Size, Difficulty)일 때만 값을 바꾼다. 설정 목록에서만 */
+    public void changeValue(int delta) {
         if (inControlKeys) return;
-        if (ITEMS[selected] == Item.DIFFICULTY) {
-            var values = tetris.feature.game.Difficulty.values();
-            settings.setDifficulty(values[Theme.cycle(settings.getDifficulty().ordinal(), delta, values.length)]);
-            applyChange("");
-            return;
+        notice = "";
+        switch (ITEMS[selected]) {
+            case SCREEN_SIZE -> changeScreenSize(delta);
+            case DIFFICULTY -> changeDifficulty(delta);
+            default -> { }
         }
-        if (ITEMS[selected] != Item.SCREEN_SIZE) return;
+    }
+
+    // Small -> Medium -> Large 순환
+    private void changeScreenSize(int delta) {
         ScreenSize[] sizes = ScreenSize.values();
         settings.setScreenSize(sizes[Theme.cycle(settings.getScreenSize().ordinal(), delta, sizes.length)]);
+        applyChange("");
+    }
+
+    // Easy -> Normal -> Hard 순환 (SET-8). 다음 게임부터 적용된다
+    private void changeDifficulty(int delta) {
+        Difficulty[] difficulties = Difficulty.values();
+        settings.setDifficulty(difficulties[Theme.cycle(settings.getDifficulty().ordinal(), delta, difficulties.length)]);
         applyChange("");
     }
 
@@ -277,7 +288,7 @@ public class SettingPanel extends JPanel {
     private List<String[]> settingRows() {
         List<String[]> rows = new ArrayList<>();
         rows.add(new String[] {Messages.get("settings.screenSize"), "◀ " + Messages.get("size." + settings.getScreenSize().name()) + " ▶"});
-        rows.add(new String[] {"난이도", "◀ " + settings.getDifficulty().name() + " ▶"});
+        rows.add(new String[] {Messages.get("settings.difficulty"), "◀ " + Messages.difficultyName(settings.getDifficulty()) + " ▶"});
         rows.add(new String[] {Messages.get("settings.controlKeys"), "›"});
         rows.add(new String[] {Messages.get("settings.colorBlind"),
                 Messages.get(settings.isColorBlindMode() ? "settings.on" : "settings.off")});
