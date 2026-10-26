@@ -3,9 +3,11 @@ package tetris.feature.game;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Random;
 import java.util.Set;
 import java.util.TreeSet;
 import tetris.component.block.Block;
+import tetris.component.block.WeightBlock;
 import tetris.feature.data.Board;
 import tetris.feature.item.Cell;
 import tetris.feature.item.GameModifiers;
@@ -14,6 +16,7 @@ import tetris.feature.item.ItemType;
 import tetris.feature.rule.BasicRotationPolicy;
 import tetris.feature.rule.BlockGenerator;
 import tetris.feature.rule.ImmediateLockPolicy;
+import tetris.feature.rule.ItemBlockGenerator;
 import tetris.feature.rule.LevelPolicy;
 import tetris.feature.rule.LockPolicy;
 import tetris.feature.rule.NextBlockQueue;
@@ -48,7 +51,7 @@ public class GameSession {
     private final SpawnPolicy spawnPolicy = new SpawnPolicy();
     private final RotationPolicy rotationPolicy = new BasicRotationPolicy();
     private final LockPolicy lockPolicy = new ImmediateLockPolicy();
-    private final LevelPolicy levelPolicy = new LevelPolicy();
+    private final LevelPolicy levelPolicy;
     private final ScoringPolicy scoringPolicy = new ScoringPolicy();
     private final GameClock clock;
     private final GameListener listener;
@@ -68,8 +71,10 @@ public class GameSession {
         if (clock == null) throw new IllegalArgumentException("clock cannot be null");
         if (listener == null) throw new IllegalArgumentException("listener cannot be null");
         this.mode = mode;
-        this.difficulty = difficulty;
-        this.generator = generator;
+        this.difficulty = mode == GameMode.ITEM ? Difficulty.NORMAL : difficulty;
+        this.levelPolicy = new LevelPolicy(this.difficulty);
+        this.generator = mode == GameMode.ITEM && !(generator instanceof ItemBlockGenerator)
+                ? new ItemBlockGenerator(generator, WeightBlock::new, new Random()) : generator;
         this.clock = clock;
         this.listener = listener;
     }
@@ -251,7 +256,7 @@ public class GameSession {
                 mode,
                 difficulty,
                 state == GameState.CLEARING ? pendingClear.flashCells() : List.of(), // ANI-5: CLEARING이 아니면 빈 목록
-                0,
+                mode == GameMode.ITEM ? 10 - lines % 10 : 0,
                 List.of());
     }
 
@@ -431,8 +436,13 @@ public class GameSession {
 
     /** L6: 누적 줄과 Level */
     private void updateCounters(ClearPlan plan) {
+        int previousMilestone = lines / 10;
         lines += plan.rowCount();
         levelPolicy.onLinesCleared(plan.rowCount());
+        // L7: 현재 Next는 유지하고, 곧 채워질 새 Next 한 개에만 예약한다.
+        if (mode == GameMode.ITEM && lines / 10 > previousMilestone) {
+            ((ItemBlockGenerator) generator).requestItem();
+        }
     }
 
     private void spawnNextBlock() {
