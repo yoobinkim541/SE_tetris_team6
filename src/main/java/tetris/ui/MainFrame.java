@@ -14,6 +14,8 @@ import java.util.Map;
 import javax.swing.JComponent;
 import javax.swing.JFrame;
 import javax.swing.JPanel;
+import tetris.feature.game.GameClock;
+import tetris.feature.game.GameListener;
 import tetris.feature.game.GameSession;
 import tetris.feature.game.GameSnapshot;
 import tetris.feature.game.GameState;
@@ -147,9 +149,17 @@ public class MainFrame extends JFrame {
     }
 
     private GameSession createSession(GameMode mode) {
-        Difficulty difficulty = mode == GameMode.ITEM ? Difficulty.NORMAL : settings.getDifficulty();
-        return new GameSession(mode, difficulty, new WeightedBlockGenerator(difficulty.weights(), new Random()),
-                new SwingGameClock(this::onTick), gamePanel);
+        return newSession(mode, settings.getDifficulty(), new Random(), new SwingGameClock(this::onTick), gamePanel);
+    }
+
+    /**
+     * 한 판을 진행할 세션을 만든다. 블록은 난이도 가중치를 쓰는 WeightedBlockGenerator로 만들어,
+     * 분포 테스트를 통과한 생성기가 실제 게임에서도 그대로 쓰이게 한다.
+     * 아이템 모드는 항상 NORMAL 규칙이라 가중치도 NORMAL로 맞춘다.
+     */
+    static GameSession newSession(GameMode mode, Difficulty difficulty, Random random, GameClock clock, GameListener listener) {
+        Difficulty effective = mode == GameMode.ITEM ? Difficulty.NORMAL : difficulty;
+        return new GameSession(mode, effective, new WeightedBlockGenerator(effective.weights(), random), clock, listener);
     }
 
     private void startGame(GameMode mode) {
