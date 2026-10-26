@@ -22,19 +22,62 @@ import tetris.feature.item.SlowEffect;
 public class SlowItemTest {
     private static final double DELTA = 1e-9;
 
+    @Test
+    void 실제_S_블록_이후_10개만_느리고_Pause와_Restart가_계약을_지킨다() {
+        tetris.component.block.Block[] blocks = new tetris.component.block.Block[14];
+        for (int i = 0; i < blocks.length; i++) {
+            int[][] shape = new int[10][10];
+            java.util.Arrays.fill(shape[0], 1);
+            blocks[i] = new tetris.component.block.Block(shape) {
+                @Override public tetris.component.block.BlockType getType() {
+                    return tetris.component.block.BlockType.I;
+                }
+            };
+        }
+        blocks[0].attachItem(0, 4, ItemType.SLOW);
+        var clock = new GameTestSupport.RecordingClock();
+        var session = new tetris.feature.game.GameSession(GameTestSupport.sequence(blocks), clock,
+                new GameTestSupport.RecordingListener());
+        session.start();
+        assertEquals(1000, clock.starts.getLast());
+        for (int lock = 0; lock < 11; lock++) {
+            session.hardDrop();
+            session.pause();
+            session.resume();
+            assertEquals(150, clock.starts.getLast()); // CLEARING 재개는 잔여 수를 소비하지 않는다
+            session.tick();
+            int base = tetris.feature.rule.LevelPolicy.fallIntervalMillis(session.snapshot().level());
+            int expected = (int) Math.round(base * (lock < 10 ? 1.5 : 1.0));
+            assertEquals(expected, clock.starts.getLast());
+            var effects = session.snapshot().effects();
+            if (lock < 10) assertEquals(List.of(new ActiveEffect(ItemType.SLOW, 9 - lock)), effects);
+            else assertTrue(effects.isEmpty());
+            session.pause();
+            session.resume();
+            assertEquals(expected, clock.starts.getLast());
+            assertEquals(effects, session.snapshot().effects());
+        }
+        session.pause();
+        session.restart();
+        assertTrue(session.snapshot().effects().isEmpty());
+        assertEquals(1000, clock.starts.getLast());
+    }
+
     // GameSession이 블록 하나를 처리하는 순서를 흉내 낸다: Spawn → 배율 읽기(타이머) → Lock(효과 실행) → Lock 끝
     private static double spawnAndLock(GameModifiers modifiers, boolean withSlowItem) {
-        modifiers.onBlockSpawned();
+        modifiers.onSpawn();
+        modifiers.beginLock();
         double multiplier = modifiers.fallMultiplier();
         if (withSlowItem) new SlowEffect().onLock(new Board(), 10, 4, modifiers);
-        modifiers.onLockFinished();
+        modifiers.finishLock();
         return multiplier;
     }
 
     @Test
     void 처음에는_낙하_배율_1() {
         GameModifiers modifiers = new GameModifiers();
-        modifiers.onBlockSpawned();
+        modifiers.onSpawn();
+        modifiers.beginLock();
         assertEquals(1.0, modifiers.fallMultiplier(), DELTA);
     }
 
@@ -66,25 +109,29 @@ public class SlowItemTest {
         GameModifiers modifiers = new GameModifiers();
         new SlowEffect().onLock(new Board(), 0, 0, modifiers);
         new SlowEffect().onLock(new Board(), 0, 0, modifiers);
-        modifiers.onBlockSpawned();
+        modifiers.onSpawn();
+        modifiers.beginLock();
         assertEquals(1.5, modifiers.fallMultiplier(), DELTA);
     }
 
     @Test
     void 점수_2배와_동시에_켜져도_서로_따로_센다() {
         GameModifiers modifiers = new GameModifiers();
-        modifiers.onBlockSpawned();
+        modifiers.onSpawn();
+        modifiers.beginLock();
         new DoubleScoreEffect().onLock(new Board(), 0, 0, modifiers);
         new SlowEffect().onLock(new Board(), 0, 0, modifiers);
-        modifiers.onLockFinished();
+        modifiers.finishLock();
 
         for (int i = 0; i < 10; i++) {
-            modifiers.onBlockSpawned();
+            modifiers.onSpawn();
+        modifiers.beginLock();
             assertEquals(1.5, modifiers.fallMultiplier(), DELTA);
             assertEquals(2, modifiers.scoreMultiplier());
-            modifiers.onLockFinished();
+            modifiers.finishLock();
         }
-        modifiers.onBlockSpawned();
+        modifiers.onSpawn();
+        modifiers.beginLock();
         assertEquals(1.0, modifiers.fallMultiplier(), DELTA);
         assertEquals(1, modifiers.scoreMultiplier());
     }
@@ -97,32 +144,35 @@ public class SlowItemTest {
         assertTrue(result.rows().isEmpty());
         assertTrue(result.cells().isEmpty());
         assertEquals(1, modifiers.scoreMultiplier());
-        assertEquals(0, modifiers.takeBonusScore());
+        assertTrue(modifiers.effects().stream().allMatch(effect -> effect.type() == ItemType.SLOW));
     }
 
     @Test
-    void 화면용_남은_블록_수는_지금_블록을_포함해_세고_끝나면_빠진다() {
+    void 화면용_남은_블록_수는_지금_블록_이후_Spawn수를_센다() {
         GameModifiers modifiers = new GameModifiers();
         spawnAndLock(modifiers, true);
         assertEquals(List.of(new ActiveEffect(ItemType.SLOW, 10)), modifiers.effects()); // 다음 블록이 나오기 전
 
-        modifiers.onBlockSpawned();
-        assertEquals(List.of(new ActiveEffect(ItemType.SLOW, 10)), modifiers.effects()); // 첫 슬로우 블록이 떨어지는 중
-        modifiers.onLockFinished();
+        modifiers.onSpawn();
+        modifiers.beginLock();
+        assertEquals(List.of(new ActiveEffect(ItemType.SLOW, 9)), modifiers.effects()); // 첫 슬로우 블록이 떨어지는 중
+        modifiers.finishLock();
 
         for (int i = 0; i < 9; i++) spawnAndLock(modifiers, false);
-        modifiers.onBlockSpawned(); // 11번째 블록: 슬로우 아님
+        modifiers.onSpawn();
+        modifiers.beginLock(); // 11번째 블록: 슬로우 아님
         assertTrue(modifiers.effects().isEmpty());
     }
 
     @Test
-    void 마지막_슬로우_블록이_떨어지는_동안은_1로_보인다() {
+    void 마지막_슬로우_블록은_남은_Spawn_0이어도_느리다() {
         GameModifiers modifiers = new GameModifiers();
         spawnAndLock(modifiers, true);
         for (int i = 0; i < 9; i++) spawnAndLock(modifiers, false);
-        modifiers.onBlockSpawned(); // 10번째 슬로우 블록
+        modifiers.onSpawn();
+        modifiers.beginLock(); // 10번째 슬로우 블록
 
-        assertEquals(List.of(new ActiveEffect(ItemType.SLOW, 1)), modifiers.effects());
+        assertEquals(List.of(new ActiveEffect(ItemType.SLOW, 0)), modifiers.effects());
         assertEquals(1.5, modifiers.fallMultiplier(), DELTA);
     }
 
@@ -137,10 +187,11 @@ public class SlowItemTest {
     }
 
     @Test
-    void 마지막_슬로우_블록이_Lock되면_표시에서_빠진다() {
+    void 마지막_슬로우_블록_다음_Spawn에서_표시가_빠진다() {
         GameModifiers modifiers = new GameModifiers();
         spawnAndLock(modifiers, true);
         for (int i = 0; i < 10; i++) spawnAndLock(modifiers, false);
+        modifiers.onSpawn();
 
         assertTrue(modifiers.effects().isEmpty());
     }
@@ -149,8 +200,9 @@ public class SlowItemTest {
     void reset하면_떨어지는_블록의_슬로우도_꺼진다() {
         GameModifiers modifiers = new GameModifiers();
         new SlowEffect().onLock(new Board(), 0, 0, modifiers);
-        modifiers.onBlockSpawned();
-        modifiers.reset();
+        modifiers.onSpawn();
+        modifiers.beginLock();
+        modifiers = new GameModifiers();
 
         assertEquals(1.0, modifiers.fallMultiplier(), DELTA);
         assertTrue(modifiers.effects().isEmpty());
