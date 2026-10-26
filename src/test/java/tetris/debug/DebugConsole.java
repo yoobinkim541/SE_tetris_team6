@@ -7,7 +7,8 @@ import tetris.feature.game.GameClock;
 import tetris.feature.game.GameListener;
 import tetris.feature.game.GameSession;
 import tetris.feature.game.GameSnapshot;
-import tetris.feature.rule.RandomBlockGenerator;
+import tetris.feature.game.Difficulty;
+import tetris.feature.rule.WeightedBlockGenerator;
 
 /**
  * UI 없이 GameSession을 직접 조작하며 보드를 텍스트로 확인하는 콘솔.
@@ -35,7 +36,7 @@ public final class DebugConsole {
     // 게임마다 새 시드로 세션을 만든다. 같은 Random을 이어 쓰면 출력한 시드로 그 게임을 재현할 수 없다
     private static GameSession newGame(long seed) {
         System.out.println("=== 새 게임  seed=" + seed + " ===");
-        GameSession session = new GameSession(new RandomBlockGenerator(new Random(seed)), new NoOpClock(), new PrintingListener());
+        GameSession session = new GameSession(new WeightedBlockGenerator(Difficulty.NORMAL.weights(), new Random(seed)), new NoOpClock(), new PrintingListener());
         session.start();
         AsciiBoard.print(session.snapshot());
         return session;

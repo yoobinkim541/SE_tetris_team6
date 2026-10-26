@@ -14,7 +14,8 @@ import tetris.feature.game.GameClock;
 import tetris.feature.game.GameListener;
 import tetris.feature.game.GameSession;
 import tetris.feature.game.GameSnapshot;
-import tetris.feature.rule.RandomBlockGenerator;
+import tetris.feature.game.Difficulty;
+import tetris.feature.rule.WeightedBlockGenerator;
 
 /**
  * 방향키로 GameSession을 조작하는 개발용 Swing 창. 실제 게임 UI(GamePanel)가 생기기 전까지 조작을 눈으로 확인하는 용도.
@@ -48,7 +49,7 @@ public final class DebugWindow {
     private void newGame(long seed) {
         timer.stop();
         frame.setTitle("Tetris Debug  seed=" + seed + "   ← → 이동  ↓ Soft Drop  ↑ 회전  Enter 새 게임");
-        session = new GameSession(new RandomBlockGenerator(new Random(seed)), new TimerClock(), new ViewListener());
+        session = new GameSession(new WeightedBlockGenerator(Difficulty.NORMAL.weights(), new Random(seed)), new TimerClock(), new ViewListener());
         session.start();
     }
 

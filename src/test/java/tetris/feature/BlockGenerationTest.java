@@ -1,85 +1,26 @@
 package tetris.feature;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.EnumSet;
 import java.util.Iterator;
-import java.util.List;
-import java.util.Random;
-import java.util.Set;
 import org.junit.jupiter.api.Test;
 import tetris.component.block.Block;
-import tetris.component.block.BlockType;
 import tetris.component.block.IBlock;
-import tetris.component.block.JBlock;
-import tetris.component.block.LBlock;
 import tetris.component.block.OBlock;
-import tetris.component.block.SBlock;
 import tetris.component.block.TBlock;
-import tetris.component.block.ZBlock;
 import tetris.feature.rule.BlockGenerator;
 import tetris.feature.rule.NextBlockQueue;
-import tetris.feature.rule.RandomBlockGenerator;
 
-/** BLK-3, NXT-1 (시드 고정 생성기 주입, 7종 등장, 큐 길이 유지, 맨 앞 1개 노출) */
+/** Next 블록 큐가 생성기 순서대로 채워지고 길이를 유지하며 맨 앞 블록을 내주는지 검증한다. 생성기 자체는 WeightedBlockGeneratorTest가 맡는다 */
 public class BlockGenerationTest {
     // 정해진 순서대로 블록을 내주는 생성기 (BLK-3: 고정 순열 주입)
     private static BlockGenerator sequence(Block... blocks) {
         Iterator<Block> it = Arrays.asList(blocks).iterator();
         return it::next;
     }
-
-    private static List<BlockType> draw(BlockGenerator generator, int count) {
-        List<BlockType> types = new ArrayList<>();
-        for (int i = 0; i < count; i++) types.add(generator.next().getType());
-        return types;
-    }
-
-    //#region RandomBlockGenerator
-    @Test
-    void 같은_시드면_같은_순서() {
-        assertEquals(draw(new RandomBlockGenerator(new Random(42)), 50),
-                     draw(new RandomBlockGenerator(new Random(42)), 50));
-    }
-
-    @Test
-    void 고정_시드로_7종이_모두_등장() {
-        Set<BlockType> seen = EnumSet.noneOf(BlockType.class);
-        seen.addAll(draw(new RandomBlockGenerator(new Random(42)), 100));
-        assertEquals(EnumSet.copyOf(Arrays.asList(BlockType.ordinary())), seen); // 무게추 W는 일반 생성 대상이 아니다
-    }
-
-    @Test
-    void 생성된_블록은_0도_모양이고_매번_새_인스턴스() {
-        RandomBlockGenerator generator = new RandomBlockGenerator(new Random(7));
-        Block[] reference = {new IBlock(), new JBlock(), new LBlock(), new OBlock(), new SBlock(), new TBlock(), new ZBlock()};
-        for (int i = 0; i < 50; i++) {
-            Block block = generator.next();
-            Block expected = reference[block.getType().ordinal()];
-            assertTrue(Arrays.deepEquals(expected.getShape(), block.getShape()));
-            assertEquals(0, block.getRotation());
-            assertNotSame(block, generator.next());
-        }
-    }
-
-    @Test
-    void Random이_null이면_예외() {
-        assertThrows(IllegalArgumentException.class, () -> new RandomBlockGenerator(null));
-    }
-
-    @Test
-    void 기본_생성자로도_블록을_만든다() {
-        assertNotNull(new RandomBlockGenerator().next());
-    }
-
-    //#endregion
 
     //#region NextBlockQueue
     @Test
