@@ -2,6 +2,7 @@ package tetris.feature.save;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import tetris.feature.game.Difficulty;
 import tetris.feature.setting.GameAction;
 import tetris.feature.setting.ScreenSize;
 import tetris.feature.setting.Settings;
@@ -12,7 +13,7 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 
-/** settings.json 입출력 (PER-1~5). 조작키도 여기에 포함. 필드가 없으면 기본값, 무효이면 그 필드만 기본값 */
+/** settings.json 입출력 (PER-1~5, PER-7~9). 조작키도 여기에 포함. 필드가 없으면 기본값, 무효이면 그 필드만 기본값 */
 public class JsonSettingsRepository implements SettingsRepository {
     private final JsonFile file;
 
@@ -41,6 +42,7 @@ public class JsonSettingsRepository implements SettingsRepository {
         root.put("difficulty", settings.getDifficulty().name());
         root.put("screenSize", settings.getScreenSize().name());
         root.put("colorBlindMode", settings.isColorBlindMode());
+        root.put("difficulty", settings.getDifficulty().name());
         ObjectNode keys = root.putObject("keys");
         settings.getKeyMap().codes().forEach((action, keyCode) -> keys.put(action.name(), keyCode));
         return file.write(root);
@@ -61,6 +63,7 @@ public class JsonSettingsRepository implements SettingsRepository {
 
         applyScreenSize(root.get("screenSize"), settings, warnings);
         applyColorBlindMode(root.get("colorBlindMode"), settings, warnings);
+        applyDifficulty(root.get("difficulty"), settings, warnings);
         applyKeys(root.get("keys"), settings, warnings);
         return new LoadResult<>(settings, warnings);
     }
@@ -84,6 +87,21 @@ public class JsonSettingsRepository implements SettingsRepository {
 
         if (node.isBoolean()) settings.setColorBlindMode(node.asBoolean());
         else warnings.add("색맹 모드 설정이 올바르지 않아 기본값(꺼짐)을 사용합니다.");
+    }
+
+    /** 이전 버전 파일에는 difficulty가 없으므로 없으면 경고 없이 NORMAL (PER-7~9) */
+    private static void applyDifficulty(JsonNode node, Settings settings, List<String> warnings) {
+        if (isAbsent(node)) return;
+
+        if (node.isTextual()) {
+            try {
+                settings.setDifficulty(Difficulty.valueOf(node.asText()));
+                return;
+            } catch (IllegalArgumentException unknownDifficulty) {
+                // 아래에서 경고한다
+            }
+        }
+        warnings.add("난이도 설정이 올바르지 않아 기본값(Normal)을 사용합니다.");
     }
 
     /** 중복·누락·예약키가 하나라도 있으면 keys 전체를 기본값으로 둔다. 검증은 KeyMap이 한다 */

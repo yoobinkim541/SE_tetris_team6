@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import tetris.feature.game.Difficulty;
 import tetris.feature.save.DataDirectory;
 import tetris.feature.save.LoadResult;
 import tetris.feature.save.JsonScoreboardRepository;
@@ -105,6 +106,7 @@ public class PersistenceTest {
 
         assertEquals(ScreenSize.MEDIUM, result.value().getScreenSize());
         assertFalse(result.value().isColorBlindMode());
+        assertEquals(Difficulty.NORMAL, result.value().getDifficulty());
         assertEquals(KeyEvent.VK_LEFT, result.value().getKeyMap().keyOf(GameAction.MOVE_LEFT));
         assertTrue(result.warnings().isEmpty());
     }
@@ -187,6 +189,69 @@ public class PersistenceTest {
         assertEquals(ScreenSize.SMALL, result.value().getScreenSize());
         assertFalse(result.value().isColorBlindMode());
         assertEquals(1, result.warnings().size());
+    }
+
+    @Test
+    void settings_difficulty를_저장하고_다시_읽으면_같다() {
+        Path file = dir.resolve("settings.json");
+        for (Difficulty difficulty : Difficulty.values()) {
+            Settings settings = new Settings();
+            settings.setDifficulty(difficulty);
+
+            assertTrue(new JsonSettingsRepository(file).save(settings));
+            LoadResult<Settings> result = new JsonSettingsRepository(file).load();
+
+            assertEquals(difficulty, result.value().getDifficulty());
+            assertTrue(result.warnings().isEmpty());
+        }
+    }
+
+    @Test
+    void settings_difficulty가_없는_이전_파일은_NORMAL이고_경고도_없다_PER9() throws IOException {
+        Path file = write("settings.json", "{\"schemaVersion\": 1, \"screenSize\": \"LARGE\", \"colorBlindMode\": true}");
+
+        LoadResult<Settings> result = new JsonSettingsRepository(file).load();
+
+        assertEquals(Difficulty.NORMAL, result.value().getDifficulty());
+        assertEquals(ScreenSize.LARGE, result.value().getScreenSize());
+        assertTrue(result.value().isColorBlindMode());
+        assertTrue(result.warnings().isEmpty());
+    }
+
+    @Test
+    void settings_difficulty가_null이면_NORMAL이고_경고도_없다() throws IOException {
+        LoadResult<Settings> result = new JsonSettingsRepository(write("settings.json", "{\"difficulty\": null}")).load();
+
+        assertEquals(Difficulty.NORMAL, result.value().getDifficulty());
+        assertTrue(result.warnings().isEmpty());
+    }
+
+    @Test
+    void settings_알_수_없는_difficulty는_그_필드만_NORMAL이고_경고한다() throws IOException {
+        for (String difficulty : new String[] {"\"INSANE\"", "\"easy\"", "\"\"", "2", "true", "[\"HARD\"]"}) {
+            Path file = write("settings.json",
+                    "{\"screenSize\": \"SMALL\", \"colorBlindMode\": true, \"difficulty\": " + difficulty + "}");
+
+            LoadResult<Settings> result = new JsonSettingsRepository(file).load();
+
+            assertEquals(Difficulty.NORMAL, result.value().getDifficulty(), difficulty);
+            assertEquals(ScreenSize.SMALL, result.value().getScreenSize(), difficulty);
+            assertTrue(result.value().isColorBlindMode(), difficulty);
+            assertEquals(1, result.warnings().size(), difficulty);
+        }
+    }
+
+    @Test
+    void settings_Reset하면_difficulty도_NORMAL로_저장된다() {
+        Path file = dir.resolve("settings.json");
+        Settings settings = new Settings();
+        settings.setDifficulty(Difficulty.HARD);
+        new JsonSettingsRepository(file).save(settings);
+
+        settings.resetToDefaults();
+        new JsonSettingsRepository(file).save(settings);
+
+        assertEquals(Difficulty.NORMAL, new JsonSettingsRepository(file).load().value().getDifficulty());
     }
 
     private static String keysJson(String override) {
