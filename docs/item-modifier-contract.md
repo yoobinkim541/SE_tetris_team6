@@ -6,7 +6,7 @@
 
 A가 `GameModifiers`의 공통 수명주기 기본 구현과 `GameSession` 연결을 제공합니다.
 C는 `DoubleScoreEffect`, `SlowEffect`, `BombEffect`와 `ItemType.effect()` 연결 및 효과별 테스트를 구현합니다.
-이 계약 PR은 C의 #68·#69를 완료 처리하지 않습니다. B·D·S는 C가 연결하기 전까지 기존 no-op입니다.
+계약 PR #95 이후 C의 #92·#93·#94를 이 계약에 맞춰 수정·병합했습니다. 현재 L·B·D·S 모두 실제 효과에 연결되어 있습니다.
 
 `ItemEffect.onLock(BoardView board, int itemRow, int itemCol, GameModifiers modifiers)`는 그대로 유지합니다.
 행·열은 블록 격자가 아닌 보드 논리 좌표입니다. 효과 객체에는 세션 상태를 저장하지 않습니다.
