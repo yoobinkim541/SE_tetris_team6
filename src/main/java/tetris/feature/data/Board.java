@@ -66,6 +66,42 @@ public class Board implements BoardView {
         return CrashDetector.CanPlace(board, shape, row + MARGIN, col + MARGIN);
     }
 
+    /** 무게추 분쇄용: 벽(좌우·바닥)만 막고 고정 칸은 무시한 채 놓을 수 있는지. 상태를 바꾸지 않는다 (ITW-4) */
+    public boolean canPlaceThrough(Block block, int row, int col) {
+        int[][] shape = block.getShape();
+        for (int r = 0; r < shape.length; r++) {
+            for (int c = 0; c < shape[r].length; c++) {
+                if (shape[r][c] == 0) continue;
+
+                int arrayRow = row + r + MARGIN;
+                int arrayCol = col + c + MARGIN;
+                if (arrayRow < 0 || arrayRow >= ARRAY_ROWS || arrayCol < 0 || arrayCol >= ARRAY_COLS) return false;
+                if (board[arrayRow][arrayCol] == WALL) return false;
+            }
+        }
+        return true;
+    }
+
+    /** 무게추 분쇄: 블록 모양이 (row, col)에서 덮는 고정 칸을 모두 비운다(위 칸은 내려오지 않는다). 지운 칸 수를 돌려준다 */
+    public int clearUnder(Block block, int row, int col) {
+        int[][] shape = block.getShape();
+        int cleared = 0;
+        for (int r = 0; r < shape.length; r++) {
+            for (int c = 0; c < shape[r].length; c++) {
+                if (shape[r][c] == 0) continue;
+
+                int arrayRow = row + r + MARGIN;
+                int arrayCol = col + c + MARGIN;
+                if (arrayRow < 0 || arrayRow >= ARRAY_ROWS || arrayCol < 0 || arrayCol >= ARRAY_COLS) continue;
+                if (board[arrayRow][arrayCol] == WALL || board[arrayRow][arrayCol] == EMPTY) continue;
+
+                board[arrayRow][arrayCol] = EMPTY;
+                cleared++;
+            }
+        }
+        return cleared;
+    }
+
     // 논리 좌표 (row, col)의 칸에 값을 쓴다
     private void setCell(int row, int col, int value) {
         board[row + MARGIN][col + MARGIN] = value;
