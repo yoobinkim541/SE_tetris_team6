@@ -1,0 +1,25 @@
+// 진단용 인수 테스트: 미구현 요구사항을 실패로 보여 주며 기존 check를 대체하지 않는다.
+// .\gradlew.bat -I audit/requirements-audit.init.gradle requirementsAudit --no-daemon
+allprojects {
+    plugins.withId('java') {
+        def auditSources = sourceSets.create('requirementsAudit') {
+            java.srcDir 'audit/java'
+            compileClasspath += sourceSets.main.output
+            runtimeClasspath += sourceSets.main.output
+        }
+        configurations.requirementsAuditImplementation.extendsFrom(configurations.testImplementation)
+        configurations.requirementsAuditRuntimeOnly.extendsFrom(configurations.testRuntimeOnly)
+        tasks.register('requirementsAudit', Test) {
+            group = 'verification'
+            description = '요구사항 2 UI·저장 인수 조건 진단 (미구현 항목은 실패)'
+            testClassesDirs = auditSources.output.classesDirs
+            classpath = auditSources.runtimeClasspath
+            useJUnitPlatform()
+            def gui = project.findProperty('auditGui') == 'true'
+            systemProperty 'java.awt.headless', String.valueOf(!gui)
+            systemProperty 'audit.gui', String.valueOf(gui)
+            systemProperty 'audit.screenshots', String.valueOf(project.findProperty('auditScreenshots') == 'true')
+            testLogging { events 'failed', 'skipped' }
+        }
+    }
+}
