@@ -199,6 +199,8 @@ public class GamePanel extends JPanel implements GameListener {
         int level = snapshot == null ? 1 : snapshot.level();
         int lines = snapshot == null ? 0 : snapshot.lines();
         String state = snapshot == null ? GameState.LOADING.name() : snapshot.state().name();
+        int lineHeight = labelSize + labelSize / 2;
+        int guideTop = cellSize / 2 + cellSize * Board.HEIGHT - lineHeight * (keyGuide.length + 1);
         if (compact) {
             java.util.List<String> rows = new java.util.ArrayList<>();
             rows.add("SCORE " + score);
@@ -209,13 +211,16 @@ public class GamePanel extends JPanel implements GameListener {
                 rows.add("DIFF " + snapshot.difficulty());
                 if (snapshot.mode() == tetris.feature.game.GameMode.ITEM)
                     rows.add("NEXT ITEM " + snapshot.nextItemLines());
+            }
+            int plainRows = rows.size();
+            if (snapshot != null) {
                 for (var effect : snapshot.effects())
-                    rows.add((effect.type() == tetris.feature.item.ItemType.DOUBLE_SCORE ? "x2 " : "SLOW ")
-                            + effect.remainingBlocks());
+                    rows.add(effectTag(effect) + " " + remainingText(effect));
             }
             g.setFont(Theme.text(labelSize, true));
-            g.setColor(Theme.TEXT);
-            for (String row : rows) {
+            for (int i = 0; i < rows.size(); i++) {
+                String row = rows.get(i);
+                g.setColor(i < plainRows ? Theme.TEXT : Theme.ACCENT); // 지속 효과 줄은 노란색
                 // 큰 점수도 정보 영역 밖으로 넘치지 않도록 이 행에서만 글자 크기를 줄인다.
                 int fontSize = labelSize;
                 g.setFont(Theme.text(fontSize, true));
@@ -225,8 +230,9 @@ public class GamePanel extends JPanel implements GameListener {
             }
         } else {
             y = drawValue(g, Messages.get("game.score"), String.valueOf(score), x, y, labelSize, valueSize);
-            y = drawValue(g, Messages.get("game.level"), String.valueOf(level), x, y, labelSize, valueSize);
-            y = drawValue(g, Messages.get("game.lines"), String.valueOf(lines), x, y, labelSize, valueSize);
+            // LEVEL·LINES는 한 줄 두 칸으로 놓아 지속 효과 섹션 자리를 만든다
+            drawValue(g, Messages.get("game.level"), String.valueOf(level), x, y, labelSize, valueSize);
+            y = drawValue(g, Messages.get("game.lines"), String.valueOf(lines), x + width / 2, y, labelSize, valueSize);
             y = drawValue(g, Messages.get("game.state"), state, x, y, labelSize, labelSize + labelSize / 4);
             if (snapshot != null) {
                 g.setFont(Theme.text(labelSize, true));
@@ -236,14 +242,11 @@ public class GamePanel extends JPanel implements GameListener {
                 g.drawString("DIFFICULTY " + snapshot.difficulty(), x, y += step);
                 if (snapshot.mode() == tetris.feature.game.GameMode.ITEM)
                     g.drawString("NEXT ITEM " + snapshot.nextItemLines(), x, y += step);
-                for (var effect : snapshot.effects())
-                    g.drawString((effect.type() == tetris.feature.item.ItemType.DOUBLE_SCORE ? "x2 " : "SLOW ")
-                            + effect.remainingBlocks(), x, y += step);
+                drawEffects(g, snapshot.effects(), x, y, width, labelSize, guideTop);
             }
         }
 
         // Key Guide는 보드 아래쪽에 맞춰 붙인다
-        int lineHeight = labelSize + labelSize / 2;
         int guideY = cellSize / 2 + cellSize * Board.HEIGHT - lineHeight * keyGuide.length;
         drawLabel(g, Messages.get("game.keys"), x, guideY - lineHeight, labelSize);
         g.setFont(Theme.text(labelSize, false));
@@ -252,6 +255,71 @@ public class GamePanel extends JPanel implements GameListener {
             guideY += lineHeight;
             g.drawString(line, x, guideY - labelSize / 3);
         }
+    }
+
+    private static final int GAUGE_SEGMENTS = 10; // 지속 효과의 최대 남은 블록 수
+
+    /**
+     * 지속 효과 섹션: 노란색으로 [이름  설명 ... N블록]과 그 아래 10칸 게이지를 그린다.
+     * limitY(조작 안내 위쪽)를 넘으면 게이지는 빼고 글자 줄만 그려 안내를 덮지 않는다.
+     */
+    private void drawEffects(Graphics2D g, java.util.List<tetris.feature.item.ActiveEffect> effects, int x, int y,
+                             int width, int labelSize, int limitY) {
+        if (effects.isEmpty()) return;
+
+        int step = labelSize + labelSize / 2;
+        int barHeight = Math.max(3, labelSize / 3);
+        int barGap = Math.max(2, labelSize / 4);
+        int headerStep = labelSize + labelSize / 4; // 제목 줄은 여백을 줄여 큰 화면에서도 게이지가 들어가게 한다
+        boolean gauge = y + headerStep + effects.size() * (step + barGap + barHeight) <= limitY;
+        int indent = Math.max(6, labelSize * 2 / 3);
+        int contentX = x + indent;
+        int contentWidth = width - indent;
+        int top = y;
+
+        g.setFont(Theme.text(labelSize, true));
+        g.setColor(Theme.DIM_TEXT);
+        g.drawString(Messages.get("game.effects"), contentX, y += headerStep);
+
+        g.setFont(Theme.text(labelSize, true));
+        int tagWidth = 0;
+        for (var effect : effects) tagWidth = Math.max(tagWidth, g.getFontMetrics().stringWidth(effectTag(effect)));
+        for (var effect : effects) {
+            y += step;
+            g.setColor(Theme.ACCENT);
+            g.setFont(Theme.text(labelSize, true));
+            g.drawString(effectTag(effect), contentX, y);
+            String remaining = remainingText(effect);
+            g.drawString(remaining, x + width - g.getFontMetrics().stringWidth(remaining), y);
+            g.setFont(Theme.text(labelSize, false));
+            g.drawString(Messages.get("effect." + effect.type().name() + ".desc"), contentX + tagWidth + labelSize / 2, y);
+            if (!gauge) continue;
+
+            int gap = Math.max(1, labelSize / 6);
+            int segment = (contentWidth - gap * (GAUGE_SEGMENTS - 1)) / GAUGE_SEGMENTS;
+            int filled = Math.min(effect.remainingBlocks(), GAUGE_SEGMENTS);
+            for (int i = 0; i < GAUGE_SEGMENTS; i++) {
+                g.setColor(i < filled ? Theme.ACCENT : Theme.ACCENT.darker().darker());
+                g.fillRect(contentX + i * (segment + gap), y + barGap, segment, barHeight);
+            }
+            y += barGap + barHeight;
+        }
+
+        // 섹션 왼쪽의 세로선으로 다른 정보와 구분한다
+        g.setColor(Theme.ACCENT.darker().darker());
+        int barTop = top + step / 3;
+        g.fillRect(x, barTop, Math.max(2, labelSize / 5), y - barTop);
+    }
+
+    private static String effectTag(tetris.feature.item.ActiveEffect effect) {
+        return Messages.get("effect." + effect.type().name() + ".tag");
+    }
+
+    // 남은 블록 수. 슬로우는 마지막 블록이 떨어지는 동안 0이라 "이번 블록"으로 보여준다
+    private static String remainingText(tetris.feature.item.ActiveEffect effect) {
+        return effect.remainingBlocks() == 0
+                ? Messages.get("effect.thisBlock")
+                : Messages.format("effect.blocks", effect.remainingBlocks());
     }
 
     // Next 블록을 값 있는 칸 기준으로 상자 가운데에 그린다
