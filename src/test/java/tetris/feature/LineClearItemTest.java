@@ -75,7 +75,7 @@ public class LineClearItemTest {
     }
 
     @Test
-    void 아직_구현하지_않은_아이템도_효과가_있고_아무것도_지우지_않는다() {
+    void 모든_아이템_종류에_효과가_연결돼_있고_빈_보드에서_L_말고는_지우는_행과_칸이_없다() {
         for (ItemType type : ItemType.values()) {
             assertNotNull(type.effect(), type.name());
             if (type == ItemType.LINE_CLEAR) continue;
