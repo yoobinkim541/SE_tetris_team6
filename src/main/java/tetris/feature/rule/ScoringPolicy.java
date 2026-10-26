@@ -1,0 +1,29 @@
+package tetris.feature.rule;
+
+/** 점수 계산 (SCR-1~3, SCR-6). 화면·스코어보드가 계산식을 중복 구현하지 않는다. */
+public class ScoringPolicy {
+    /** 하강 1칸(자동·Soft Drop) 점수 = level */
+    public long softDropScore(int level) {
+        if (level < 1) throw new IllegalArgumentException("level should be 1 or more. Value : " + level);
+        return level;
+    }
+
+    /** Hard Drop 점수 = cells × level */
+    public long hardDropScore(int cells, int level) {
+        if (cells < 0) throw new IllegalArgumentException("cells should be 0 or more. Value : " + cells);
+        if (level < 1) throw new IllegalArgumentException("level should be 1 or more. Value : " + level);
+        return (long) cells * level;
+    }
+
+    /** 줄 삭제 보너스: 1줄 100, 2줄 300, 3줄 500, 4줄 800, 0줄 0 (Level 무관) */
+    public long lineClearBonus(int lines) {
+        return switch (lines) {
+            case 0 -> 0;
+            case 1 -> 100;
+            case 2 -> 300;
+            case 3 -> 500;
+            case 4 -> 800;
+            default -> throw new IllegalArgumentException(String.format("lines should be between %d and %d. Value : %d", 0, 4, lines));
+        };
+    }
+}

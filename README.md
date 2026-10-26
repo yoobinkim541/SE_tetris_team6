@@ -1,9 +1,16 @@
 # TETRIS - Team6
 김유빈 심재윤 심규민
 
+2차 구현 및 검증: [요구사항 v2](docs/requirements-spec-v2.md). 일반 게임 난이도는 설정에서 선택하며 아이템 모드는 메인 메뉴에서 시작합니다. 스코어보드에서 좌우 키로 네 분류를 전환합니다.
+
+검증: `./gradlew.bat test check guiAcceptance --no-daemon` (Windows). 배포 ZIP은 `./gradlew.bat packageApp`으로 생성합니다. 실제 사용자 평가와 최종 제출 확인 항목은 v2 문서에 별도 기록합니다.
+
+제출 준비: [사용자 2명 평가](docs/user-playtest.md) · [교수자 문의 문안](docs/professor-confirmation.md) · [릴리스 확인표](docs/release-checklist.md). 패키지 실행 검증은 `./scripts/verify-package.ps1`로 수행합니다.
+
 ## 목차
 1. [Project Overview](#1-project-overview)
 2. [Git Convention](#2-git-convention)
+3. [빌드·실행·배포](#3-빌드실행배포)
 
 
 ---
@@ -84,5 +91,30 @@ data: 반도체 산업 키워드 목록 업데이트
 ## 관련 Issue
 - Closes #
 ```
+
+---
+
+## 3. 빌드·실행·배포
+
+### 요구 환경
+- Windows 11, JDK 21 이상 (개발·빌드용)
+- 배포 패키지로 실행할 때는 JRE가 들어 있어 Java 설치가 필요 없습니다.
+
+### 명령어
+| 목적 | 명령 (Windows) | 결과 |
+|---|---|---|
+| 더블클릭 실행 | `.\run.bat` 더블클릭 | 게임 창 즉시 실행 |
+| 실행 | `.\gradlew.bat run` | 게임 창 실행 |
+| 테스트 | `.\gradlew.bat test` | 단위·비기능 테스트 + JaCoCo 리포트 (`build/reports/jacoco/test/html`) |
+| 배포 패키지 | `.\gradlew.bat packageApp` | `build/distributions/SE-Tetris-windows.zip` |
+
+배포 zip을 풀고 `SE Tetris\SE Tetris.exe`를 더블클릭하면 실행됩니다. GitHub Actions의 **Package** 워크플로(`main` 반영, `v*` 태그, 수동 실행)에서도 같은 zip을 아티팩트로 받을 수 있습니다.
+
+스프린트 종료 시 리뷰한 `develop → main` PR을 병합한 뒤 해당 커밋에 `v0.4`, `v0.5` 같은 태그를 푸시합니다. Package 워크플로는 테스트와 70% 커버리지 검증이 성공하면 ZIP과 의존성을 포함한 실행 JAR(`SE-Tetris.jar`)을 GitHub Release에 첨부합니다. JAR 실행에는 Java 21 이상이 필요하며 `java -jar SE-Tetris.jar`로 실행합니다. 로컬 빌드는 `.\gradlew.bat releaseJar`입니다.
+
+### 사용자 데이터
+- 위치: `%APPDATA%\SETetrisTeam6\`
+- `settings.json`: 화면 크기, 색맹 모드, 조작키 / `scoreboard.json`: Top 10 기록
+- 파일 형식과 손상 시 처리: `docs/requirements-spec-v1.2.md` §12
 
 ---
