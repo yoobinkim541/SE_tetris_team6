@@ -28,8 +28,17 @@ public class KeyBindingManager {
     private static final String PRESSED = ".pressed";
     private static final String RELEASED = ".released";
     // 수정 키를 누른 채 뗀 경우에도 눌림 상태가 풀리도록 뗌은 수정 키 조합까지 등록한다 (눌림은 수정 키 없이만: KEY-7)
-    private static final int[] RELEASE_MODIFIERS = {
-            0, InputEvent.SHIFT_DOWN_MASK, InputEvent.CTRL_DOWN_MASK, InputEvent.ALT_DOWN_MASK};
+    private static final int[] RELEASE_MODIFIERS = releaseModifiers();
+
+    private static int[] releaseModifiers() {
+        int[] flags = {InputEvent.SHIFT_DOWN_MASK, InputEvent.CTRL_DOWN_MASK,
+                InputEvent.ALT_DOWN_MASK, InputEvent.META_DOWN_MASK, InputEvent.ALT_GRAPH_DOWN_MASK};
+        int[] combinations = new int[1 << flags.length];
+        for (int combination = 0; combination < combinations.length; combination++)
+            for (int bit = 0; bit < flags.length; bit++)
+                if ((combination & (1 << bit)) != 0) combinations[combination] |= flags[bit];
+        return combinations;
+    }
 
     private final Runnable onQuit;
     private final Set<GameAction> held = EnumSet.noneOf(GameAction.class); // 반복 불가 키 중 눌려 있는 것

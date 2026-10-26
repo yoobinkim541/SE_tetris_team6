@@ -45,6 +45,8 @@ public class JsonScoreboardRepository implements ScoreboardRepository {
         ArrayNode entries = root.putArray("entries");
         for (ScoreEntry entry : scoreboard.entries()) {
             entries.addObject()
+                    .put("mode", entry.mode().name())
+                    .put("difficulty", entry.difficulty().name())
                     .put("name", entry.name())
                     .put("score", entry.score())
                     .put("level", entry.level())
@@ -80,10 +82,19 @@ public class JsonScoreboardRepository implements ScoreboardRepository {
                     requiredInteger(node, "score"),
                     integerOrDefault(node, "level", DEFAULT_LEVEL),
                     integerOrDefault(node, "lines", DEFAULT_LINES),
+                    category(node, "mode", tetris.feature.game.GameMode.class, tetris.feature.game.GameMode.CLASSIC),
+                    category(node, "difficulty", tetris.feature.game.Difficulty.class, tetris.feature.game.Difficulty.NORMAL),
                     recordedAtOrEpoch(node)));
         } catch (IllegalArgumentException invalidEntry) {
             return Optional.empty();
         }
+    }
+
+    private static <E extends Enum<E>> E category(JsonNode node, String field, Class<E> type, E fallback) {
+        JsonNode value = node.get(field);
+        if (value == null || value.isNull()) return fallback;
+        if (!value.isTextual()) throw new IllegalArgumentException("invalid " + field);
+        return Enum.valueOf(type, value.asText());
     }
 
     private static String textOrNull(JsonNode node, String field) {
