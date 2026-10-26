@@ -19,6 +19,7 @@ public class BlockPalette {
         DEFAULT.put(BlockType.S, new Color(0x2E9E44));
         DEFAULT.put(BlockType.T, new Color(0x8E24AA));
         DEFAULT.put(BlockType.Z, new Color(0xD32F2F));
+        DEFAULT.put(BlockType.W, new Color(0xBDBDBD)); // 고정된 무게추 (RND-9)
 
         COLOR_BLIND.put(BlockType.I, new Color(0x56B4E9));
         COLOR_BLIND.put(BlockType.J, new Color(0x0072B2));
@@ -27,6 +28,7 @@ public class BlockPalette {
         COLOR_BLIND.put(BlockType.S, new Color(0x009E73));
         COLOR_BLIND.put(BlockType.T, new Color(0xCC79A7));
         COLOR_BLIND.put(BlockType.Z, new Color(0xD55E00));
+        COLOR_BLIND.put(BlockType.W, new Color(0xBDBDBD));
     }
 
     public Color color(BlockType type, boolean colorBlindMode) {

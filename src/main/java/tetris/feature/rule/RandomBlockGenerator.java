@@ -13,7 +13,7 @@ import tetris.component.block.ZBlock;
 
 /** 7종을 각각 1/7 확률로 독립 선택 (기존 timer/RandomSelect 대체) */
 public class RandomBlockGenerator implements BlockGenerator {
-    private static final BlockType[] TYPES = BlockType.values();
+    private static final BlockType[] TYPES = BlockType.ordinary();
 
     private final Random random;
 
@@ -42,6 +42,7 @@ public class RandomBlockGenerator implements BlockGenerator {
             case S -> new SBlock();
             case T -> new TBlock();
             case Z -> new ZBlock();
+            case W -> throw new IllegalArgumentException("무게추는 일반 블록 생성 대상이 아니다");
         };
     }
 }
