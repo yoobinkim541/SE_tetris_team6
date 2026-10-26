@@ -103,6 +103,8 @@ data: 반도체 산업 키워드 목록 업데이트
 
 배포 zip을 풀고 `SE Tetris\SE Tetris.exe`를 더블클릭하면 실행됩니다. GitHub Actions의 **Package** 워크플로(`main` 반영, `v*` 태그, 수동 실행)에서도 같은 zip을 아티팩트로 받을 수 있습니다.
 
+스프린트 종료 시 리뷰한 `develop → main` PR을 병합한 뒤 해당 커밋에 `v0.4`, `v0.5` 같은 태그를 푸시합니다. Package 워크플로는 테스트와 70% 커버리지 검증이 성공하면 ZIP과 의존성을 포함한 실행 JAR(`SE-Tetris.jar`)을 GitHub Release에 첨부합니다. JAR 실행에는 Java 21 이상이 필요하며 `java -jar SE-Tetris.jar`로 실행합니다. 로컬 빌드는 `.\gradlew.bat releaseJar`입니다.
+
 ### 사용자 데이터
 - 위치: `%APPDATA%\SETetrisTeam6\`
 - `settings.json`: 화면 크기, 색맹 모드, 조작키 / `scoreboard.json`: Top 10 기록
