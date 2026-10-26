@@ -41,6 +41,7 @@ public class GameSession {
     private GameState state = GameState.LOADING;
     private long score;
     private int lines; // 누적 삭제 줄 (표시용)
+    private int currentFallIntervalMillis = 1000;
     private boolean quitPending;                  // Quit 확인창이 떠 있는 동안 true
     private GameState stateBeforeQuit;            // 확인창을 띄우기 전 상태 (No 선택 시 복귀용)
     private ClearPlan pendingClear;               // CLEARING 동안 150 ms 뒤에 지울 대상
@@ -190,7 +191,7 @@ public class GameSession {
             clock.start(CLEAR_ANIMATION_MILLIS);
         } else {
             state = GameState.PLAYING;
-            clock.start(levelPolicy.fallIntervalMillis());
+            clock.start(currentFallIntervalMillis);
         }
         pausedDuringClearing = false;
         listener.onChanged(snapshot());
@@ -257,7 +258,7 @@ public class GameSession {
                 difficulty,
                 state == GameState.CLEARING ? pendingClear.flashCells() : List.of(), // ANI-5: CLEARING이 아니면 빈 목록
                 mode == GameMode.ITEM ? 10 - lines % 10 : 0,
-                List.of());
+                modifiers.effects());
     }
 
     // ── 명세 4장 파이프라인 (내부) ────────────
@@ -349,6 +350,7 @@ public class GameSession {
 
     /** §5 LOCK. Level은 L6과 다음 Spawn의 S3에서만 바뀐다 (PIPE-1) */
     private void lockCurrentBlock() {
+        modifiers.beginLock();
         Block placed = placeCurrentBlock();           // L1
         ClearPlan plan = collectClearTargets(placed); // L2
         if (plan.isEmpty()) {                         // ANI-4: 지울 대상이 없으면 CLEARING을 거치지 않는다
@@ -376,7 +378,7 @@ public class GameSession {
         int clearedCells = applyClear(plan);          // L4
         awardClearScore(plan, clearedCells);          // L5
         updateCounters(plan);                         // L6
-
+        modifiers.finishLock();                       // L8: 이번에 획득한 D는 유지
         spawnNextBlock();
     }
 
@@ -430,7 +432,7 @@ public class GameSession {
 
     /** L5: 줄 삭제 점수 + 아이템이 지운 고정 칸당 10점 (§8.6) */
     private void awardClearScore(ClearPlan plan, int clearedCells) {
-        score += scoringPolicy.lineClearBonus(plan.rowCount());
+        score += scoringPolicy.lineClearBonus(plan.rowCount()) * modifiers.scoreMultiplier();
         score += (long) clearedCells * CELL_CLEAR_SCORE;
     }
 
@@ -459,7 +461,9 @@ public class GameSession {
         currentBlock = block;
         crushing = false;
         levelPolicy.onBlockSpawned();                                              // S3
-        clock.start(levelPolicy.fallIntervalMillis());                             // S4
+        modifiers.onSpawn();
+        currentFallIntervalMillis = (int) Math.round(levelPolicy.fallIntervalMillis() * modifiers.fallMultiplier());
+        clock.start(currentFallIntervalMillis);                                    // S4
     }
 
     private void gameOver() {
