@@ -19,6 +19,7 @@ public record ScoreEntry(String name, long score, int level, int lines, GameMode
         if (difficulty == null) throw new IllegalArgumentException("difficulty cannot be null");
         if (recordedAt == null) throw new IllegalArgumentException("recordedAt cannot be null");
 
+        if (mode == GameMode.ITEM) difficulty = Difficulty.NORMAL;
         name = name.trim();
     }
 

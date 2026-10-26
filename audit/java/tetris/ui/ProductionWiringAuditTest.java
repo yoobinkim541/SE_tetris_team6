@@ -34,6 +34,43 @@ class ProductionWiringAuditTest {
     }
 
     @Test
+    void focusLossCallbackPausesRealGameAndClearsHeldRotate() throws Exception {
+        withFrame(new Settings(), frame -> {
+            menuItems(frame).get(0).action().run();
+            GameSession game = session(frame);
+            javax.swing.JComponent panel = (javax.swing.JComponent) field(frame, "gamePanel");
+            // 보드 중앙에서 모든 일반 블록을 회전 가능하게 내려 둔다.
+            for (int i = 0; i < 5; i++) game.moveDown();
+            Object rotate = panel.getInputMap(javax.swing.JComponent.WHEN_IN_FOCUSED_WINDOW)
+                    .get(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_UP, 0));
+            panel.getActionMap().get(rotate).actionPerformed(null);
+            int rotation = game.snapshot().currentBlock().getRotation();
+            var event = new java.awt.event.WindowEvent(frame, java.awt.event.WindowEvent.WINDOW_DEACTIVATED);
+            for (var listener : frame.getWindowListeners()) listener.windowDeactivated(event);
+            assertEquals(GameState.PAUSED, game.getState());
+            game.resume();
+            panel.getActionMap().get(rotate).actionPerformed(null);
+            // O는 모양이 그대로여도 회전 카운터는 순환한다.
+            assertEquals((rotation + 1) % 4, game.snapshot().currentBlock().getRotation());
+        });
+    }
+
+    @Test
+    void allConfiguredSizesFitCurrentScaledDesktop() throws Exception {
+        withFrame(new Settings(), frame -> {
+            java.awt.Rectangle desktop = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
+            int previousHeight = 0;
+            for (var size : tetris.feature.setting.ScreenSize.values()) {
+                frame.applyScreenSize(size);
+                assertTrue(frame.getWidth() <= desktop.width, size + " width exceeds desktop");
+                assertTrue(frame.getHeight() <= desktop.height, size + " height exceeds desktop");
+                assertTrue(frame.getHeight() > previousHeight, "세 크기를 구분해야 함");
+                previousHeight = frame.getHeight();
+            }
+        });
+    }
+
+    @Test
     void actualItemMenuActionStartsItemAtNormalDifficulty() throws Exception {
         Settings settings = new Settings();
         settings.setDifficulty(Difficulty.HARD);
