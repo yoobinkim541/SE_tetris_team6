@@ -38,10 +38,33 @@ tasks.register('guiAcceptance', Test) {
     testClassesDirs = sourceSets.test.output.classesDirs
     classpath = sourceSets.test.runtimeClasspath
     useJUnitPlatform()
+    // LINE coverage is collected by the default test task. Avoid duplicate agent
+    // instrumentation in native GUI checks (Java 21 C2/JaCoCo crash observed).
+    jacoco.enabled = false
     filter { includeTestsMatching 'tetris.ui.ProductionWiringAuditTest' }
     systemProperty 'java.awt.headless', 'false'
     systemProperty 'audit.gui', 'true'
     systemProperty 'sun.java2d.uiScale', providers.gradleProperty('guiScale').getOrElse('1.0')
+}
+
+// 제한된 Java heap에서 UI 경로·개별 입력 지연·아이템 스트레스를 실행한다.
+// OS 전체 RAM 1GB / 1.2GHz 실기 인증과는 별개인 소프트웨어 자원 회귀 검증이다.
+tasks.register('resourceAcceptance', Test) {
+    group = 'verification'
+    description = '256MB Java heap에서 실제 창·입력 지연·스트레스 검증'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    maxHeapSize = '256m'
+    useJUnitPlatform()
+    // This task measures UI/resource behavior, not coverage.
+    jacoco.enabled = false
+    filter {
+        includeTestsMatching 'tetris.ui.ProductionWiringAuditTest'
+        includeTestsMatching 'tetris.ui.ChecklistInputLatencyTest'
+        includeTestsMatching 'tetris.feature.RandomInputStressTest'
+    }
+    systemProperty 'java.awt.headless', 'false'
+    systemProperty 'audit.gui', 'true'
 }
 
 jacocoTestReport {

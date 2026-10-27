@@ -132,6 +132,74 @@ class ProductionWiringAuditTest {
         });
     }
 
+    @Test
+    void checklistGameOverRecordsAndHighlightsBothModesThenReturnsToMenu() throws Exception {
+        for (GameMode mode : GameMode.values()) {
+            withFrame(new Settings(), frame -> {
+                assertTimeout(java.time.Duration.ofSeconds(1),
+                        () -> menuItems(frame).get(mode == GameMode.ITEM ? 1 : 0).action().run(),
+                        "6-5: menu start must finish within one second on this host");
+                GameSession game = session(frame);
+                for (int input = 0; input < 1000 && game.getState() != GameState.GAME_OVER; input++) {
+                    if (game.getState() == GameState.CLEARING) game.tick();
+                    else game.hardDrop();
+                }
+                assertEquals(GameState.GAME_OVER, game.getState(), "2-29: blocked Spawn ends game");
+                assertEquals(MainFrame.Screen.GAME_OVER, field(frame, "currentScreen"));
+                assertTimeout(java.time.Duration.ofSeconds(1),
+                        () -> JComponentAction.enter((javax.swing.JComponent) field(frame, "gameOverPanel")),
+                        "6-5: result navigation must finish within one second on this host");
+                assertEquals(MainFrame.Screen.NAME_INPUT, field(frame, "currentScreen"), "3-5: qualifying score needs name");
+                var name = (javax.swing.JTextField) field(field(frame, "nameInputPanel"), "field");
+                name.setText("Player");
+                assertTimeout(java.time.Duration.ofSeconds(1), name::postActionEvent,
+                        "6-5: score save and scoreboard navigation must finish within one second on this host");
+                assertEquals(MainFrame.Screen.SCOREBOARD, field(frame, "currentScreen"), "2-30: result reaches scoreboard");
+                var scores = (ScoreBoardPanel) field(frame, "scoreBoardPanel");
+                var entries = (List<?>) field(scores, "entries");
+                assertFalse(entries.isEmpty());
+                int highlight = (int) field(scores, "highlightIndex");
+                assertTrue(highlight >= 0, "3-6: new record highlighted");
+                var entry = (tetris.feature.score.ScoreEntry) entries.get(highlight);
+                assertEquals("Player", entry.name());
+                assertEquals(mode, entry.mode());
+                assertEquals(game.snapshot().score(), entry.score());
+                assertTrue(new JsonScoreboardRepository(directory.resolve("scoreboard.json")).load().value()
+                        .entries().contains(entry), "3-7: result persisted");
+                assertTimeout(java.time.Duration.ofSeconds(1), scores::activateSelected,
+                        "6-5: return to menu must finish within one second on this host");
+                assertEquals(MainFrame.Screen.MAIN_MENU, field(frame, "currentScreen"), "2-31: scoreboard closes to menu");
+            });
+        }
+    }
+
+    @Test
+    void checklistNonQualifyingResultSkipsNameAndShowsScoreboard() throws Exception {
+        withFrame(new Settings(), frame -> {
+            Scoreboard board = (Scoreboard) field(frame, "scoreboard");
+            for (int rank = 0; rank < 10; rank++) board.add(new tetris.feature.score.ScoreEntry(
+                    "Top" + rank, 1_000_000 - rank, 1, 0, java.time.Instant.EPOCH));
+            menuItems(frame).get(0).action().run();
+            GameSession game = session(frame);
+            for (int input = 0; input < 1000 && game.getState() != GameState.GAME_OVER; input++) {
+                if (game.getState() == GameState.CLEARING) game.tick();
+                else game.hardDrop();
+            }
+            assertEquals(GameState.GAME_OVER, game.getState());
+            JComponentAction.enter((javax.swing.JComponent) field(frame, "gameOverPanel"));
+            assertEquals(MainFrame.Screen.SCOREBOARD, field(frame, "currentScreen"));
+            assertEquals(10, board.entries().size());
+        });
+    }
+
+    private static class JComponentAction {
+        static void enter(javax.swing.JComponent component) {
+            Object key = component.getInputMap(javax.swing.JComponent.WHEN_IN_FOCUSED_WINDOW)
+                    .get(javax.swing.KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_ENTER, 0));
+            component.getActionMap().get(key).actionPerformed(null);
+        }
+    }
+
     private void withFrame(Settings settings, FrameCheck check) throws Exception {
         Throwable[] failure = new Throwable[1];
         SwingUtilities.invokeAndWait(() -> {

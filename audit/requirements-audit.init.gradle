@@ -21,5 +21,14 @@ allprojects {
             systemProperty 'audit.screenshots', String.valueOf(project.findProperty('auditScreenshots') == 'true')
             testLogging { events 'failed', 'skipped' }
         }
+        // Init scripts register this task before the build applies JaCoCo. Configure
+        // its task extension only after all plugins have finished applying.
+        afterEvaluate {
+            if (project.plugins.hasPlugin('jacoco')) {
+                tasks.named('requirementsAudit', Test).configure { auditTask ->
+                    auditTask.extensions.getByType(org.gradle.testing.jacoco.plugins.JacocoTaskExtension).enabled = false
+                }
+            }
+        }
     }
 }

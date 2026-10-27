@@ -1,0 +1,648 @@
+{
+  "source": "https://docs.google.com/spreadsheets/d/1847XgHhucPiS1QZ23Hl1oCWT2MuSXmjq2V7wriGUftM/edit?gid=1911909482",
+  "sheet": "시트 1",
+  "read_date": "2026-10-27",
+  "note": "원본 구현 O는 작성된 값이며 이번 감사 판정이 아님.",
+  "rows": [
+    {
+      "row": 5,
+      "id": "1-1",
+      "category": "시작메뉴",
+      "group": "표시",
+      "requirement": "메뉴 화면 상단에 게임의 이름이 표시",
+      "source_mark": "O"
+    },
+    {
+      "row": 6,
+      "id": "1-2",
+      "category": "",
+      "group": "",
+      "requirement": "게임 시작 메뉴 표시",
+      "source_mark": "O"
+    },
+    {
+      "row": 7,
+      "id": "1-3",
+      "category": "",
+      "group": "",
+      "requirement": "아이템모드 게임 시작 메뉴 표시",
+      "source_mark": "O"
+    },
+    {
+      "row": 8,
+      "id": "1-4",
+      "category": "",
+      "group": "",
+      "requirement": "설정 메뉴 표시",
+      "source_mark": "O"
+    },
+    {
+      "row": 9,
+      "id": "1-5",
+      "category": "",
+      "group": "",
+      "requirement": "스코어 보드 표시",
+      "source_mark": "O"
+    },
+    {
+      "row": 10,
+      "id": "1-6",
+      "category": "",
+      "group": "",
+      "requirement": "게임 종료 메뉴 표시",
+      "source_mark": "O"
+    },
+    {
+      "row": 11,
+      "id": "1-7",
+      "category": "",
+      "group": "동작",
+      "requirement": "키보드를 이용하여 메뉴 사이를 이동",
+      "source_mark": "O"
+    },
+    {
+      "row": 12,
+      "id": "1-8",
+      "category": "",
+      "group": "",
+      "requirement": "엔터 키를 이용하여 메뉴 선택 또는 다른 키를 사용하면 사용가능한 키를 표시",
+      "source_mark": "O"
+    },
+    {
+      "row": 13,
+      "id": "1-9",
+      "category": "",
+      "group": "",
+      "requirement": "각 메뉴 선택시 알맞은 동작이 실행",
+      "source_mark": "O"
+    },
+    {
+      "row": 14,
+      "id": "1-10",
+      "category": "",
+      "group": "설계",
+      "requirement": "메뉴가 차후 추가되기 쉬운 구조로 설계",
+      "source_mark": "O"
+    },
+    {
+      "row": 15,
+      "id": "2-1",
+      "category": "테트리스 게임",
+      "group": "화면 구성 및 동작",
+      "requirement": "20줄, 10칸의 보드가 존재",
+      "source_mark": "O"
+    },
+    {
+      "row": 16,
+      "id": "2-2",
+      "category": "",
+      "group": "",
+      "requirement": "다음 블럭을 확인할 수 있는 부분이 존재",
+      "source_mark": "O"
+    },
+    {
+      "row": 17,
+      "id": "2-3",
+      "category": "",
+      "group": "",
+      "requirement": "현재 점수를 확인할 수 있는 부분이 존재",
+      "source_mark": "O"
+    },
+    {
+      "row": 18,
+      "id": "2-4",
+      "category": "",
+      "group": "",
+      "requirement": "2-2에는 2-1의 보드에 새로운 현재 블럭이 생성될 때마다 그 다음에 생성될 블럭이 정확히 표시됨",
+      "source_mark": "O"
+    },
+    {
+      "row": 19,
+      "id": "2-5",
+      "category": "",
+      "group": "",
+      "requirement": "2-3은 실시간으로 바뀌는 점수를 표시",
+      "source_mark": "O"
+    },
+    {
+      "row": 20,
+      "id": "2-6",
+      "category": "",
+      "group": "",
+      "requirement": "삭제되는 줄이 잘 확인될 수 있는 표시가 존재함",
+      "source_mark": "O"
+    },
+    {
+      "row": 21,
+      "id": "2-7",
+      "category": "",
+      "group": "조작 방법",
+      "requirement": "보드에 현재 블럭이 생성되고 나면, 이 블럭은 아무 조작없이도 1초에 1줄씩 밑으로 떨어짐",
+      "source_mark": "O"
+    },
+    {
+      "row": 22,
+      "id": "2-8",
+      "category": "",
+      "group": "",
+      "requirement": "일정 수 이상의 블럭이 생성되었거나, 줄이 삭제되었으면 떨어지는 속도가 증가",
+      "source_mark": "O"
+    },
+    {
+      "row": 23,
+      "id": "2-9",
+      "category": "",
+      "group": "",
+      "requirement": "현재 블럭을 키보드로 좌, 우, 아래 한 칸씩 이동이 가능해야 함",
+      "source_mark": "O"
+    },
+    {
+      "row": 24,
+      "id": "2-10",
+      "category": "",
+      "group": "",
+      "requirement": "현재 블럭을 시계방향으로 90도 회전시킬 수 있어야 함",
+      "source_mark": "O"
+    },
+    {
+      "row": 25,
+      "id": "2-11",
+      "category": "",
+      "group": "",
+      "requirement": "현재 블럭을 한 번에 끝까지 밑으로 떨어뜨릴 수 있어야 함",
+      "source_mark": "O"
+    },
+    {
+      "row": 26,
+      "id": "2-12",
+      "category": "",
+      "group": "",
+      "requirement": "키 입력이 1초에 3번 이하로 반복되는 경우, 해당 키 입력이 모두 정확히 블럭의 움직임에 반영되어야 함",
+      "source_mark": "O"
+    },
+    {
+      "row": 27,
+      "id": "2-13",
+      "category": "",
+      "group": "",
+      "requirement": "2-12의 반복된 키 입력과 블럭의 움직임 사이에 발생하는 지연은 1초 미만이어야 함",
+      "source_mark": "O"
+    },
+    {
+      "row": 28,
+      "id": "2-14",
+      "category": "",
+      "group": "",
+      "requirement": "게임 도중 게임을 일시 중단할 수 있는 키가 존재해야 함",
+      "source_mark": "O"
+    },
+    {
+      "row": 29,
+      "id": "2-15",
+      "category": "",
+      "group": "",
+      "requirement": "게임이 일시 중단된 상태에서 다시 재개할 수 있는 키가 존재해야 함",
+      "source_mark": "O"
+    },
+    {
+      "row": 30,
+      "id": "2-16",
+      "category": "",
+      "group": "",
+      "requirement": "2-14, 2-15의 상태에서 OS의 프로세스 종료 등을 제외하고 게임 자체의 종료 방법이 존재해야 함",
+      "source_mark": "O"
+    },
+    {
+      "row": 31,
+      "id": "2-17",
+      "category": "",
+      "group": "블럭 종류",
+      "requirement": "총 7가지의 테트리스 기본 블럭이 모두 존재해야 함",
+      "source_mark": "O"
+    },
+    {
+      "row": 32,
+      "id": "2-18",
+      "category": "",
+      "group": "",
+      "requirement": "다음에 나타날 블럭은 normal 난이도에서 무작위로 결정되어야 함",
+      "source_mark": "O"
+    },
+    {
+      "row": 33,
+      "id": "2-19",
+      "category": "",
+      "group": "",
+      "requirement": "Easy 난이도에서 I형 블럭이 20% 더 자주 등장해야 함",
+      "source_mark": "O"
+    },
+    {
+      "row": 34,
+      "id": "2-20",
+      "category": "",
+      "group": "",
+      "requirement": "Hard 난이도에서 I형 블럭이 20% 덜 등장해야 함",
+      "source_mark": "O"
+    },
+    {
+      "row": 35,
+      "id": "2-21",
+      "category": "",
+      "group": "",
+      "requirement": "2-18, 2-19, 2-20의 확률을 확인할 수 있는 단위 테스트가 존재해야 함",
+      "source_mark": "O"
+    },
+    {
+      "row": 36,
+      "id": "2-22",
+      "category": "",
+      "group": "",
+      "requirement": "각각의 블럭은 모두 다른 색상을 가져야 함",
+      "source_mark": "O"
+    },
+    {
+      "row": 37,
+      "id": "2-23",
+      "category": "",
+      "group": "",
+      "requirement": "유사한 모양을 지닌 블럭은 구분이 용이하도록 대비되는 색상을 가져야 함",
+      "source_mark": "O"
+    },
+    {
+      "row": 38,
+      "id": "2-24",
+      "category": "",
+      "group": "",
+      "requirement": "색맹모드를 선택한 경우 적녹생맥 및 청황색맹도 블럭 구분이 쉽도록 블럭 표시가 바뀌어야 함",
+      "source_mark": "O"
+    },
+    {
+      "row": 39,
+      "id": "2-25",
+      "category": "",
+      "group": "점수 계산",
+      "requirement": "블럭이 1칸 떨어질 때마다 한 단위의 점수 획득",
+      "source_mark": "O"
+    },
+    {
+      "row": 40,
+      "id": "2-26",
+      "category": "",
+      "group": "",
+      "requirement": "2-25에서 획득하는 점수는 자동으로 떨어지거나 조작을 통해 떨어지더라도 차이가 없어야 함.",
+      "source_mark": "O"
+    },
+    {
+      "row": 41,
+      "id": "2-27",
+      "category": "",
+      "group": "",
+      "requirement": "2-8에 따라 블럭이 떨어지는 속도가 빨라지면 추가 점수를 부여해야 함",
+      "source_mark": "O"
+    },
+    {
+      "row": 42,
+      "id": "2-28",
+      "category": "",
+      "group": "",
+      "requirement": "그 외 정해진 기준에 따라 점수를 가산/감산하는 방식이 반드시 1개 이상 존재",
+      "source_mark": "O"
+    },
+    {
+      "row": 43,
+      "id": "2-29",
+      "category": "",
+      "group": "게임 종료",
+      "requirement": "더 이상 블럭을 쌓을 수 없게 되면 게임이 종료되어야 함",
+      "source_mark": "O"
+    },
+    {
+      "row": 44,
+      "id": "2-30",
+      "category": "",
+      "group": "",
+      "requirement": "게임 종료시 3-1의 스코어 보드를 표시함",
+      "source_mark": "O"
+    },
+    {
+      "row": 45,
+      "id": "2-31",
+      "category": "",
+      "group": "",
+      "requirement": "스코어 보드가 닫히면 현재 게임을 종료하고 시작 메뉴로 이동하거나 프로그램을 종료함",
+      "source_mark": "O"
+    },
+    {
+      "row": 46,
+      "id": "3-1",
+      "category": "스코어 보드",
+      "group": "표시",
+      "requirement": "스코어 보드는 점수가 높은 순으로 이름 및 점수를 보여줘야 함",
+      "source_mark": "O"
+    },
+    {
+      "row": 47,
+      "id": "3-2",
+      "category": "",
+      "group": "",
+      "requirement": "역대 순위를 최소 상위 10개 이상 보여줘야 함",
+      "source_mark": "O"
+    },
+    {
+      "row": 48,
+      "id": "3-3",
+      "category": "",
+      "group": "",
+      "requirement": "스코어 보드에서는 각 점수가 어떤 난이도에서 기록된 것인지 확인할 수 있어야 함",
+      "source_mark": "O"
+    },
+    {
+      "row": 49,
+      "id": "3-4",
+      "category": "",
+      "group": "",
+      "requirement": "스코어 보드에서는 각 점수가 어떤 모드(일반/아이템)에서 기록된 것인지 확인할 수 있어야 함",
+      "source_mark": "O"
+    },
+    {
+      "row": 50,
+      "id": "3-5",
+      "category": "",
+      "group": "동작",
+      "requirement": "2-30에서 현재 게임 점수가 순위 내에 있어 기록이 필요한 경우, 이름을 입력 받아 점수를 저장",
+      "source_mark": "O"
+    },
+    {
+      "row": 51,
+      "id": "3-6",
+      "category": "",
+      "group": "",
+      "requirement": "3-5에서 이름을 입력 받고 나면 스코어 보드가 업데이트 되고, 입력된 이름 및 기록한 점수를 강조하여 보여줌",
+      "source_mark": "O"
+    },
+    {
+      "row": 52,
+      "id": "3-7",
+      "category": "",
+      "group": "",
+      "requirement": "스코어 보드는 4-3에서 초기화되기 전에는 프로그램이 종료되어도 점수를 저장하여 기록을 유지해야 함",
+      "source_mark": "O"
+    },
+    {
+      "row": 53,
+      "id": "4-1",
+      "category": "설정 화면",
+      "group": "설정 항목",
+      "requirement": "테트리스 게임의 윈도우 크기를 최소 3가지 이상의 미리 정의된 크기로 변경하는 기능 존재",
+      "source_mark": "O"
+    },
+    {
+      "row": 54,
+      "id": "4-2",
+      "category": "",
+      "group": "",
+      "requirement": "게임 조작을 위해 사용될 키를 설정하는 기능 존재",
+      "source_mark": "O"
+    },
+    {
+      "row": 55,
+      "id": "4-3",
+      "category": "",
+      "group": "",
+      "requirement": "스코어 보드 기록 초기화하는 기능 존재",
+      "source_mark": "O"
+    },
+    {
+      "row": 56,
+      "id": "4-4",
+      "category": "",
+      "group": "",
+      "requirement": "2-24를 위한 색맹모드 선택 기능 존재",
+      "source_mark": "O"
+    },
+    {
+      "row": 57,
+      "id": "4-5",
+      "category": "",
+      "group": "설정 저장",
+      "requirement": "설정은 프로그램이 종료되더라도 유지되어야 함",
+      "source_mark": "O"
+    },
+    {
+      "row": 58,
+      "id": "4-6",
+      "category": "",
+      "group": "",
+      "requirement": "설정을 초기화할 방법이 존재해야 함",
+      "source_mark": "O"
+    },
+    {
+      "row": 59,
+      "id": "5-1",
+      "category": "아이템 모드",
+      "group": "기본 동작",
+      "requirement": "10개의 줄을 삭제할 때마다 아이템이 나타나야 함",
+      "source_mark": "O"
+    },
+    {
+      "row": 60,
+      "id": "5-2",
+      "category": "",
+      "group": "",
+      "requirement": "2-2에도 다음 블럭으로 아이템이 포함된 블럭이나 아이템이 표시됨",
+      "source_mark": "O"
+    },
+    {
+      "row": 61,
+      "id": "5-3",
+      "category": "",
+      "group": "",
+      "requirement": "각 아이템은 구분이 쉽도록 특징적인 모양이나 서로 다른 문자를 이용해 표시",
+      "source_mark": "O"
+    },
+    {
+      "row": 62,
+      "id": "5-4",
+      "category": "",
+      "group": "아이템 종류",
+      "requirement": "문자 'L'로 표시되는 줄 삭제 아이템이 존재",
+      "source_mark": "O"
+    },
+    {
+      "row": 63,
+      "id": "5-5",
+      "category": "",
+      "group": "",
+      "requirement": "5-4 아이템이 포함된 블럭이 바닥에 닿거나 더 이상 움직이지 못하게 되면, L이 있는 줄을 모두 삭제함",
+      "source_mark": "O"
+    },
+    {
+      "row": 64,
+      "id": "5-6",
+      "category": "",
+      "group": "",
+      "requirement": "5-4 아이템의 L은 블럭에서 무작위 위치에 표시됨",
+      "source_mark": "O"
+    },
+    {
+      "row": 65,
+      "id": "5-7",
+      "category": "",
+      "group": "",
+      "requirement": "5-4 아이템으로 삭제되는 줄에 대해서도 기존 방식대로 점수가 계산되어야 함",
+      "source_mark": "O"
+    },
+    {
+      "row": 66,
+      "id": "5-8",
+      "category": "",
+      "group": "",
+      "requirement": "너비가 4칸인 무게추 아이템이 존재해야 함",
+      "source_mark": "O"
+    },
+    {
+      "row": 67,
+      "id": "5-9",
+      "category": "",
+      "group": "",
+      "requirement": "5-8 아이템이 떨어지며 지나치는 모든 블럭을 삭제해야 함",
+      "source_mark": "O"
+    },
+    {
+      "row": 68,
+      "id": "5-10",
+      "category": "",
+      "group": "",
+      "requirement": "5-8 아이템은 처음에는 좌우로 움직일 수 있으나, 바닥이나 다른 블럭에 닿으면 더 이상 좌우로 움직일 수 없어야 함",
+      "source_mark": "O"
+    },
+    {
+      "row": 69,
+      "id": "5-11",
+      "category": "",
+      "group": "",
+      "requirement": "직접 설계/구현한 아이템1이 잘 동작해야 함",
+      "source_mark": "O"
+    },
+    {
+      "row": 70,
+      "id": "5-12",
+      "category": "",
+      "group": "",
+      "requirement": "5-11 아이템에 대한 명세를 Trello나 기타 문서 등으로 제시할 수 있어야 함",
+      "source_mark": "O"
+    },
+    {
+      "row": 71,
+      "id": "5-13",
+      "category": "",
+      "group": "",
+      "requirement": "직접 설계/구현한 아이템2가 잘 동작해야 함",
+      "source_mark": "O"
+    },
+    {
+      "row": 72,
+      "id": "5-14",
+      "category": "",
+      "group": "",
+      "requirement": "5-13 아이템에 대한 명세를 Trello나 기타 문서 등으로 제시할 수 있어야 함",
+      "source_mark": "O"
+    },
+    {
+      "row": 73,
+      "id": "5-15",
+      "category": "",
+      "group": "",
+      "requirement": "직접 설계/구현한 아이템3이 잘 동작해야 함",
+      "source_mark": "O"
+    },
+    {
+      "row": 74,
+      "id": "5-16",
+      "category": "",
+      "group": "",
+      "requirement": "5-15 아이템에 대한 명세를 Trello나 기타 문서 등으로 제시할 수 있어야 함",
+      "source_mark": "O"
+    },
+    {
+      "row": 75,
+      "id": "6-1",
+      "category": "프로젝트 관리",
+      "group": "게임 실행 및 배포",
+      "requirement": "게임은 Java 21 버전이 설치된 윈도우즈 11 또는 macOS 26이상 OS에서 실행할 수 있어야 함",
+      "source_mark": "O"
+    },
+    {
+      "row": 76,
+      "id": "6-2",
+      "category": "",
+      "group": "",
+      "requirement": "작성된 코드를 손쉽게 빌드하고 아이콘이 포함된 실행파일로 패키징하여 배포할 수 있어야 함",
+      "source_mark": "O"
+    },
+    {
+      "row": 77,
+      "id": "6-3",
+      "category": "",
+      "group": "",
+      "requirement": "별다른 명령어의 입력 등이 없이 GUI를 이용하는 OS에서 마우스 클릭으로 게임이 실행가능해야 함",
+      "source_mark": "O"
+    },
+    {
+      "row": 78,
+      "id": "6-4",
+      "category": "",
+      "group": "",
+      "requirement": "1.2GHz이상 프로세서, 1GB RAM, 500MB의 여유 디스크 공간을 지닌 PC에서 오류없이 실행 가능해야 함",
+      "source_mark": "O"
+    },
+    {
+      "row": 79,
+      "id": "6-5",
+      "category": "",
+      "group": "",
+      "requirement": "6-4의 환경에서 게임의 모든 동작 및 사용자 조작이 1초 미만의 지연만 발생하고 이루어져야 함",
+      "source_mark": "O"
+    },
+    {
+      "row": 80,
+      "id": "6-6",
+      "category": "",
+      "group": "QM & CM",
+      "requirement": "개발단계에서 각 버전들은 VCS를 이용하여 관리되어야 함",
+      "source_mark": "O"
+    },
+    {
+      "row": 81,
+      "id": "6-7",
+      "category": "",
+      "group": "",
+      "requirement": "프로젝트 진행상황이 Trello에서 관리되고, 각 팀원별 업무 분담을 확인할 수 있어야 함",
+      "source_mark": "O"
+    },
+    {
+      "row": 82,
+      "id": "6-8",
+      "category": "",
+      "group": "",
+      "requirement": "프로젝트에서 발생한 이슈가 하나 이상 GitHub에 등록되어 처리 상황을 확인할 수 있어야 함",
+      "source_mark": "O"
+    },
+    {
+      "row": 83,
+      "id": "6-9",
+      "category": "",
+      "group": "",
+      "requirement": "작성된 코드를 검증할 수 있는 단위 테스트가 존재하여, Line Coverage가 작성한 코드의 50% 이상이 되어야 함",
+      "source_mark": "O"
+    },
+    {
+      "row": 84,
+      "id": "6-10",
+      "category": "",
+      "group": "",
+      "requirement": "비기능적 요구사항의 충족여부를 검증할 수 있는 자동실행 가능한 테스트가 하나 이상 존재해야 함",
+      "source_mark": "O"
+    }
+  ]
+}
