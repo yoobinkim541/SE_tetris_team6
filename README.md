@@ -1,6 +1,8 @@
 # TETRIS - Team6
 김유빈 심재윤 심규민
 
+평가 준비: [체크리스트 80항목 대조·보완 결과](docs/checklist-compliance-2026-10-27.md) · [Java 21 검증 결과](docs/checklist-verification-2026-10-27.json). 최소 사양 실기 검증과 프로젝트 관리 도구 확인은 별도로 남아 있습니다.
+
 아이템 평가·플레이 안내: [아이템 모드 명세서 — L/B/D/S/W 효과·점수·검증 화면](docs/item-specification.md).
 
 2차 구현 및 검증: [요구사항 v2](docs/requirements-spec-v2.md). 일반 게임 난이도는 설정에서 선택하며 아이템 모드는 메인 메뉴에서 시작합니다. 스코어보드에서 좌우 키로 네 분류를 전환합니다.
