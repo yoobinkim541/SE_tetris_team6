@@ -24,9 +24,9 @@ class ItemContractTest {
 
     @Test
     void difficultyValuesFollowSpec() {
-        assertEquals(12, Difficulty.EASY.iWeight());
-        assertEquals(10, Difficulty.NORMAL.iWeight());
-        assertEquals(8, Difficulty.HARD.iWeight());
+        assertEquals(36, Difficulty.EASY.iWeight());
+        assertEquals(30, Difficulty.NORMAL.iWeight());
+        assertEquals(24, Difficulty.HARD.iWeight());
         assertEquals(80, Difficulty.EASY.levelStepMillis());
         assertEquals(100, Difficulty.NORMAL.levelStepMillis());
         assertEquals(120, Difficulty.HARD.levelStepMillis());
@@ -36,12 +36,12 @@ class ItemContractTest {
     }
 
     @Test
-    void difficultyWeightsCoverAllBlockTypesAndOnlyIDiffers() {
+    void difficultyWeightsCoverAllBlockTypesAndOtherTypesAreUniform() {
         var weights = Difficulty.HARD.weights();
         assertEquals(BlockType.ordinary().length, weights.size());
-        assertEquals(8, weights.get(BlockType.I));
+        assertEquals(24, weights.get(BlockType.I));
         for (BlockType type : BlockType.ordinary()) {
-            if (type != BlockType.I) assertEquals(10, weights.get(type));
+            if (type != BlockType.I) assertEquals(31, weights.get(type));
         }
     }
 
