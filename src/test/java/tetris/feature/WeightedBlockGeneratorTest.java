@@ -12,6 +12,7 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import tetris.component.block.Block;
 import tetris.component.block.BlockType;
@@ -25,7 +26,7 @@ import tetris.component.block.ZBlock;
 import tetris.feature.game.Difficulty;
 import tetris.feature.rule.WeightedBlockGenerator;
 
-/** 난이도별 가중치(I 12/10/8, 나머지 10)로 블록 7종이 기대 비율대로 나오는지 10,000회 ±5%p로 검증하고, 생성된 블록 상태와 잘못된 입력 처리를 확인한다 */
+/** 2-18~2-21: I 실제 확률의 상대 ±20%, 7종 생성 분포, 재현성과 잘못된 입력 처리를 검증한다. */
 public class WeightedBlockGeneratorTest {
     private static final int DRAWS = 10_000;
     private static final double TOLERANCE = 0.05; // 기대 비율과의 차이를 비율의 절댓값 5%p까지 허용
@@ -54,25 +55,49 @@ public class WeightedBlockGeneratorTest {
 
     //#region 분포 (실제 게임이 쓰는 Difficulty.weights() 그대로)
     @Test
-    void EASY_I는_12_나머지는_10_비율로_나온다() {
+    @DisplayName("2-19 / 2-21: EASY I 확률 20% 증가, 10,000회 분포 검증")
+    void EASY_I는_36_나머지는_29_비율로_나온다() {
         assertDistribution(Difficulty.EASY.weights(), 42);
     }
 
     @Test
+    @DisplayName("2-18 / 2-21: NORMAL 7종 균등 무작위, 10,000회 분포 검증")
     void NORMAL은_7종_모두_같은_비율() {
         assertDistribution(Difficulty.NORMAL.weights(), 42);
     }
 
     @Test
-    void HARD_I는_8_나머지는_10_비율로_나온다() {
+    @DisplayName("2-20 / 2-21: HARD I 확률 20% 감소, 10,000회 분포 검증")
+    void HARD_I는_24_나머지는_31_비율로_나온다() {
         assertDistribution(Difficulty.HARD.weights(), 42);
     }
 
     @Test
-    void I_기대_비율은_EASY_16_67_NORMAL_14_29_HARD_11_76_퍼센트() { // 가중치 합 72 / 70 / 68 중 I의 몫
-        assertEquals(0.1667, iRatio(Difficulty.EASY), 0.0001);
-        assertEquals(0.1429, iRatio(Difficulty.NORMAL), 0.0001);
-        assertEquals(0.1176, iRatio(Difficulty.HARD), 0.0001);
+    @DisplayName("2-18~2-21: I 실제 확률은 Normal의 정확히 1.2배 / 0.8배")
+    void I_확률은_Normal_대비_정확히_20퍼센트_증감한다() {
+        assertEquals(1.0 / 7, iRatio(Difficulty.NORMAL), 1e-12);
+        assertEquals(1.2 / 7, iRatio(Difficulty.EASY), 1e-12);
+        assertEquals(0.8 / 7, iRatio(Difficulty.HARD), 1e-12);
+    }
+
+    @Test
+    @DisplayName("2-18~2-21: 독립 기대 확률로 10개 시드의 실제 생성 분포 검증")
+    void 실제_생성_분포는_요구사항의_확률과_일치한다() {
+        for (Difficulty difficulty : Difficulty.values()) {
+            double expectedI = switch (difficulty) {
+                case EASY -> 1.2 / 7;
+                case NORMAL -> 1.0 / 7;
+                case HARD -> 0.8 / 7;
+            };
+            for (long seed = 0; seed < 10; seed++) {
+                var observed = counts(new WeightedBlockGenerator(difficulty.weights(), new Random(seed)), DRAWS);
+                for (BlockType type : BlockType.ordinary()) {
+                    double expected = type == BlockType.I ? expectedI : (1 - expectedI) / 6;
+                    assertEquals(expected, observed.getOrDefault(type, 0) / (double) DRAWS,
+                            0.02, difficulty + " seed=" + seed + " type=" + type);
+                }
+            }
+        }
     }
 
     private static double iRatio(Difficulty difficulty) {
