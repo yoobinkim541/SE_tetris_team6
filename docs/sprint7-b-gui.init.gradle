@@ -1,0 +1,9 @@
+// Opt-in native window test; avoids modifying the C-owned production build.
+gradle.projectsEvaluated {
+    rootProject.tasks.named('jacocoTestReport').configure { enabled = false }
+    rootProject.tasks.withType(Test).configureEach { task ->
+        task.systemProperty 'java.awt.headless', 'false'
+        task.systemProperty 'audit.gui', 'true'
+        task.extensions.getByType(org.gradle.testing.jacoco.plugins.JacocoTaskExtension).enabled = false
+    }
+}
