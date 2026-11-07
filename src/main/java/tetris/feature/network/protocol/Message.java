@@ -8,7 +8,7 @@ import java.util.Objects;
  *
  * @param matchId        경기 식별자. {@link MessageType#requiresMatchId()}이면 필수, 아니면 없어도 된다. 빈 문자열은 금지
  * @param configRevision 로비 설정 revision. 0은 설정 전. {@link MessageType#requiresConfigRevision()}이면 1 이상
- * @param payload        종류별 내용. 생성 시 복사하므로 넘긴 객체를 나중에 바꿔도 메시지는 바뀌지 않는다
+ * @param payload        종류별 내용. 생성·조회 시 깊은 복사하여 송신 대기 중에도 메시지가 바뀌지 않는다
  */
 public record Message(MessageType type, String matchId, int configRevision, ObjectNode payload) {
     public Message {
@@ -27,5 +27,10 @@ public record Message(MessageType type, String matchId, int configRevision, Obje
             throw new IllegalArgumentException(type + " requires configRevision >= 1");
         }
         payload = payload.deepCopy();
+    }
+
+    @Override
+    public ObjectNode payload() {
+        return payload.deepCopy();
     }
 }
