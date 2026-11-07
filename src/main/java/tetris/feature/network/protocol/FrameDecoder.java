@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Consumer;
 
 /**
  * 한 연결의 받는 방향. TCP read 경계는 프레임 경계와 무관하므로 받은 바이트를 모아 완성된 프레임만 꺼낸다.
@@ -19,14 +20,28 @@ public final class FrameDecoder {
     private long lastSequence;
     private boolean failed;
 
-    /** 완성된 메시지를 받은 순서대로 돌려준다. 아직 완성된 프레임이 없으면 빈 리스트 */
+    /**
+     * 완성된 메시지를 받은 순서대로 돌려준다. 아직 완성된 프레임이 없으면 빈 리스트.
+     * 위반을 만나면 같은 호출에서 앞서 복원한 메시지도 돌려주지 않으므로, 연결에서는
+     * {@link #feed(byte[], int, int, Consumer)}를 쓴다.
+     */
     public List<Message> feed(byte[] source, int offset, int length) throws ProtocolException {
+        List<Message> messages = new ArrayList<>();
+        feed(source, offset, length, messages::add);
+        return messages;
+    }
+
+    /**
+     * 완성된 메시지를 받은 순서대로 sink에 넘긴다. 위반 프레임 앞의 정상 메시지는 위반을 던지기 전에 넘기므로,
+     * 결과가 TCP가 바이트를 나눈 방식에 따라 달라지지 않는다. 위반 프레임 자체와 그 뒤 바이트는 넘기지 않는다.
+     */
+    public void feed(byte[] source, int offset, int length, Consumer<Message> sink) throws ProtocolException {
         if (failed) throw new IllegalStateException("decoder already rejected this connection");
         Objects.checkFromIndexSize(offset, length, source.length);
         append(source, offset, length);
 
-        List<Message> messages = new ArrayList<>();
         int position = 0;
+        boolean completed = false;
         try {
             while (size - position >= WireFormat.LENGTH_PREFIX_BYTES) {
                 int bodyLength = ByteBuffer.wrap(buffer, position, WireFormat.LENGTH_PREFIX_BYTES).getInt();
@@ -39,15 +54,16 @@ public final class FrameDecoder {
                 }
                 int frameEnd = position + WireFormat.LENGTH_PREFIX_BYTES + bodyLength;
                 if (frameEnd > size) break;
-                messages.add(parse(position + WireFormat.LENGTH_PREFIX_BYTES, bodyLength));
+                Message message = parse(position + WireFormat.LENGTH_PREFIX_BYTES, bodyLength);
                 position = frameEnd;
+                sink.accept(message);
             }
-        } catch (ProtocolException e) {
-            failed = true;
-            throw e;
+            completed = true;
+        } finally {
+            // 위반이나 sink 예외 뒤에는 버퍼 상태를 믿을 수 없으므로 이 연결의 입력을 더 받지 않는다
+            if (completed) discard(position);
+            else failed = true;
         }
-        discard(position);
-        return messages;
     }
 
     private void append(byte[] source, int offset, int length) {

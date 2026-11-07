@@ -249,6 +249,19 @@ public class FrameCodecTest {
     }
 
     @Test
+    void 잘못된_프레임_앞의_정상_메시지는_TCP_분할과_무관하게_먼저_전달한다() throws ProtocolException {
+        byte[] valid = new FrameEncoder().encode(state("m", 1));
+        byte[] joined = concat(valid, rawFrame("not json"));
+        List<Message> delivered = new ArrayList<>();
+
+        ProtocolException error = assertThrows(ProtocolException.class,
+                () -> new FrameDecoder().feed(joined, 0, joined.length, delivered::add));
+
+        assertEquals(ErrorCode.MALFORMED_FRAME, error.code());
+        assertEquals(List.of(state("m", 1)), delivered);
+    }
+
+    @Test
     void 인코더는_메시지마다_순번을_붙인다() throws ProtocolException {
         FrameEncoder encoder = new FrameEncoder();
         byte[] a = encoder.encode(state("m", 1));
