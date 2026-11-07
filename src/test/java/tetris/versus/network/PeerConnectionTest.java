@@ -20,10 +20,13 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import javax.swing.SwingUtilities;
 import org.junit.jupiter.api.AfterEach;
@@ -41,6 +44,7 @@ import tetris.feature.network.protocol.Message;
 import tetris.feature.network.protocol.MessageType;
 import tetris.feature.network.protocol.PeerRole;
 import tetris.feature.network.protocol.ProtocolException;
+import tetris.feature.network.protocol.WireFormat;
 
 /** S7-C2: 실제 loopback TCP 소켓 위의 PeerConnection (R3-NETTEST) */
 @Timeout(30)
@@ -71,6 +75,42 @@ public class PeerConnectionTest {
 
         CloseReason nextClose() throws InterruptedException {
             return closes.poll(WAIT_SECONDS, TimeUnit.SECONDS);
+        }
+    }
+
+    /**
+     * 테스트가 실행 시점을 정하는 dispatcher. execute는 큐에 넣기만 하고 {@link #runAll()}이 테스트 스레드에서 실행한다.
+     * holdFirst이면 첫 execute를 부른 스레드(첫 메시지를 넘기는 수신 스레드)를 release까지 붙잡는다.
+     */
+    private static final class ManualDispatcher implements Executor {
+        final BlockingQueue<Runnable> tasks = new LinkedBlockingQueue<>();
+        final CountDownLatch firstArrived = new CountDownLatch(1);
+        final CountDownLatch release = new CountDownLatch(1);
+        private final AtomicBoolean first = new AtomicBoolean(true);
+        private final boolean holdFirst;
+
+        ManualDispatcher(boolean holdFirst) {
+            this.holdFirst = holdFirst;
+        }
+
+        @Override
+        public void execute(Runnable task) {
+            if (first.compareAndSet(true, false)) {
+                firstArrived.countDown();
+                if (holdFirst) {
+                    try {
+                        release.await();
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
+            }
+            tasks.add(task);
+        }
+
+        void runAll() {
+            Runnable task;
+            while ((task = tasks.poll()) != null) task.run();
         }
     }
 
@@ -247,26 +287,73 @@ public class PeerConnectionTest {
     void 로컬에서_닫은_뒤에는_이미_받은_메시지도_넘기지_않는다() throws Exception {
         Socket[] pair = socketPair();
         Recorder recorder = new Recorder();
-        ExecutorService paused = Executors.newSingleThreadExecutor();
-        CountDownLatch gate = new CountDownLatch(1);
-        paused.execute(() -> {
-            try {
-                gate.await();
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        });
-        PeerConnection connection = PeerConnection.start(pair[1], paused, recorder);
+        ManualDispatcher manual = new ManualDispatcher(false);
+        PeerConnection connection = PeerConnection.start(pair[1], manual, recorder);
         connections.add(connection);
         pair[0].getOutputStream().write(frames(state(1)));
-        Thread.sleep(200); // 수신 스레드가 디코딩해 dispatcher 큐에 넣을 시간
+        assertTrue(manual.firstArrived.await(WAIT_SECONDS, TimeUnit.SECONDS), "수신 스레드가 메시지를 넘기지 않았다");
 
         connection.close();
-        gate.countDown();
+        manual.runAll();
 
-        assertEquals(CloseReason.LOCAL, recorder.nextClose());
+        assertEquals(List.of(CloseReason.LOCAL), List.copyOf(recorder.closes));
         assertTrue(recorder.messages.isEmpty(), "이전 연결 세대의 메시지가 새 화면에 섞이지 않게 한다");
-        paused.shutdownNow();
+    }
+
+    @Test
+    void 다른_원인으로_닫힌_뒤_넘어온_메시지는_onClosed_다음에_전달하지_않는다() throws Exception {
+        Socket[] pair = socketPair();
+        Recorder recorder = new Recorder();
+        ManualDispatcher manual = new ManualDispatcher(true);
+        PeerConnection connection = PeerConnection.start(pair[1], manual, recorder);
+        connections.add(connection);
+        pair[0].getOutputStream().write(frames(state(1)));
+        assertTrue(manual.firstArrived.await(WAIT_SECONDS, TimeUnit.SECONDS), "수신 스레드가 메시지를 넘기지 않았다");
+        Message big = new Message(MessageType.STATE, "m", 0,
+                JsonNodeFactory.instance.objectNode().put("pad", "x".repeat(60_000)));
+
+        // 수신 스레드가 메시지를 넘기는 도중, 상대가 읽지 않아 송신 대기열이 넘쳐 닫힌다
+        while (connection.isOpen()) connection.send(big);
+        manual.release.countDown();
+        assertTrue(connection.awaitTermination(Duration.ofSeconds(WAIT_SECONDS)));
+        manual.runAll();
+
+        assertEquals(List.of(CloseReason.SEND_BACKLOG), List.copyOf(recorder.closes));
+        assertTrue(recorder.messages.isEmpty(), "onClosed 뒤에 onMessage가 왔다");
+    }
+
+    @Test
+    void dispatcher가_작업을_거부해도_소켓과_스레드를_정리한다() throws Exception {
+        Socket[] pair = socketPair();
+        Executor rejecting = task -> {
+            throw new RejectedExecutionException("dispatcher shut down");
+        };
+        PeerConnection connection = PeerConnection.start(pair[1], rejecting, new Recorder());
+        connections.add(connection);
+
+        pair[0].getOutputStream().write(frames(state(1)));
+
+        assertTrue(connection.awaitTermination(Duration.ofSeconds(WAIT_SECONDS)), "수신·송신 스레드가 남아 있다");
+        assertFalse(connection.isOpen());
+        assertEquals(-1, pair[0].getInputStream().read(), "상대는 EOF를 받는다");
+    }
+
+    @Test
+    void 상대가_보낸_값이_길어도_ERROR를_보낸_뒤_닫는다() throws Exception {
+        Socket[] pair = socketPair();
+        Recorder recorder = new Recorder();
+        start(pair[1], recorder);
+        String prefix = "{\"version\":1,\"sequence\":1,\"configRevision\":0,\"payload\":{},\"type\":\"";
+        String suffix = "\"}";
+        String type = "Z".repeat(WireFormat.MAX_FRAME_BYTES - prefix.length() - suffix.length());
+        byte[] body = (prefix + type + suffix).getBytes(StandardCharsets.UTF_8);
+
+        pair[0].getOutputStream().write(ByteBuffer.allocate(4 + body.length).putInt(body.length).put(body).array());
+
+        assertEquals(CloseReason.PROTOCOL_ERROR, recorder.nextClose());
+        Message error = readOne(pair[0].getInputStream(), new FrameDecoder());
+        assertTrue(error != null && error.type() == MessageType.ERROR, "ERROR 프레임을 받지 못했다");
+        assertEquals(ErrorCode.UNKNOWN_TYPE, ControlPayloads.Failure.from(error.payload()).code());
     }
     //#endregion
 

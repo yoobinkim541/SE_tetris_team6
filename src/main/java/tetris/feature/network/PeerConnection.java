@@ -37,6 +37,8 @@ public final class PeerConnection {
     private static final int READ_BUFFER_BYTES = 8 * 1024;
     /** 프로토콜 오류 뒤 ERROR를 보내는 데 쓸 최대 시간. 상대가 읽지 않아도 연결을 붙잡지 않는다 */
     private static final long ERROR_FLUSH_MILLIS = 1_000;
+    /** ERROR에 담는 설명 최대 길이. 상대가 보낸 긴 값이 들어가도 ERROR 프레임이 크기 제한을 넘지 않게 한다 */
+    private static final int MAX_ERROR_DETAIL_CHARS = 256;
     private static final AtomicInteger IDS = new AtomicInteger();
 
     /** 송신 스레드에 보내는 마지막 작업: ERROR를 쓰고 닫는다 */
@@ -51,6 +53,8 @@ public final class PeerConnection {
     private final BlockingQueue<Object> outbox = new ArrayBlockingQueue<>(SEND_QUEUE_CAPACITY + 1);
     private final AtomicBoolean closed = new AtomicBoolean();
     private volatile boolean closedLocally;
+    /** dispatcher 스레드에서 onClosed를 실행했다. 그 뒤 큐에 들어온 메시지는 넘기지 않는다 */
+    private volatile boolean closeDelivered;
     private final Thread reader;
     private final Thread writer;
 
@@ -120,13 +124,16 @@ public final class PeerConnection {
             InputStream in = socket.getInputStream();
             int read;
             while ((read = in.read(buffer)) != -1) {
-                for (Message message : decoder.feed(buffer, 0, read)) deliver(message);
+                decoder.feed(buffer, 0, read, this::deliver);
             }
             shutdown(CloseReason.PEER_CLOSED, "end of stream");
         } catch (ProtocolException e) {
             failAndClose(e);
         } catch (IOException e) {
             shutdown(CloseReason.IO_ERROR, String.valueOf(e.getMessage()));
+        } catch (RuntimeException e) {
+            // dispatcher 거부 등: 알릴 수 없어도 소켓과 송신 스레드는 정리한다
+            shutdown(CloseReason.IO_ERROR, "reader failed: " + e);
         }
     }
 
@@ -153,19 +160,23 @@ public final class PeerConnection {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             shutdown(CloseReason.IO_ERROR, "writer interrupted");
+        } catch (RuntimeException e) {
+            shutdown(CloseReason.IO_ERROR, "writer failed: " + e);
         }
     }
 
     private void deliver(Message message) {
         dispatcher.execute(() -> {
-            if (!closedLocally) listener.onMessage(message);
+            if (!closedLocally && !closeDelivered) listener.onMessage(message);
         });
     }
 
     /** 상대의 위반: 더 읽지 않고, 대기 중인 송신을 버린 뒤 ERROR 하나만 보내고 닫는다 */
     private void failAndClose(ProtocolException e) {
         if (closed.get()) return;
-        Message error = new ControlPayloads.Failure(e.code(), String.valueOf(e.getMessage())).message();
+        String detail = String.valueOf(e.getMessage());
+        if (detail.length() > MAX_ERROR_DETAIL_CHARS) detail = detail.substring(0, MAX_ERROR_DETAIL_CHARS);
+        Message error = new ControlPayloads.Failure(e.code(), detail).message();
         outbox.clear();
         if (!outbox.offer(new FailAndClose(error, CloseReason.PROTOCOL_ERROR, e.getMessage()))) {
             shutdown(CloseReason.PROTOCOL_ERROR, e.getMessage());
@@ -188,6 +199,13 @@ public final class PeerConnection {
         }
         outbox.clear();
         outbox.offer(STOP);
-        dispatcher.execute(() -> listener.onClosed(reason, detail));
+        try {
+            dispatcher.execute(() -> {
+                closeDelivered = true;
+                listener.onClosed(reason, detail);
+            });
+        } catch (RuntimeException e) {
+            // dispatcher가 이미 멈췄으면 알릴 곳이 없다. 소켓과 스레드 정리는 위에서 끝났다
+        }
     }
 }
