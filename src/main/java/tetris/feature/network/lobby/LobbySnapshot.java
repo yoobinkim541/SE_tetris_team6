@@ -27,6 +27,17 @@ public record LobbySnapshot(LobbyPhase phase, PeerRole role, List<String> localA
         Objects.requireNonNull(message, "message");
         localAddresses = List.copyOf(localAddresses);
         recentHosts = List.copyOf(recentHosts);
+        if (phase != LobbyPhase.HOSTING && !localAddresses.isEmpty()) {
+            throw new IllegalArgumentException("local addresses only in HOSTING");
+        }
+        if (localAddresses.stream().anyMatch(String::isBlank)) {
+            throw new IllegalArgumentException("blank local address");
+        }
+        boolean needsPeer = phase == LobbyPhase.CONNECTING || phase == LobbyPhase.LOBBY
+                || phase == LobbyPhase.IN_MATCH;
+        if (needsPeer ? peerAddress == null || peerAddress.isBlank() : peerAddress != null) {
+            throw new IllegalArgumentException("peer address inconsistent with phase");
+        }
         switch (phase) {
             case INITIAL -> requireRole(role == null, phase, role);
             case HOSTING -> requireRole(role == PeerRole.HOST, phase, role);
@@ -47,6 +58,28 @@ public record LobbySnapshot(LobbyPhase phase, PeerRole role, List<String> localA
     /** P2P 첫 화면 */
     public static LobbySnapshot initial(List<String> recentHosts) {
         return new LobbySnapshot(LobbyPhase.INITIAL, null, List.of(), null, null, 0, false, false, recentHosts, "");
+    }
+
+    /** Host selection always increments the wire revision and clears both READY votes. */
+    public LobbySnapshot configured(MatchConfig next) {
+        if (phase != LobbyPhase.LOBBY || role != PeerRole.HOST) {
+            throw new IllegalStateException("only the host in LOBBY configures settings");
+        }
+        return new LobbySnapshot(phase, role, localAddresses, peerAddress,
+                Objects.requireNonNull(next, "config"), Math.incrementExact(configRevision),
+                false, false, recentHosts, message);
+    }
+
+    /** Local vote against the settings the consumer displayed; peer votes come from transport. */
+    public LobbySnapshot readyAtRevision(int expectedConfigRevision, boolean ready) {
+        if (phase != LobbyPhase.LOBBY || config == null) {
+            throw new IllegalStateException("READY requires a configured LOBBY");
+        }
+        if (expectedConfigRevision != configRevision) {
+            throw new IllegalArgumentException("stale config revision");
+        }
+        return new LobbySnapshot(phase, role, localAddresses, peerAddress, config, configRevision,
+                ready, peerReady, recentHosts, message);
     }
 
     private static void requireRole(boolean valid, LobbyPhase phase, PeerRole role) {

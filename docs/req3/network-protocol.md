@@ -2,7 +2,7 @@
 
 - 소유: C 네트워크. 코드: `src/main/java/tetris/feature/network/protocol`, 테스트: `src/test/java/tetris/versus/network`
 - 근거: [#118 S7-C1](https://github.com/yoobinkim541/SE_tetris_team6/issues/118), Notion R3-D08(호스트 권위, TCP 길이 접두 JSON, 버전·연결 세대·설정 revision·matchId·sequence; 아직 Open)
-- 상태: **계약 v1 제안**. A의 `MatchConfig`·`PlayerCommand`·`MatchSnapshot`(S7-A1)과 B의 로비 화면 요구가 확정되면 아래 "합의 대기" 항목을 갱신한다.
+- 상태: **S7 코드 계약 v1**. A 공통 DTO를 계약 원본으로 사용하고 CONFIG/INPUT/STATE 실제 프레임 소비 테스트를 통과했다. C 로비 포트는 `network.lobby`에 선언했다. 실제 경기/로비 통합은 후속 스프린트다.
 
 ## 1. 프레임
 
@@ -85,11 +85,11 @@ TCP 연결 하나가 곧 한 세대다. 순번이 연결마다 1부터 시작하
 - 연결마다 수신 스레드 1개(디코더 소유)와 송신 스레드 1개(인코더 소유)를 둔다. 인코더·디코더는 스레드 안전하지 않다.
 - 수신한 메시지와 종료 통지는 주입한 dispatcher(실제 앱은 EDT)로 넘긴다. 엔진 상태는 EDT 한 곳에서만 바꾼다.
 
-## 6. 합의 대기
+## 6. S7 계약 인수와 후속 통합
 
 | 항목 | 상대 | 상태 |
 |---|---|---|
-| CONFIG·INPUT·STATE·RESULT payload 모양 | A (S7-A1 계약 v1) | 미합의. A 계약 확정 후 DTO 변환기를 추가 |
-| 로비 상태·행동 API (`LobbyClient`, `LobbySnapshot`) | B | 미합의. S8-C2에서 구현 |
-| GameClock due-time과 STATE 발행 시점 | A | 미합의 |
-| R3-D08 결정 기록 (연결 세대를 와이어에 넣지 않는 선택 포함) | 팀 | Notion Discussion Open |
+| CONFIG·INPUT·STATE·RESULT payload 모양 | A 공통 계약 v1 | MatchConfig/PlayerCommand/MatchSnapshot/MatchResult를 원본으로 고정. CommonWireContractTest에서 CONFIG/INPUT/STATE 송수신 소비 검증. 실제 운영용 변환·권위/이전 판 거절은 후속 통합 |
+| 로비 상태·행동 API (`LobbyClient`, `LobbySnapshot`) | B·C 소비자 | `docs/req3/lobby-contract.md` 및 LobbyContractTest. 실제 소켓 로비는 S8 |
+| GameClock due-time | A | DueTimeClock 및 GameSession SpawnBoundary 연결. STATE 발행·30Hz 합치기는 S9 |
+| R3-D08 (연결 객체 = 연결 세대) | 대리 검토 | 현 코드와 PeerConnection close 검증에 맞춘 선택. 사용자 요청으로 AI 대리 리뷰; 사람 회의가 열렸다고 기록하지 않음 |

@@ -7,6 +7,8 @@ import java.awt.event.WindowEvent;
 import java.util.Arrays;
 import javax.swing.*;
 import tetris.feature.setting.GameAction;
+import tetris.feature.versus.api.MatchSnapshot;
+import tetris.feature.versus.api.MatchPhase;
 
 /** Standalone S7 fixture; intentionally separate from the production single-player menu. */
 public final class BattleDemo {
@@ -29,7 +31,7 @@ public final class BattleDemo {
                 paused[0]=!paused[0];
                 var snapshot=FakeBattleClient.sample();
                 fake.publish(new MatchSnapshot(snapshot.matchId(),command.sequence(),snapshot.one(),snapshot.two(),
-                    snapshot.remainingMillis(),paused[0]?"FAKE / PAUSED":"FAKE / UI PREVIEW"));
+                    snapshot.remainingMillis(),paused[0]?MatchPhase.PAUSED:MatchPhase.PLAYING,null));
             }
             if(command.pressed() && command.action()==GameAction.QUIT) frame.dispose();
         },action -> !paused[0] || BattleKeyMap.isShared(action));

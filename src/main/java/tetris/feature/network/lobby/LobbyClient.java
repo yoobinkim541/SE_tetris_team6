@@ -25,14 +25,23 @@ public interface LobbyClient extends AutoCloseable {
     void configure(MatchConfig config);
 
     /** 게임 시작 버튼. 현재 configRevision에 대한 준비. 양쪽 모두 준비되면 호스트가 START를 한 번 보내고 IN_MATCH */
-    void ready();
+    // Reject a revision different from the settings the consumer displayed.
+    void ready(int expectedConfigRevision);
 
     /** IN_MATCH일 때 경기 포트. 그 외 단계에서는 {@link IllegalStateException} */
     BattleClient battle();
 
+    /**
+     * The current snapshot is delivered first, then ordered updates through the injected
+     * EDT dispatcher. Subscription removal is idempotent; after removal returns no new
+     * callback may begin. Consumers keep callbacks brief.
+     */
     BattleClient.Subscription subscribe(Consumer<LobbySnapshot> listener);
 
-    /** 연결과 스레드를 정리한다. 여러 번 불러도 된다 */
+    /**
+     * Releases connections, pending work and listeners. Idempotent; all other calls
+     * after close throw IllegalStateException. No new callback begins after close returns.
+     */
     @Override
     void close();
 }

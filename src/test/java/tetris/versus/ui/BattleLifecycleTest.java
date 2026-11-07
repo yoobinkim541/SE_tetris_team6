@@ -7,6 +7,7 @@ import java.awt.event.*;
 import java.util.ArrayList;
 import javax.swing.*;
 import tetris.ui.versus.*;
+import tetris.feature.versus.api.PlayerCommand;
 
 /** Native window lifecycle wiring; opt in with the companion Gradle init script. */
 @EnabledIfSystemProperty(named="audit.gui", matches="true")

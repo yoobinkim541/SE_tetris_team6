@@ -24,6 +24,22 @@ public class LobbySnapshotTest {
     }
 
     @Test
+    void phaseAddressesMustBeConsistentAndNonblank() {
+        for (LobbyPhase phase : List.of(LobbyPhase.CONNECTING, LobbyPhase.LOBBY, LobbyPhase.IN_MATCH)) {
+            for (String address : new String[] {null, " "}) {
+                assertThrows(IllegalArgumentException.class, () -> new LobbySnapshot(phase, PeerRole.CLIENT,
+                        List.of(), address, null, 0, false, false, List.of(), ""));
+            }
+        }
+        assertThrows(IllegalArgumentException.class, () -> new LobbySnapshot(LobbyPhase.INITIAL, null,
+                List.of("192.168.0.1"), null, null, 0, false, false, List.of(), ""));
+        assertThrows(IllegalArgumentException.class, () -> new LobbySnapshot(LobbyPhase.HOSTING, PeerRole.HOST,
+                List.of(" "), null, null, 0, false, false, List.of(), ""));
+        assertThrows(IllegalArgumentException.class, () -> new LobbySnapshot(LobbyPhase.HOSTING, PeerRole.HOST,
+                List.of(), "unexpected-peer", null, 0, false, false, List.of(), ""));
+    }
+
+    @Test
     void 첫_화면은_역할_주소_설정_준비가_없다() {
         LobbySnapshot initial = LobbySnapshot.initial(List.of("192.168.0.7"));
 
