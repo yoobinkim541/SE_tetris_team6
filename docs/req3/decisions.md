@@ -33,7 +33,7 @@ Notion "팀 결정 제안: S7-A1에서 확정하고 근거 기록"을 계약 v1�
 | D-11 | **삽입 시점**: 내 줄 삭제·점수·효과 정산 뒤, 새 블록 생성 전. CLEARING 150 ms 도중 즉시 삽입 금지. 공격은 삭제 확정 때 1회 발행 | `LockResult`, `SpawnBoundary` | — |
 | D-12 | **상단 초과**: 공격 삽입으로 기존 고정 칸이 보이는 보드 위로 밀리면 패배 | S8-A1 | 숨은 생성 행 경계 확인 |
 | D-13 | **입력**: 반복 가능한 이동(MOVE_LEFT/RIGHT/SOFT_DROP)은 OS 반복 press마다 1회, ROTATE/HARD_DROP/PAUSE/QUIT은 press→release 사이 1회. release는 CLEARING·PAUSED·결과에서도 held 해제. Spawn 대기 중(currentBlock null) 세션에는 이동·회전·Hard Drop을 전달하지 않고 다음 pulse로 넘김 | `PlayerCommand` | — |
-| D-14 | **조작 키**: P1 A/D/S/W/F, P2 방향키/Space, 공통 P Pause·Q Quit. 결정 전 싱글 키를 덮어쓰지 않음 | B 소유 | 동시 입력 한계 실측 |
+| D-14 | **조작 키**: P1 방향키/Space, P2 A/D/S/W/F, 공통 P Pause·Q Quit. 싱글 키를 덮어쓰지 않음 (`BattleKeyMap` 및 `docs/sprint7-b.md` 기준) | B 소유 | 동시 입력 한계 실측 |
 
 ### C 소유 결정 (참고, C가 확정)
 
