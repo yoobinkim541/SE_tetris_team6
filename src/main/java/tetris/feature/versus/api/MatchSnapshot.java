@@ -4,7 +4,7 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * 화면·네트워크가 읽는 경기 상태 사본 (R3-ATTACK, R3-TIME). 배열은 생성·조회 때 모두 복사한다.
+ * 화면·네트워크가 읽는 경기 상태 사본 (R3-LIVE, R3-GARBAGE, R3-TIME). 클라이언트 표시 전용. 배열은 생성·조회 때 모두 복사한다.
  * 칸 값: 0=빈칸, 1~8=블록 색, {@link VersusRules#ATTACK_CELL}=공격 줄.
  *
  * @param revision        같은 matchId 안에서 단조 증가. 오래된 STATE를 버리는 기준
@@ -48,7 +48,7 @@ public record MatchSnapshot(String matchId, long revision, PlayerView one, Playe
             if (pendingRows == null || pendingRows.size() > VersusRules.MAX_PENDING_ROWS) {
                 throw new IllegalArgumentException("pendingRows must hold 0.." + VersusRules.MAX_PENDING_ROWS + " rows");
             }
-            pendingRows = pendingRows.stream().map(PlayerView::copyAttackRow).toList();
+            pendingRows = pendingRows.stream().map(AttackRows::copyRow).toList();
         }
 
         @Override
@@ -66,13 +66,6 @@ public record MatchSnapshot(String matchId, long revision, PlayerView one, Playe
             return pendingRows.stream().map(int[]::clone).toList();
         }
 
-        private static int[] copyAttackRow(int[] row) {
-            if (row == null || row.length != VersusRules.BOARD_COLS) throw new IllegalArgumentException("attack row width");
-            for (int v : row) {
-                if (v != 0 && v != VersusRules.ATTACK_CELL) throw new IllegalArgumentException("attack row value " + v);
-            }
-            return row.clone();
-        }
     }
 
     static int[][] copyGrid(int[][] source, int height, int width) {
