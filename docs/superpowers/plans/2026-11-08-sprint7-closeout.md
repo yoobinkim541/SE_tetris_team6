@@ -19,7 +19,7 @@
 - [x] B consumes feature/versus/api directly; removed provisional duplicate contracts and tested common Fake use.
 - [x] C LobbyClient/LobbySnapshot contract with shared MatchConfig and consumer tests; actual lobby adapter remains S8.
 - [x] Full check, GUI 9/9, resource 23/23 and native delegated demo/lifecycle 2/2. Read-only review addressed READY revision zero; scoring audit compatibility restored.
-- [ ] Small Feat:/Test:/Docs: commits, CI, develop integration; reconcile source/status links and honest remaining human work in Notion.
+- [x] Small convention commits and evidence report prepared. Final CI/develop integration and reconciled Notion/issue links are tracked in the closeout PR and sprint page.
 
 ## Execution ledger
 - Baseline develop: 5b97b4b. Existing user checkout changes remain untouched.

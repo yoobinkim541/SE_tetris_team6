@@ -56,7 +56,8 @@ Pause/Quit은 어느 플레이어를 지정해도 공통 매핑 하나를 변경
 - 키 변경 시 `rebind`, 화면 폐기 시 `close`한다. 기존 루트 바인딩을 복원하고 리스너를 해제한다.
 - 표시 DTO는 보드·Next·대기열을 생성 시와 접근 시 깊은 복사한다. 공격칸 값 9는 BlockType에 추가하지 않는다.
 - `BoardRenderer`와 `BattlePanel`은 로컬/P2P에서 재사용한다. `GamePanel`의 싱글 그리기 경로는 유지한다.
-- **A의 S7-A1 API가 기준 커밋에 없으므로** `ui/versus`에 임시 표시/입력 DTO와 포트를 둔다. A 소유 `feature/versus/api`를 대신 확정하지 않았다. 확정 후 어댑터로 변환해야 한다.
+- 화면·입력·Fake는 A 소유 `feature/versus/api`의 `BattleClient`, `MatchSnapshot.PlayerView`, `PlayerCommand`, `PlayerId`를 직접 소비한다. 기존 `ui/versus` 임시 DTO와 포트는 제거했다. 공격칸·보드 크기·대기열 한도는 `VersusRules`를 사용한다.
+- 상태 문구는 공통 `MatchPhase`와 `MatchResult`에서 만든다. Countdown/Playing/Paused 및 결과의 승자·무승부·종료 사유(Top out/Time up/Forfeit)를 표시한다.
 - Fake는 고정 MatchSnapshot과 명령 기록만 제공한다. 실제 GameSession, MatchEngine, Socket 의존은 없다.
 - Swing 컴포넌트·라우터·Fake는 EDT에서 사용한다. 실제 네트워크 콜백은 어댑터가 EDT로 전달해야 한다.
 
@@ -73,5 +74,7 @@ Pause/Quit은 어느 플레이어를 지정해도 공통 매핑 하나를 변경
 
 UI 렌더링 이미지는 `build/reports/sprint7-b-preview.png`에 생성한다.
 
-실제 엔진 연결, 두 PC 통합, 다른 팀원 리뷰는 별도 인수 항목이다. 자동 테스트나 Fake 시연을 해당 항목의 완료 근거로 사용하지 않는다.
-사용자 요청에 따라 기존 커밋 형식으로 나눠 직접 develop에 푸시하며, 별도 PR/팀원 승인을 수행했다고 기록하지 않는다.
+위 결과는 11/7 초기 B 구현 기록이다. 초기 구현은 사용자 요청에 따라 develop에 직접 푸시했다.
+
+2026-11-08 마감에서는 공통 API 이전과 `BattleCommonApiTest`를 추가했다. 사용자가 리뷰·시연·회고를 AI에 위임했으므로 독립 AI 코드 리뷰와 `BattleDemoAcceptanceTest`로 대리 인수한다. 실제 사람 팀원이 참석하거나 승인했다고 기록하지 않는다. 최신 결과·KPT·후속 범위는 [S7 마감 보고](req3/s7-closeout.md)에 기록한다.
+실제 MatchEngine·두 PC 통합은 후속 스프린트 범위다. Fake 시연을 해당 기능의 완료 근거로 사용하지 않는다.

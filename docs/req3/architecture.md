@@ -36,7 +36,7 @@ B 로컬/P2P 화면 ──PlayerCommand──▶ BattleClient ──▶ A MatchE
 | `MatchClock` | — | 단조 시계(ms) |
 | `VersusRules` | — | 2줄 / 10줄 / 공격 칸 9 / 180초 / pulse 16 ms |
 
-엔진 쪽 구현(`tetris.feature.versus`): `DueTimeClock` — GameClock 어댑터. 다음은 S7-A2 이후에 만든다: AttackRows 추출, 대기열, MatchEngine 구현, 로컬 BattleClient.
+엔진 쪽 구현(`tetris.feature.versus`): `DueTimeClock`, `AttackRowExtractor`, `PendingAttackQueue`. `GameSession`은 선택적 `SpawnBoundary`로 삭제 확정 후 LockResult를 발행한다. 실제 공격 삽입·MatchEngine·로컬 BattleClient 구현은 S8 이후다.
 
 ## 시계와 Spawn 경계
 
@@ -52,16 +52,19 @@ Lock → (CLEARING 150 ms) → 점수·카운터 정산 → SpawnBoundary.onLock
                         └ 예(대전) → 엔진이 대기열 공격을 아래에 삽입 → Spawn 재개
 ```
 
-- `GameSession`에 `SpawnBoundary`를 연결하는 일은 S7-A2/S8-A1에서 한다. 싱글은 `IMMEDIATE`라 동작이 바뀌지 않는다.
+- `GameSession`의 여섯 번째 생성자 인수로 `SpawnBoundary`를 주입한다. 기존 생성자는 `IMMEDIATE` 경로를 그대로 사용한다.
+- 공격 사본은 삭제 전 최종 행 합집합에서 만든다. 정산 후 `onLockResolved`를 한 번 호출하며 `deferSpawn()`이면 타이머를 멈추고 `isSpawnPending()` 상태로 기다린다.
+- 엔진은 공격 삽입을 마친 뒤 `resumeSpawn()`을 한 번 호출한다. Pause 중에는 이 호출이 무시되므로 Resume 뒤 엔진이 다시 호출한다. 대기 중 이동·회전·Drop·tick은 무시한다.
 
-## B·C 임시 코드 → v1
+## B·C 소비자 계약 인수 (S7 마감)
 
 | 지금 | v1 | 할 일 |
 |---|---|---|
-| B `ui.versus.PlayerCommand` (+ 중첩 PlayerId) | `api.PlayerCommand`, `api.PlayerId` | import 변경 |
-| B `ui.versus.BattleClient` | `api.BattleClient` | import 변경 (메서드 같음) |
-| B `ui.versus.MatchSnapshot.Player` | `api.MatchSnapshot.PlayerView` | 이름 변경 |
-| B `MatchSnapshot.status: String` | `phase: MatchPhase`, `result: MatchResult` | 화면 문구는 B가 enum에서 만든다 |
-| B `MatchSnapshot.ATTACK_CELL` | `VersusRules.ATTACK_CELL` | 위치만 변경 (값 9) |
-| C `MessageType.CONFIG / INPUT / STATE / RESULT` payload | `MatchConfig` / `PlayerCommand` / `MatchSnapshot` / `MatchResult` | C가 DTO 변환기 추가 |
-| C 로비 (`LobbyClient`, `LobbySnapshot`) | C 소유 | C가 정의, B가 표시 |
+| B 임시 PlayerCommand/PlayerId | `api.PlayerCommand`, `api.PlayerId` | 이전 완료, 중복 타입 제거 |
+| B 임시 BattleClient | `api.BattleClient` | Fake·입력 라우터·화면이 직접 소비 |
+| B 임시 MatchSnapshot | `api.MatchSnapshot.PlayerView` | 이전 완료, phase/result에서 화면 문구 생성 |
+| B 공격칸 상수 | `VersusRules.ATTACK_CELL` | 이전 완료 |
+| C CONFIG / INPUT / STATE / RESULT | `MatchConfig` / `PlayerCommand` / `MatchSnapshot` / `MatchResult` | 공유 DTO를 계약 원본으로 고정. CommonWireContractTest에서 CONFIG/INPUT/STATE 실제 프레임 소비 검증; 운영용 변환기는 후속 통합 |
+| C 로비 (`network.lobby.LobbyClient`, `LobbySnapshot`) | C 소유 | 계약·불변 상태·설정 revision/READY 검증 구현. 실제 접속·화면은 S8 |
+
+인수 근거: `BattleCommonApiTest`, `CommonWireContractTest`, `LobbyContractTest`. Fake와 계약 테스트가 실제 엔진·소켓 로비 구현 완료를 뜻하지 않는다.
