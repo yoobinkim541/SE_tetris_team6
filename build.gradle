@@ -13,7 +13,7 @@ repositories {
 }
 
 dependencies {
-    implementation 'com.fasterxml.jackson.core:jackson-databind:2.22.3' // 저장 계층(feature.save)에서만 사용 (PER-3)
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.22.3' // 저장 계층(feature.save, PER-3)과 P2P 전송 프레임(feature.network.protocol)에서만 사용
 
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
