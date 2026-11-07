@@ -1,8 +1,8 @@
 # P2P 전송 프로토콜 v1 (C 트랙)
 
 - 소유: C 네트워크. 코드: `src/main/java/tetris/feature/network/protocol`, 테스트: `src/test/java/tetris/versus/network`
-- 근거: [#118 S7-C1](https://github.com/yoobinkim541/SE_tetris_team6/issues/118), Notion R3-D08(호스트 권위, TCP 길이 접두 JSON, 버전·연결 세대·설정 revision·matchId·sequence; 아직 Open)
-- 상태: **S7 코드 계약 v1**. A 공통 DTO를 계약 원본으로 사용하고 CONFIG/INPUT/STATE 실제 프레임 소비 테스트를 통과했다. C 로비 포트는 `network.lobby`에 선언했다. 실제 경기/로비 통합은 후속 스프린트다.
+- 근거: [#118 S7-C1](https://github.com/yoobinkim541/SE_tetris_team6/issues/118), Notion R3-D08(호스트 권위, TCP 길이 접두 JSON, 버전·연결 세대·설정 revision·matchId·sequence), `docs/req3/decisions.md` "C 소유 결정"
+- 상태: **v1 확정.** 프레임·봉투·오류 정책은 C 소유 결정으로 확정한다. 경기 payload(CONFIG·INPUT·STATE·RESULT)는 A의 계약 v1(`tetris.feature.versus.api`, PR #122)에 맞춘 `MatchPayloads`로 변환한다. READY·START payload는 로비 프로토콜(S8-C2, #128)에서 정한다.
 
 ## 1. 프레임
 
@@ -47,19 +47,32 @@ TCP 연결 하나가 곧 한 세대다. 순번이 연결마다 1부터 시작하
 | 종류 | matchId | configRevision ≥ 1 | 전달 | payload 소유 |
 |---|---|---|---|---|
 | HELLO | - | - | 유실 없음 | C: `{"role":"HOST"\|"CLIENT"}` |
-| CONFIG | - | 필수 | 유실 없음 | A `MatchConfig` (합의 대기) |
-| READY | - | 필수 | 유실 없음 | 합의 대기 |
-| START | 필수 | 필수 | 유실 없음 | 합의 대기 |
-| INPUT | 필수 | - | 유실 없음 | A `PlayerCommand` (합의 대기) |
-| STATE | 필수 | - | 최신 값으로 합칠 수 있음 | A `MatchSnapshot` 전송용 DTO (합의 대기) |
-| RESULT | 필수 | - | 유실 없음 | 합의 대기 |
+| CONFIG | - | 필수 | 유실 없음 | A `MatchConfig` ↔ `MatchPayloads` (3.1) |
+| READY | - | 필수 | 유실 없음 | S8-C2 (#128)에서 정의 |
+| START | 필수 | 필수 | 유실 없음 | S8-C2 (#128)에서 정의 |
+| INPUT | 필수 | - | 유실 없음 | A `PlayerCommand` ↔ `MatchPayloads` (3.1) |
+| STATE | 필수 | - | 최신 값으로 합칠 수 있음 | A `MatchSnapshot` ↔ `MatchPayloads` (3.1) |
+| RESULT | 필수 | - | 유실 없음 | A `MatchResult` ↔ `MatchPayloads` (3.1) |
 | PING / PONG | - | - | 유실 없음 | C: `{"nonce":long,"sentAtNanos":long}`, PONG은 받은 PING을 그대로 반환 |
 | LEAVE | - | - | 유실 없음 | C: `{"reason":string}` |
 | ERROR | - | - | 보내고 바로 종료 | C: `{"code":ErrorCode,"detail":string}` |
 
 - `sentAtNanos`는 보낸 PC의 `System.nanoTime()`이다. 다른 PC의 시계와 비교하지 않고 RTT 계산에만 쓴다.
 - STATE를 합치는 송신 큐 정책과 30Hz 상한은 S9-C2에서 구현한다. v1 코덱은 모든 종류를 순서대로 보낸다.
-- 네트워크로 `Block` 객체를 그대로 직렬화하지 않는다. STATE는 보드 값·좌표·종류·아이템만 담은 제한된 DTO로 만든다.
+- 네트워크로 `Block`·`GameSession` 객체를 그대로 직렬화하지 않는다. STATE는 계약 `MatchSnapshot`의 칸 값·Next·점수·대기열·단계·결과만 보낸다.
+
+### 3.1 경기 payload (`MatchPayloads`)
+
+| 종류 | payload | 비고 |
+|---|---|---|
+| CONFIG | `{"mode":"TIMED","difficulty":"NORMAL","timeLimitMillis":180000}` | 봉투 `configRevision`은 로비가 설정을 바꿀 때마다 올린 값 |
+| INPUT | `{"player":"ONE","action":"MOVE_LEFT","pressed":true,"sequence":12}` | `action`은 `GameAction` 이름 |
+| STATE | `{"revision":41,"remainingMillis":95000,"phase":"PLAYING","result":null,"one":{...},"two":{...}}` | 플레이어: `{"cells":[[..10]×20],"next":[[..]],"score":1200,"pendingRows":[[..10]×0~10]}` |
+| RESULT | `{"winner":"ONE","reason":"FORFEIT"}` | 무승부는 `"winner":null` |
+
+- matchId는 봉투에만 싣는다. STATE를 읽을 때 봉투의 matchId로 `MatchSnapshot`을 만든다.
+- 받은 쪽은 JSON 타입(정수·불리언·문자열·배열)을 먼저 엄격히 검사하고, 계약 생성자로 다시 만들어 값 범위를 검증한다. 보드 20×10, 칸 0~9(9 = 공격 칸, D-04), Next 최대 4×4, 대기열 0~10줄(값 0 또는 9), 결과는 FINISHED일 때만, TIMED만 제한 시간 > 0, 기권은 승자 필수. 어긋나면 `INVALID_FIELD`.
+- 프레임 크기(실측): 경기 중 STATE 1,188 B, 최악(두 보드 전부 9, Next 4×4, 대기열 10줄씩, 결과 포함) 1,802 B. 64 KiB 상한의 3% 미만이다.
 
 ## 4. 오류 정책
 
@@ -85,11 +98,15 @@ TCP 연결 하나가 곧 한 세대다. 순번이 연결마다 1부터 시작하
 - 연결마다 수신 스레드 1개(디코더 소유)와 송신 스레드 1개(인코더 소유)를 둔다. 인코더·디코더는 스레드 안전하지 않다.
 - 수신한 메시지와 종료 통지는 주입한 dispatcher(실제 앱은 EDT)로 넘긴다. 엔진 상태는 EDT 한 곳에서만 바꾼다.
 
-## 6. S7 계약 인수와 후속 통합
+## 6. 합의 상태
 
 | 항목 | 상대 | 상태 |
 |---|---|---|
-| CONFIG·INPUT·STATE·RESULT payload 모양 | A 공통 계약 v1 | MatchConfig/PlayerCommand/MatchSnapshot/MatchResult를 원본으로 고정. CommonWireContractTest에서 CONFIG/INPUT/STATE 송수신 소비 검증. 실제 운영용 변환·권위/이전 판 거절은 후속 통합 |
-| 로비 상태·행동 API (`LobbyClient`, `LobbySnapshot`) | B·C 소비자 | `docs/req3/lobby-contract.md` 및 LobbyContractTest. 실제 소켓 로비는 S8 |
-| GameClock due-time | A | DueTimeClock 및 GameSession SpawnBoundary 연결. STATE 발행·30Hz 합치기는 S9 |
-| R3-D08 (연결 객체 = 연결 세대) | 대리 검토 | 현 코드와 PeerConnection close 검증에 맞춘 선택. 사용자 요청으로 AI 대리 리뷰; 사람 회의가 열렸다고 기록하지 않음 |
+| CONFIG·INPUT·STATE·RESULT payload 모양 | A (계약 v1, #122) | 반영. `MatchPayloads`가 계약 타입만 사용 |
+| GameClock due-time과 STATE 발행 | A (D-07) | C는 tick을 보내지 않는다. 호스트가 pulse 결과 `MatchSnapshot`을 STATE로 보낸다. 발행 주기·합치기는 S9-C2 |
+| 로비 상태·행동 API (`LobbyClient`, `LobbySnapshot`) | B | C 소유 계약을 별도 PR로 정의. 구현은 S8-C1(#127)·S8-C2(#128) |
+| R3-D08 결정 기록 | 팀 | `decisions.md`가 네트워크 정책을 C 소유로 정리. 연결 세대를 봉투에 넣지 않는 선택(2절)을 Notion Discussion에 반영 필요 |
+
+## 최신 develop 통합 인수
+
+PR #129의 MatchPayloads를 경기 와이어 형식의 단일 변환기로 사용한다. 기존 CommonWireContractTest도 이 변환기를 경유하도록 연결한다. 로비 포트와 S7 마감 기록은 lobby-contract.md 및 s7-closeout.md에서 관리하며, 실제 사람 승인 대신 사용자 위임 AI 대리 리뷰라는 기존 인수 방식을 유지한다.
