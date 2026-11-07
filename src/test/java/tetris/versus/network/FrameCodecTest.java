@@ -25,6 +25,24 @@ import tetris.feature.network.protocol.WireFormat;
 
 /** S7-C1 전송 계약: 길이 접두 JSON 프레임, 버전·순번·matchId·설정 revision 검증 (R3-NETTEST) */
 public class FrameCodecTest {
+    @Test
+    void payloadAccessCannotChangeTheMessageAwaitingSerialization() throws ProtocolException {
+        ObjectNode source = payload("tick", 7);
+        source.putObject("nested").put("value", 1);
+        Message message = new Message(MessageType.STATE, "m", 0, source);
+        source.put("tick", 8);
+        ObjectNode exposed = message.payload();
+        exposed.put("tick", 9);
+        ((ObjectNode) exposed.get("nested")).put("value", 2);
+
+        assertEquals(7, message.payload().get("tick").intValue());
+        assertEquals(1, message.payload().get("nested").get("value").intValue());
+        byte[] frame = new FrameEncoder().encode(message);
+        Message received = new FrameDecoder().feed(frame, 0, frame.length).getFirst();
+        assertEquals(7, received.payload().get("tick").intValue());
+        assertEquals(1, received.payload().get("nested").get("value").intValue());
+    }
+
     private static ObjectNode payload(String key, int value) {
         return JsonNodeFactory.instance.objectNode().put(key, value);
     }
