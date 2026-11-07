@@ -23,6 +23,10 @@ import tetris.feature.rule.NextBlockQueue;
 import tetris.feature.rule.RotationPolicy;
 import tetris.feature.rule.ScoringPolicy;
 import tetris.feature.rule.SpawnPolicy;
+import tetris.feature.versus.AttackExtractor;
+import tetris.feature.versus.api.AttackRows;
+import tetris.feature.versus.api.LockResult;
+import tetris.feature.versus.api.SpawnBoundary;
 
 /**
  * 게임 한 판의 흐름과 상태기계 (명세 4, 8장). Swing EDT 단일 스레드에서만 사용한다.
@@ -48,6 +52,8 @@ public class GameSession {
     private boolean pausedDuringClearing;         // CLEARING에서 Pause했는지. Resume 때 CLEARING으로 돌아간다
     private GameModifiers modifiers = new GameModifiers(); // 지속 효과 (D, S). start()마다 새로 만든다
     private boolean crushing;                     // 무게추가 첫 하강에 실패해 분쇄 모드가 됐는지 (ITW-4)
+    private SpawnBoundary spawnBoundary = SpawnBoundary.IMMEDIATE; // 싱글은 IMMEDIATE (R3-REGRESSION)
+    private AttackRows pendingAttack = AttackRows.NONE; // Lock 때 삭제 전 사본으로 만든 공격. 삭제 확정 때 1회 발행
 
     private final SpawnPolicy spawnPolicy = new SpawnPolicy();
     private final RotationPolicy rotationPolicy = new BasicRotationPolicy();
@@ -96,6 +102,7 @@ public class GameSession {
         pausedDuringClearing = false;
         crushing = false;
         modifiers = new GameModifiers();
+        pendingAttack = AttackRows.NONE;
 
         state = GameState.PLAYING; // Spawn 충돌 시 PLAYING -> GAME_OVER 전이가 되도록 먼저 전환
         spawnNextBlock();
@@ -117,6 +124,7 @@ public class GameSession {
         stateBeforeQuit = null;
         pendingClear = null;
         pausedDuringClearing = false;
+        pendingAttack = AttackRows.NONE;
         state = GameState.ENDED;
     }
 
@@ -237,6 +245,15 @@ public class GameSession {
         return state;
     }
 
+    /**
+     * 대전 엔진이 Lock 정산을 받을 경계를 연결한다 (R3-ORDER). 기본값은 {@link SpawnBoundary#IMMEDIATE}.
+     * v1은 {@link SpawnBoundary#onLockResolved}만 호출한다. deferSpawn에 따른 Spawn 보류는 S8-A1에서 연결한다.
+     */
+    public void setSpawnBoundary(SpawnBoundary boundary) {
+        if (boundary == null) throw new IllegalArgumentException("boundary cannot be null");
+        this.spawnBoundary = boundary;
+    }
+
     public GameMode getMode() {
         return mode;
     }
@@ -354,6 +371,7 @@ public class GameSession {
         modifiers.beginLock();
         Block placed = placeCurrentBlock();           // L1
         ClearPlan plan = collectClearTargets(placed); // L2
+        pendingAttack = captureAttack(placed, plan);  // R3-ATTACK: 보드를 바꾸기 전 사본에서 공격 줄을 만든다
         if (plan.isEmpty()) {                         // ANI-4: 지울 대상이 없으면 CLEARING을 거치지 않는다
             finishLock(plan);
             return;
@@ -380,7 +398,36 @@ public class GameSession {
         awardClearScore(plan, clearedCells);          // L5
         updateCounters(plan);                         // L6
         modifiers.finishLock();                       // L8: 이번에 획득한 D는 유지
+        resolveLock(plan);                            // R3-ORDER: 삭제 확정 후, Spawn 전에 1회
         spawnNextBlock();
+    }
+
+    /**
+     * 대전에서 상대에게 보낼 공격 줄 (R3-ATTACK). 싱글(IMMEDIATE)은 받을 사람이 없으므로 계산하지 않는다.
+     * 줄 삭제·아이템 효과가 보드를 바꾸기 전에 불러야 한다.
+     */
+    private AttackRows captureAttack(Block placed, ClearPlan plan) {
+        if (spawnBoundary == SpawnBoundary.IMMEDIATE) return AttackRows.NONE;
+        return AttackExtractor.extract(board.copyCells(), plan.rows(), occupiedCells(placed));
+    }
+
+    // 고정한 블록이 차지한 보드 논리 좌표
+    private static List<Cell> occupiedCells(Block placed) {
+        List<Cell> cells = new ArrayList<>();
+        int[][] shape = placed.getShape();
+        for (int r = 0; r < shape.length; r++) {
+            for (int c = 0; c < shape[r].length; c++) {
+                if (shape[r][c] != 0) cells.add(new Cell(placed.getRow() + r, placed.getCol() + c));
+            }
+        }
+        return cells;
+    }
+
+    /** 이번 Lock의 정산 결과를 한 번만 알린다. CLEARING이 Pause로 다시 시작돼도 finishLock은 한 번이다 */
+    private void resolveLock(ClearPlan plan) {
+        AttackRows attack = pendingAttack;
+        pendingAttack = AttackRows.NONE;
+        spawnBoundary.onLockResolved(new LockResult(plan.rowCount(), attack));
     }
 
     /** L1: 현재 블록 칸을 보드에 기록 */
