@@ -1,4 +1,4 @@
-package tetris.versus.api;
+package tetris.versus.core;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -25,12 +25,12 @@ class MatchContractTest {
 
     @Test
     void onlyItemModeHasItemsAndOnlyTimeLimitIsTimed() {
-        assertFalse(VersusMode.NORMAL.itemsEnabled());
-        assertTrue(VersusMode.ITEM.itemsEnabled());
-        assertFalse(VersusMode.TIME_LIMIT.itemsEnabled());
-        assertTrue(VersusMode.TIME_LIMIT.timeLimited());
-        assertFalse(VersusMode.NORMAL.timeLimited());
-        assertFalse(VersusMode.ITEM.timeLimited());
+        assertFalse(BattleMode.CLASSIC.itemsEnabled());
+        assertTrue(BattleMode.ITEM.itemsEnabled());
+        assertFalse(BattleMode.TIMED.itemsEnabled());
+        assertTrue(BattleMode.TIMED.timed());
+        assertFalse(BattleMode.CLASSIC.timed());
+        assertFalse(BattleMode.ITEM.timed());
     }
 
     @Test
@@ -38,15 +38,16 @@ class MatchContractTest {
         assertEquals(2, VersusRules.MIN_ATTACK_LINES);
         assertEquals(10, VersusRules.MAX_PENDING_ROWS);
         assertEquals(9, VersusRules.ATTACK_CELL);
+        assertEquals(180_000L, VersusRules.DEFAULT_TIME_LIMIT_MILLIS);
     }
 
     @Test
-    void timeLimitIsRequiredOnlyForTimeLimitMode() {
-        assertEquals(VersusRules.DEFAULT_TIME_LIMIT_MILLIS, MatchConfig.of(VersusMode.TIME_LIMIT).timeLimitMillis());
-        assertEquals(0, MatchConfig.of(VersusMode.NORMAL).timeLimitMillis());
-        assertEquals(Difficulty.NORMAL, MatchConfig.of(VersusMode.ITEM).difficulty());
-        assertThrows(IllegalArgumentException.class, () -> new MatchConfig(VersusMode.TIME_LIMIT, Difficulty.EASY, 0));
-        assertThrows(IllegalArgumentException.class, () -> new MatchConfig(VersusMode.NORMAL, Difficulty.EASY, 1000));
+    void timeLimitIsRequiredOnlyForTimedMode() {
+        assertEquals(VersusRules.DEFAULT_TIME_LIMIT_MILLIS, MatchConfig.of(BattleMode.TIMED).timeLimitMillis());
+        assertEquals(0, MatchConfig.of(BattleMode.CLASSIC).timeLimitMillis());
+        assertEquals(Difficulty.NORMAL, MatchConfig.of(BattleMode.ITEM).difficulty());
+        assertThrows(IllegalArgumentException.class, () -> new MatchConfig(BattleMode.TIMED, Difficulty.EASY, 0));
+        assertThrows(IllegalArgumentException.class, () -> new MatchConfig(BattleMode.CLASSIC, Difficulty.EASY, 1000));
         assertThrows(NullPointerException.class, () -> new MatchConfig(null, Difficulty.EASY, 0));
     }
 
@@ -125,7 +126,7 @@ class MatchContractTest {
         assertThrows(IllegalArgumentException.class,
                 () -> new MatchSnapshot("m-1", 0, one, one, -1, MatchPhase.FINISHED, null));
         assertThrows(IllegalArgumentException.class,
-                () -> new MatchSnapshot("m-1", 0, one, one, -1, MatchPhase.PLAYING, MatchResult.timeUpDraw()));
+                () -> new MatchSnapshot("m-1", 0, one, one, -1, MatchPhase.PLAYING, MatchResult.draw(MatchResult.EndReason.TIME_UP)));
         assertThrows(IllegalArgumentException.class,
                 () -> new MatchSnapshot(" ", 0, one, one, -1, MatchPhase.PLAYING, null));
         assertThrows(IllegalArgumentException.class,
@@ -135,17 +136,20 @@ class MatchContractTest {
     }
 
     @Test
-    void onlyTimeUpCanBeADraw() {
-        assertTrue(MatchResult.timeUpDraw().isDraw());
+    void drawsComeOnlyFromSameFrameTopOutOrTimeUpTie() {
+        assertTrue(MatchResult.draw(MatchResult.EndReason.TIME_UP).isDraw());
+        assertTrue(MatchResult.draw(MatchResult.EndReason.TOPPED_OUT).isDraw());
         assertFalse(MatchResult.win(PlayerId.ONE, MatchResult.EndReason.TIME_UP).isDraw());
-        assertThrows(IllegalArgumentException.class, () -> new MatchResult(null, MatchResult.EndReason.TOPPED_OUT));
-        assertThrows(IllegalArgumentException.class, () -> new MatchResult(null, MatchResult.EndReason.OPPONENT_LEFT));
+        assertEquals(PlayerId.TWO, MatchResult.win(PlayerId.TWO, MatchResult.EndReason.FORFEIT).winner());
+        assertThrows(IllegalArgumentException.class, () -> MatchResult.draw(MatchResult.EndReason.FORFEIT));
         assertThrows(NullPointerException.class, () -> MatchResult.win(null, MatchResult.EndReason.TIME_UP));
+        assertThrows(NullPointerException.class, () -> MatchResult.draw(null));
     }
 
     @Test
-    void singlePlayerHooksAreNoOps() {
-        assertDoesNotThrow(PreSpawnHook.NONE::beforeSpawn);
+    void singlePlayerSpawnBoundaryIsImmediate() {
+        assertFalse(SpawnBoundary.IMMEDIATE.deferSpawn());
+        assertDoesNotThrow(() -> SpawnBoundary.IMMEDIATE.onLockResolved(new LockResult(1, AttackRows.NONE)));
         long a = MatchClock.system().nowMillis();
         assertTrue(MatchClock.system().nowMillis() >= a);
     }
