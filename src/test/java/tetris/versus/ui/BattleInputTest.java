@@ -8,7 +8,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import javax.swing.*;
 import tetris.feature.setting.GameAction;
 import tetris.ui.versus.*;
-import tetris.ui.versus.PlayerCommand.PlayerId;
+import tetris.feature.versus.api.PlayerId;
+import tetris.feature.versus.api.PlayerCommand;
 
 class BattleInputTest {
     private static void key(JRootPane root,int code,boolean released,int modifiers) {

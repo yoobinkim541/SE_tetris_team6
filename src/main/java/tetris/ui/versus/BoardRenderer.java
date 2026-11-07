@@ -5,6 +5,7 @@ import java.awt.Font;
 import java.awt.Graphics2D;
 import tetris.component.block.BlockType;
 import tetris.ui.BlockPalette;
+import tetris.feature.versus.api.VersusRules;
 
 /** Shared local/P2P board drawing. Attack is a display value, never a generated BlockType. */
 public final class BoardRenderer {
@@ -20,8 +21,8 @@ public final class BoardRenderer {
     }
     public void paintCell(Graphics2D g, int value, int x, int y, int size) {
         if (size <= 0) return;
-        if (value < 0 || value > MatchSnapshot.ATTACK_CELL) throw new IllegalArgumentException("unknown cell");
-        boolean attack = value == MatchSnapshot.ATTACK_CELL;
+        if (value < 0 || value > VersusRules.ATTACK_CELL) throw new IllegalArgumentException("unknown cell");
+        boolean attack = value == VersusRules.ATTACK_CELL;
         Color fill = value == 0 ? new Color(0x262A33) : attack ? new Color(0x929AA5)
             : palette.color(BlockType.values()[value-1],colorBlind);
         g.setColor(fill); g.fillRect(x,y,size,size);
