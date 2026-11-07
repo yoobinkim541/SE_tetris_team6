@@ -106,3 +106,7 @@ TCP 연결 하나가 곧 한 세대다. 순번이 연결마다 1부터 시작하
 | GameClock due-time과 STATE 발행 | A (D-07) | C는 tick을 보내지 않는다. 호스트가 pulse 결과 `MatchSnapshot`을 STATE로 보낸다. 발행 주기·합치기는 S9-C2 |
 | 로비 상태·행동 API (`LobbyClient`, `LobbySnapshot`) | B | C 소유 계약을 별도 PR로 정의. 구현은 S8-C1(#127)·S8-C2(#128) |
 | R3-D08 결정 기록 | 팀 | `decisions.md`가 네트워크 정책을 C 소유로 정리. 연결 세대를 봉투에 넣지 않는 선택(2절)을 Notion Discussion에 반영 필요 |
+
+## 최신 develop 통합 인수
+
+PR #129의 MatchPayloads를 경기 와이어 형식의 단일 변환기로 사용한다. 기존 CommonWireContractTest도 이 변환기를 경유하도록 연결한다. 로비 포트와 S7 마감 기록은 lobby-contract.md 및 s7-closeout.md에서 관리하며, 실제 사람 승인 대신 사용자 위임 AI 대리 리뷰라는 기존 인수 방식을 유지한다.

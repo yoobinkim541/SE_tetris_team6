@@ -7,6 +7,7 @@ import java.util.function.Consumer;
 import java.util.function.Predicate;
 import javax.swing.*;
 import tetris.feature.setting.GameAction;
+import tetris.feature.versus.api.PlayerCommand;
 import tetris.ui.versus.BattleKeyMap.Target;
 
 /** One root-level router for a match; construct/use/close on the EDT. */

@@ -4,7 +4,7 @@ import java.awt.event.KeyEvent;
 import java.util.*;
 import tetris.feature.setting.GameAction;
 import tetris.feature.setting.KeyMap;
-import tetris.ui.versus.PlayerCommand.PlayerId;
+import tetris.feature.versus.api.PlayerId;
 
 /** Separate in-memory versus keys; never reads or overwrites single-player settings. */
 public final class BattleKeyMap {
