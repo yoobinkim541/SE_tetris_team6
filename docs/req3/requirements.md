@@ -9,9 +9,9 @@
 |---|---|---|---|---|---|
 | R3-MENU | p2~3,8 | 시작 메뉴에서 로컬 대전·P2P 각각 진입 | B / S8-B1, S9-B2 | — | VersusMenuTest |
 | R3-MODES | p3,8 | 일반·아이템·시간제한 3종. P2P는 호스트만 선택 | A·B·C / S9-A1, S9-B1, S9-C1 | `BattleMode`, `MatchConfig` | ✅ MatchContractTest |
-| R3-ATTACK | p4 | 2줄 이상 삭제 시 공격. 삭제 전 행에서 방금 고정한 블록 칸을 비운 형태 | A / S7-A2 | `VersusRules.MIN_ATTACK_LINES`, `AttackRows`, `LockResult` | ✅ AttackContractTest, AttackRowsTest(S7-A2) |
+| R3-ATTACK | p4 | 2줄 이상 삭제 시 공격. 삭제 전 행에서 방금 고정한 블록 칸을 비운 형태 | A / S7-A2 | `VersusRules.MIN_ATTACK_LINES`, `AttackRows`, `LockResult`, `AttackExtractor` | ✅ AttackContractTest, AttackRowsTest, LockResolutionTest |
 | R3-ORDER | p4~6 | 먼저 대기열 표시. Lock·삭제 뒤 다음 Spawn 전에 아래쪽 삽입 | A / S8-A1 | `SpawnBoundary`, `MatchEngine` pulse 순서 | GarbageInsertionTest |
-| R3-CAP | p6 | 최대 10줄. 기존 아래에 추가, 넘치면 최하단 버림, 10줄이면 무시 | A / S7-A2 | `VersusRules.MAX_PENDING_ROWS`, `PlayerView.pendingRows` | ✅ MatchContractTest, PendingAttackQueueTest(S7-A2) |
+| R3-CAP | p6 | 최대 10줄. 기존 아래에 추가, 넘치면 최하단 버림, 10줄이면 무시 | A / S7-A2 | `VersusRules.MAX_PENDING_ROWS`, `PendingAttackQueue` | ✅ MatchContractTest, PendingAttackQueueTest |
 | R3-GARBAGE | p5 | 형태 유지, 기존 칸 위로 이동, 회색으로 구분 | A·B / S8-A1, S8-B2 | `VersusRules.ATTACK_CELL`=9 | GarbageInsertionTest, VersusRenderingTest |
 | R3-LOSS | p5 | 쌓을 수 없으면 상대 승리. 양쪽 같은 결과 | A·B / S8-A2, S8-B2 | `MatchResult`(TOPPED_OUT) | ✅ MatchContractTest, MatchResultTest |
 | R3-NOSCORE | p5 | 대전 기록은 스코어보드에 저장하지 않음 | B / S9-B1 | `MatchResult`는 onGameOver 경로를 쓰지 않음 | VersusNoScorePersistenceTest |

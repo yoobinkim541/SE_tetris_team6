@@ -36,7 +36,14 @@ B 로컬/P2P 화면 ──PlayerCommand──▶ BattleClient ──▶ A MatchE
 | `MatchClock` | — | 단조 시계(ms) |
 | `VersusRules` | — | 2줄 / 10줄 / 공격 칸 9 / 180초 / pulse 16 ms |
 
-엔진 쪽 구현(`tetris.feature.versus`): `DueTimeClock` — GameClock 어댑터. 다음은 S7-A2 이후에 만든다: AttackRows 추출, 대기열, MatchEngine 구현, 로컬 BattleClient.
+엔진 쪽 구현(`tetris.feature.versus`):
+
+- `DueTimeClock` — GameClock 어댑터 (S7-A1)
+- `AttackExtractor` — 삭제 전 보드 사본·삭제 행·고정 블록 칸 → `AttackRows` (S7-A2)
+- `PendingAttackQueue` — 위→아래 FIFO, 10줄 상한, 가득 차면 무시, 넘치면 아래부터 버림 (S7-A2)
+- `GameSession.setSpawnBoundary` — Lock 때 사본을 떠 두고 삭제 확정(finishLock) 때 `LockResult`를 1회 발행. 싱글(IMMEDIATE)은 사본도 만들지 않음 (S7-A2)
+
+다음 작업: 공격 삽입과 deferSpawn 연결(S8-A1), MatchEngine 구현과 승패(S8-A2), 로컬 BattleClient.
 
 ## 시계와 Spawn 경계
 
@@ -52,7 +59,7 @@ Lock → (CLEARING 150 ms) → 점수·카운터 정산 → SpawnBoundary.onLock
                         └ 예(대전) → 엔진이 대기열 공격을 아래에 삽입 → Spawn 재개
 ```
 
-- `GameSession`에 `SpawnBoundary`를 연결하는 일은 S7-A2/S8-A1에서 한다. 싱글은 `IMMEDIATE`라 동작이 바뀌지 않는다.
+- `onLockResolved` 발행은 S7-A2에서 연결됐다. `deferSpawn()`에 따른 Spawn 보류와 공격 삽입은 S8-A1에서 연결한다. 싱글은 `IMMEDIATE`라 동작이 바뀌지 않는다.
 
 ## B·C 임시 코드 → v1
 
