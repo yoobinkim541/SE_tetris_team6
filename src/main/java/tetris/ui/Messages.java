@@ -147,6 +147,9 @@ public class Messages {
      */
     public static String keyGuide(MainFrame.Screen screen, KeyMap keyMap) {
         return switch (screen) {
+            case BATTLE_MODES -> "↑↓ 선택 · Enter 확인";
+            case BATTLE -> new tetris.ui.versus.BattleKeyMap().guide();
+            case BATTLE_RESULT -> "Enter 모드 선택 · Esc 메인 메뉴";
             case MAIN_MENU -> get("guide.mainMenu");
             case SETTINGS -> get("guide.settings");
             case SCOREBOARD -> get("guide.scoreboard");

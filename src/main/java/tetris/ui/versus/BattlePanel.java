@@ -9,9 +9,16 @@ import tetris.feature.versus.api.VersusRules;
 /** One reusable two-player view. Owns no engine, socket or key bindings. EDT confined. */
 public final class BattlePanel extends JPanel {
     private final BoardRenderer renderer;
+    private final String guide;
     private MatchSnapshot snapshot;
     public BattlePanel(boolean colorBlind) {
+        this(colorBlind, new BattleKeyMap().guide());
+    }
+    public BattlePanel(boolean colorBlind, String guide) {
+        setFocusable(true);
         renderer = new BoardRenderer(colorBlind);
+        this.guide = Objects.requireNonNull(guide);
+        getAccessibleContext().setAccessibleDescription(guide);
         setBackground(new Color(0x1B1E24)); setPreferredSize(new Dimension(960,720));
     }
     public void setSnapshot(MatchSnapshot snapshot) { this.snapshot = Objects.requireNonNull(snapshot); repaint(); }
@@ -48,8 +55,18 @@ public final class BattlePanel extends JPanel {
             g.drawString(time,740,32);
             paintPlayer(g,snapshot.one(),28,"P1"); paintPlayer(g,snapshot.two(),500,"P2");
             g.setFont(new Font(Font.DIALOG,Font.PLAIN,18)); g.setColor(Color.WHITE);
-            g.drawString("X = Attack cell   W = Weight   Queue: top -> bottom (max " + VersusRules.MAX_PENDING_ROWS + ")",28,680);
-            g.drawString("P1: Arrows / Space    P2: A D S W / F    Shared: P pause / Q quit",28,706);
+            g.drawString("X = Attack cell   W = Weight   Queue: top -> bottom (max " + VersusRules.MAX_PENDING_ROWS + ")",28,650);
+            g.setFont(new Font(Font.DIALOG,Font.PLAIN,14));
+            String[] lines = guide.split("\\R", -1);
+            int lineHeight = Math.min(18, 54 / Math.max(1, lines.length));
+            for (int i = 0; i < lines.length; i++) {
+                String line = lines[i];
+                Font font = g.getFont();
+                int width = g.getFontMetrics().stringWidth(line);
+                if (width > 904) g.setFont(font.deriveFont((float) (font.getSize2D() * 904 / width)));
+                g.drawString(line, 28, 670 + i * lineHeight);
+                g.setFont(font);
+            }
         } finally { g.dispose(); }
     }
     private void paintPlayer(Graphics2D g, MatchSnapshot.PlayerView player, int x, String name) {
