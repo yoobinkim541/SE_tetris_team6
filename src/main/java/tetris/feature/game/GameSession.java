@@ -272,6 +272,14 @@ public class GameSession {
         spawnBoundary = boundary;
     }
 
+    /** Apply received attacks only after lock settlement and before the next Spawn. */
+    public void applyPendingAttack(AttackRows attack) {
+        if (!spawnPending || state != GameState.PLAYING || quitPending) {
+            throw new IllegalStateException("attacks require a settled Spawn boundary");
+        }
+        if (board.insertAttackRows(attack)) gameOver();
+    }
+
     /** Engine resumes after applying its pending rows; repeated/paused/ended calls do nothing. */
     public void resumeSpawn() {
         if (!spawnPending || state != GameState.PLAYING || quitPending) return;

@@ -9,6 +9,34 @@ import tetris.ui.versus.*;
 import tetris.feature.versus.api.*;
 
 class BattleScreenControllerTest {
+    @Test void confirmedRealForfeitShowsResultInsteadOfNavigatingAway() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            var root = new JRootPane(); var client = new LocalBattleClient(MatchConfig.of(BattleMode.CLASSIC));
+            var result = new AtomicInteger(); var exit = new AtomicInteger();
+            var controller = new BattleScreenController(root, client, new BattleKeyMap(),
+                new BattlePanel(false), state -> {
+                    assertEquals(MatchResult.EndReason.FORFEIT, state.result().reason()); result.incrementAndGet();
+                }, () -> true, exit::incrementAndGet);
+            key(root, KeyEvent.VK_Q, false);
+            assertEquals(1, result.get()); assertEquals(0, exit.get()); controller.close();
+        });
+    }
+
+    @Test void quitDialogPausesAfterResumeWhilePhysicalPauseIsStillHeld() throws Exception {
+        SwingUtilities.invokeAndWait(() -> {
+            var root=new JRootPane();var client=new LocalBattleClient(MatchConfig.of(BattleMode.CLASSIC));
+            var state=new java.util.concurrent.atomic.AtomicReference<MatchSnapshot>();client.subscribe(state::set);
+            var controller=new BattleScreenController(root,client,new BattleKeyMap(),new BattlePanel(false),s->{},()->{
+                assertEquals(MatchPhase.PAUSED,state.get().phase(),"modal confirmation must freeze both sessions");return false;
+            },()->{});
+            try {
+                key(root,KeyEvent.VK_P,false);key(root,KeyEvent.VK_P,true);key(root,KeyEvent.VK_P,false);
+                assertEquals(MatchPhase.PLAYING,state.get().phase());key(root,KeyEvent.VK_Q,false);
+                assertEquals(MatchPhase.PLAYING,state.get().phase());
+                controller.focusLost();assertEquals(MatchPhase.PAUSED,state.get().phase());
+            } finally {controller.close();}
+        });
+    }
     @Test void synchronousPauseSnapshotDoesNotClearSharedKeyLatch() throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             var root = new JRootPane(); var client = new PreviewBattleClient();

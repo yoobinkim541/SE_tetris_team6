@@ -64,7 +64,7 @@ class ProductionWiringAuditTest {
                 frame.applyScreenSize(size);
                 assertTrue(frame.getWidth() <= desktop.width, size + " width exceeds desktop");
                 assertTrue(frame.getHeight() <= desktop.height, size + " height exceeds desktop");
-                assertTrue(frame.getHeight() > previousHeight, "세 크기를 구분해야 함");
+                assertTrue(frame.getHeight() > previousHeight, "세 크기를 구분해야 함: " + size + " height=" + frame.getHeight() + " previous=" + previousHeight);
                 previousHeight = frame.getHeight();
             }
         });

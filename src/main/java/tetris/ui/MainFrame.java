@@ -72,7 +72,7 @@ public class MainFrame extends JFrame {
 
     public MainFrame(Settings settings, Scoreboard scoreboard,
                      SettingsRepository settingsRepository, ScoreboardRepository scoreboardRepository) {
-        this(settings, scoreboard, settingsRepository, scoreboardRepository, config -> new PreviewBattleClient());
+        this(settings, scoreboard, settingsRepository, scoreboardRepository, LocalBattleClient::new);
     }
 
     public MainFrame(Settings settings, Scoreboard scoreboard,
@@ -111,7 +111,7 @@ public class MainFrame extends JFrame {
         addScreen(Screen.SCOREBOARD, scoreBoardPanel);
         addScreen(Screen.SETTINGS, settingPanel);
         var modes = new MainMenuPanel(List.of(
-                new MenuItem("로컬 일반 대전 (엔진 연결 전 미리보기)", () -> startBattle(BattleMode.CLASSIC)),
+                new MenuItem("로컬 일반 대전", () -> startBattle(BattleMode.CLASSIC)),
                 new MenuItem("아이템 대전 · 준비 중", () -> {}),
                 new MenuItem("시간제한 대전 · 준비 중", () -> {}),
                 new MenuItem("메인 메뉴", () -> showScreen(Screen.MAIN_MENU))));
