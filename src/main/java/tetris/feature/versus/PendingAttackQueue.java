@@ -18,7 +18,14 @@ public final class PendingAttackQueue {
         return accepted;
     }
     public int size() { return rows.size(); }
-    public AttackRows snapshot() { return new AttackRows(new ArrayList<>(rows)); }
+    public boolean isEmpty() { return rows.isEmpty(); }
+    public boolean isFull() { return size() == VersusRules.MAX_PENDING_ROWS; }
+    public boolean offer(AttackRows attack) {
+        if (attack == null) throw new IllegalArgumentException("attack");
+        return append(attack) > 0;
+    }
+    public java.util.List<int[]> rows() { return snapshot().rows(); }
+    public AttackRows snapshot() { return rows.isEmpty() ? AttackRows.NONE : new AttackRows(new ArrayList<>(rows)); }
     /** Called once by the receiving engine at its next lock/spawn boundary. */
     public AttackRows drain() { var result=snapshot(); rows.clear(); return result; }
     public void clear() { rows.clear(); }

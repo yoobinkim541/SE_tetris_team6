@@ -63,7 +63,7 @@ public class GameSession {
     private final GameListener listener;
     private final GameMode mode;
     private final Difficulty difficulty;
-    private final SpawnBoundary spawnBoundary;
+    private SpawnBoundary spawnBoundary;
     private boolean spawnPending;
 
     /** 일반 모드·NORMAL 난이도 */
@@ -262,6 +262,15 @@ public class GameSession {
     }
 
     public boolean isSpawnPending() { return spawnPending; }
+
+    /** Compatibility hook; an in-flight lock keeps its original boundary. */
+    public void setSpawnBoundary(SpawnBoundary boundary) {
+        if (boundary == null) throw new IllegalArgumentException("spawnBoundary");
+        if (pendingClear != null || spawnPending) {
+            throw new IllegalStateException("lock settlement is in progress");
+        }
+        spawnBoundary = boundary;
+    }
 
     /** Engine resumes after applying its pending rows; repeated/paused/ended calls do nothing. */
     public void resumeSpawn() {
