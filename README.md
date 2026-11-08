@@ -3,6 +3,8 @@
 
 3차 Sprint 7 B: [두 보드·대기열 Fake 데모와 2인 입력 사용법](docs/sprint7-b.md). 실제 엔진·네트워크 연결 전의 독립 화면 모형입니다.
 
+Sprint 7 마감: [A2 공격·대기열, 공통 계약 인수, AI 대리 시연·KPT와 검증 결과](docs/req3/s7-closeout.md).
+
 평가 준비: [체크리스트 80항목 대조·보완 결과](docs/checklist-compliance-2026-10-27.md) · [Java 21 검증 결과](docs/checklist-verification-2026-10-27.json). 최소 사양 실기 검증과 프로젝트 관리 도구 확인은 별도로 남아 있습니다.
 
 아이템 평가·플레이 안내: [아이템 모드 명세서 — L/B/D/S/W 효과·점수·검증 화면](docs/item-specification.md).

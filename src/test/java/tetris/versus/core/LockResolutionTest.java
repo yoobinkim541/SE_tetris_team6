@@ -72,6 +72,44 @@ class LockResolutionTest {
     }
 
     @Test
+    void changingBoundaryWhileClearingOrPausedClearingCannotRedirectCapturedAttack() throws Exception {
+        GameSession session = oSession(recorder);
+        fillRowExcept(session, 18, 4, 5);
+        fillRowExcept(session, 19, 4, 5);
+        session.hardDrop();
+        Recorder replacement = new Recorder();
+        assertThrows(IllegalStateException.class, () -> session.setSpawnBoundary(replacement));
+        session.pause();
+        assertThrows(IllegalStateException.class, () -> session.setSpawnBoundary(replacement));
+        session.resume();
+        session.tick();
+        assertEquals(1, recorder.results.size());
+        assertTrue(replacement.results.isEmpty());
+        session.setSpawnBoundary(replacement);
+        session.hardDrop();
+        assertEquals(1, replacement.results.size());
+    }
+
+    @Test
+    void changingBoundaryDuringDeferredSpawnCannotReplaceTheOwningBoundary() {
+        SpawnBoundary deferred = new SpawnBoundary() {
+            public void onLockResolved(LockResult result) { }
+            public boolean deferSpawn() { return true; }
+        };
+        GameSession session = oSession(deferred);
+        session.hardDrop();
+        assertTrue(session.isSpawnPending());
+        assertThrows(IllegalStateException.class, () -> session.setSpawnBoundary(recorder));
+        session.pause();
+        assertThrows(IllegalStateException.class, () -> session.setSpawnBoundary(recorder));
+        session.resume();
+        session.resumeSpawn();
+        session.setSpawnBoundary(recorder);
+        session.hardDrop();
+        assertEquals(1, recorder.results.size());
+    }
+
+    @Test
     void twoLineClearIsResolvedOnceAfterClearingWithTheBlockShapeAsHoles() throws Exception {
         GameSession session = oSession(recorder);
         fillRowExcept(session, 18, 4, 5);

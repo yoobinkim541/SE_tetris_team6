@@ -3,6 +3,7 @@ package tetris.feature.game;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Random;
 import java.util.Set;
 import java.util.TreeSet;
@@ -23,7 +24,7 @@ import tetris.feature.rule.NextBlockQueue;
 import tetris.feature.rule.RotationPolicy;
 import tetris.feature.rule.ScoringPolicy;
 import tetris.feature.rule.SpawnPolicy;
-import tetris.feature.versus.AttackExtractor;
+import tetris.feature.versus.AttackRowExtractor;
 import tetris.feature.versus.api.AttackRows;
 import tetris.feature.versus.api.LockResult;
 import tetris.feature.versus.api.SpawnBoundary;
@@ -52,8 +53,6 @@ public class GameSession {
     private boolean pausedDuringClearing;         // CLEARING에서 Pause했는지. Resume 때 CLEARING으로 돌아간다
     private GameModifiers modifiers = new GameModifiers(); // 지속 효과 (D, S). start()마다 새로 만든다
     private boolean crushing;                     // 무게추가 첫 하강에 실패해 분쇄 모드가 됐는지 (ITW-4)
-    private SpawnBoundary spawnBoundary = SpawnBoundary.IMMEDIATE; // 싱글은 IMMEDIATE (R3-REGRESSION)
-    private AttackRows pendingAttack = AttackRows.NONE; // Lock 때 삭제 전 사본으로 만든 공격. 삭제 확정 때 1회 발행
 
     private final SpawnPolicy spawnPolicy = new SpawnPolicy();
     private final RotationPolicy rotationPolicy = new BasicRotationPolicy();
@@ -64,6 +63,8 @@ public class GameSession {
     private final GameListener listener;
     private final GameMode mode;
     private final Difficulty difficulty;
+    private SpawnBoundary spawnBoundary;
+    private boolean spawnPending;
 
     /** 일반 모드·NORMAL 난이도 */
     public GameSession(BlockGenerator generator, GameClock clock, GameListener listener) {
@@ -72,6 +73,12 @@ public class GameSession {
 
     /** 모드와 난이도는 한 판이 끝날 때까지 바뀌지 않는다 (DIF-5, MOD-2) */
     public GameSession(GameMode mode, Difficulty difficulty, BlockGenerator generator, GameClock clock, GameListener listener) {
+        this(mode, difficulty, generator, clock, listener, SpawnBoundary.IMMEDIATE);
+    }
+
+    /** Versus hook: settlement is observable before the next block is spawned. */
+    public GameSession(GameMode mode, Difficulty difficulty, BlockGenerator generator, GameClock clock,
+                       GameListener listener, SpawnBoundary spawnBoundary) {
         if (mode == null) throw new IllegalArgumentException("mode cannot be null");
         if (difficulty == null) throw new IllegalArgumentException("difficulty cannot be null");
         if (generator == null) throw new IllegalArgumentException("generator cannot be null");
@@ -84,6 +91,7 @@ public class GameSession {
                 ? new ItemBlockGenerator(generator, WeightBlock::new, new Random()) : generator;
         this.clock = clock;
         this.listener = listener;
+        this.spawnBoundary = Objects.requireNonNull(spawnBoundary, "spawnBoundary");
     }
 
     // ── 수명주기 ─────────────────────────────
@@ -97,12 +105,12 @@ public class GameSession {
         nextQueue = new NextBlockQueue(generator, PREVIEW_COUNT);
         currentBlock = null;
         quitPending = false;
+        spawnPending = false;
         stateBeforeQuit = null;
         pendingClear = null;
         pausedDuringClearing = false;
         crushing = false;
         modifiers = new GameModifiers();
-        pendingAttack = AttackRows.NONE;
 
         state = GameState.PLAYING; // Spawn 충돌 시 PLAYING -> GAME_OVER 전이가 되도록 먼저 전환
         spawnNextBlock();
@@ -121,40 +129,40 @@ public class GameSession {
         clock.stop();
         currentBlock = null;
         quitPending = false;
+        spawnPending = false;
         stateBeforeQuit = null;
         pendingClear = null;
         pausedDuringClearing = false;
-        pendingAttack = AttackRows.NONE;
         state = GameState.ENDED;
     }
 
     // ── 조작 (PLAYING에서만 유효, 실패는 무시) ──
     public void moveLeft() {
-        if (state != GameState.PLAYING) return;
+        if (state != GameState.PLAYING || spawnPending) return;
         shift(-1);
     }
 
     public void moveRight() {
-        if (state != GameState.PLAYING) return;
+        if (state != GameState.PLAYING || spawnPending) return;
         shift(1);
     }
 
     /** Soft Drop: 자동 낙하와 같은 하강 시도. 낙하 타이머는 리셋하지 않는다 (TMR-4) */
     public void moveDown() {
-        if (state != GameState.PLAYING) return;
+        if (state != GameState.PLAYING || spawnPending) return;
         descendOrLock();
     }
 
     /** 실패하면 모양·위치·회전 상태를 바꾸지 않는다 (ROT-3) */
     public void rotateRight() {
-        if (state != GameState.PLAYING) return;
+        if (state != GameState.PLAYING || spawnPending) return;
         if (currentBlock.isWeight()) return; // ITW-1: 무게추는 회전하지 않는다
         if (rotationPolicy.rotate(board, currentBlock)) listener.onChanged(snapshot());
     }
 
     /** 내려갈 수 있는 만큼 한 번에 내리고 +칸수 x Level (SCR-2) 후 즉시 Lock. 점수는 Level이 바뀔 수 있는 Lock 전에 더한다 */
     public void hardDrop() {
-        if (state != GameState.PLAYING) return;
+        if (state != GameState.PLAYING || spawnPending) return;
 
         if (currentBlock.isWeight()) {
             crushToBottom(); // ITW-6, ITW-7: 점수 없음
@@ -174,7 +182,7 @@ public class GameSession {
             finishClearing(); // 150 ms가 지났다 (ANI-3)
             return;
         }
-        if (state != GameState.PLAYING) return;
+        if (state != GameState.PLAYING || spawnPending) return;
         descendOrLock();
     }
 
@@ -199,7 +207,7 @@ public class GameSession {
             clock.start(CLEAR_ANIMATION_MILLIS);
         } else {
             state = GameState.PLAYING;
-            clock.start(currentFallIntervalMillis);
+            if (!spawnPending) clock.start(currentFallIntervalMillis);
         }
         pausedDuringClearing = false;
         listener.onChanged(snapshot());
@@ -245,21 +253,31 @@ public class GameSession {
         return state;
     }
 
-    /**
-     * 대전 엔진이 Lock 정산을 받을 경계를 연결한다 (R3-ORDER). 기본값은 {@link SpawnBoundary#IMMEDIATE}.
-     * v1은 {@link SpawnBoundary#onLockResolved}만 호출한다. deferSpawn에 따른 Spawn 보류는 S8-A1에서 연결한다.
-     */
-    public void setSpawnBoundary(SpawnBoundary boundary) {
-        if (boundary == null) throw new IllegalArgumentException("boundary cannot be null");
-        this.spawnBoundary = boundary;
-    }
-
     public GameMode getMode() {
         return mode;
     }
 
     public Difficulty getDifficulty() {
         return difficulty;
+    }
+
+    public boolean isSpawnPending() { return spawnPending; }
+
+    /** Compatibility hook; an in-flight lock keeps its original boundary. */
+    public void setSpawnBoundary(SpawnBoundary boundary) {
+        if (boundary == null) throw new IllegalArgumentException("spawnBoundary");
+        if (pendingClear != null || spawnPending) {
+            throw new IllegalStateException("lock settlement is in progress");
+        }
+        spawnBoundary = boundary;
+    }
+
+    /** Engine resumes after applying its pending rows; repeated/paused/ended calls do nothing. */
+    public void resumeSpawn() {
+        if (!spawnPending || state != GameState.PLAYING || quitPending) return;
+        spawnPending = false;
+        spawnNextBlock();
+        if (state == GameState.PLAYING) listener.onChanged(snapshot());
     }
 
     public GameSnapshot snapshot() {
@@ -343,7 +361,11 @@ public class GameSession {
     }
 
     /** 한 번의 Lock에서 지워질 줄 R (§5 L2). 아이템이 지우는 칸 C는 아이템 구현 때 여기에 더한다 */
-    private record ClearPlan(List<Integer> rows, Set<Cell> cells) {
+    private record ClearPlan(List<Integer> rows, Set<Cell> cells, AttackRows attack) {
+        // Existing scoring audit constructs the single-player plan reflectively.
+        private ClearPlan(List<Integer> rows, Set<Cell> cells) {
+            this(rows, cells, AttackRows.NONE);
+        }
         boolean isEmpty() {
             return rows.isEmpty() && cells.isEmpty();
         }
@@ -371,7 +393,6 @@ public class GameSession {
         modifiers.beginLock();
         Block placed = placeCurrentBlock();           // L1
         ClearPlan plan = collectClearTargets(placed); // L2
-        pendingAttack = captureAttack(placed, plan);  // R3-ATTACK: 보드를 바꾸기 전 사본에서 공격 줄을 만든다
         if (plan.isEmpty()) {                         // ANI-4: 지울 대상이 없으면 CLEARING을 거치지 않는다
             finishLock(plan);
             return;
@@ -398,36 +419,14 @@ public class GameSession {
         awardClearScore(plan, clearedCells);          // L5
         updateCounters(plan);                         // L6
         modifiers.finishLock();                       // L8: 이번에 획득한 D는 유지
-        resolveLock(plan);                            // R3-ORDER: 삭제 확정 후, Spawn 전에 1회
-        spawnNextBlock();
-    }
-
-    /**
-     * 대전에서 상대에게 보낼 공격 줄 (R3-ATTACK). 싱글(IMMEDIATE)은 받을 사람이 없으므로 계산하지 않는다.
-     * 줄 삭제·아이템 효과가 보드를 바꾸기 전에 불러야 한다.
-     */
-    private AttackRows captureAttack(Block placed, ClearPlan plan) {
-        if (spawnBoundary == SpawnBoundary.IMMEDIATE) return AttackRows.NONE;
-        return AttackExtractor.extract(board.copyCells(), plan.rows(), occupiedCells(placed));
-    }
-
-    // 고정한 블록이 차지한 보드 논리 좌표
-    private static List<Cell> occupiedCells(Block placed) {
-        List<Cell> cells = new ArrayList<>();
-        int[][] shape = placed.getShape();
-        for (int r = 0; r < shape.length; r++) {
-            for (int c = 0; c < shape[r].length; c++) {
-                if (shape[r][c] != 0) cells.add(new Cell(placed.getRow() + r, placed.getCol() + c));
-            }
+        if (spawnBoundary == SpawnBoundary.IMMEDIATE) {
+            spawnNextBlock(); // preserve the existing single-player path
+            return;
         }
-        return cells;
-    }
-
-    /** 이번 Lock의 정산 결과를 한 번만 알린다. CLEARING이 Pause로 다시 시작돼도 finishLock은 한 번이다 */
-    private void resolveLock(ClearPlan plan) {
-        AttackRows attack = pendingAttack;
-        pendingAttack = AttackRows.NONE;
-        spawnBoundary.onLockResolved(new LockResult(plan.rowCount(), attack));
+        spawnPending = true;
+        clock.stop();
+        spawnBoundary.onLockResolved(new LockResult(plan.rowCount(), plan.attack()));
+        if (spawnPending && state == GameState.PLAYING && !spawnBoundary.deferSpawn()) resumeSpawn();
     }
 
     /** L1: 현재 블록 칸을 보드에 기록 */
@@ -451,7 +450,10 @@ public class GameSession {
 
         rows.removeIf(row -> row < -Board.MARGIN || row >= Board.HEIGHT); // 보드 밖 행은 무시
         cells.removeIf(cell -> rows.contains(cell.row()));
-        return new ClearPlan(new ArrayList<>(rows), cells);
+        List<Integer> deletedRows = new ArrayList<>(rows);
+        AttackRows attack = spawnBoundary == SpawnBoundary.IMMEDIATE ? AttackRows.NONE
+                : AttackRowExtractor.extract(board.copyCells(), deletedRows, placed);
+        return new ClearPlan(deletedRows, cells, attack);
     }
 
     // Lock한 블록의 아이템 칸마다 효과를 불러 지울 행·칸을 모은다. 아이템 칸의 보드 좌표 = 블록 위치 + 격자 위치
