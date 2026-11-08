@@ -210,6 +210,34 @@ public class Board implements BoardView {
         }
     }
 
+    /**
+     * Shift fixed cells up and append attack rows in display order. Walls are untouched,
+     * item marks move with their cells, and attack cells never carry items.
+     * Returns true if any fixed cell ends above the visible board (D-12).
+     */
+    public boolean insertAttackRows(tetris.feature.versus.api.AttackRows attack) {
+        var rows = java.util.Objects.requireNonNull(attack, "attack").rows();
+        int count = rows.size();
+        if (count > tetris.feature.versus.api.VersusRules.MAX_PENDING_ROWS) {
+            throw new IllegalArgumentException("attack insertion exceeds pending queue capacity");
+        }
+        if (count == 0) return false;
+        boolean overflow = false;
+        for (int r = 0; r < MARGIN + count; r++) {
+            for (int c = MARGIN; c < MARGIN + WIDTH; c++) overflow |= board[r][c] != EMPTY;
+        }
+        for (int r = 0; r < HEIGHT + MARGIN - count; r++) {
+            System.arraycopy(board[r + count], MARGIN, board[r], MARGIN, WIDTH);
+            System.arraycopy(items[r + count], MARGIN, items[r], MARGIN, WIDTH);
+        }
+        for (int r = 0; r < count; r++) {
+            int target = HEIGHT + MARGIN - count + r;
+            System.arraycopy(rows.get(r), 0, board[target], MARGIN, WIDTH);
+            Arrays.fill(items[target], null);
+        }
+        return overflow;
+    }
+
     /** Hard Drop 거리: 블록을 아래로 몇 칸 내릴 수 있는지 (0 이상). 상태를 바꾸지 않는다 */
     public int getDropDistance(Block block) {
         if (block == null) throw new IllegalArgumentException("block cannot be null");

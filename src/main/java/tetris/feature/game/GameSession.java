@@ -3,6 +3,7 @@ package tetris.feature.game;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Random;
 import java.util.Set;
 import java.util.TreeSet;
@@ -23,6 +24,10 @@ import tetris.feature.rule.NextBlockQueue;
 import tetris.feature.rule.RotationPolicy;
 import tetris.feature.rule.ScoringPolicy;
 import tetris.feature.rule.SpawnPolicy;
+import tetris.feature.versus.AttackRowExtractor;
+import tetris.feature.versus.api.AttackRows;
+import tetris.feature.versus.api.LockResult;
+import tetris.feature.versus.api.SpawnBoundary;
 
 /**
  * 게임 한 판의 흐름과 상태기계 (명세 4, 8장). Swing EDT 단일 스레드에서만 사용한다.
@@ -58,6 +63,8 @@ public class GameSession {
     private final GameListener listener;
     private final GameMode mode;
     private final Difficulty difficulty;
+    private SpawnBoundary spawnBoundary;
+    private boolean spawnPending;
 
     /** 일반 모드·NORMAL 난이도 */
     public GameSession(BlockGenerator generator, GameClock clock, GameListener listener) {
@@ -66,6 +73,12 @@ public class GameSession {
 
     /** 모드와 난이도는 한 판이 끝날 때까지 바뀌지 않는다 (DIF-5, MOD-2) */
     public GameSession(GameMode mode, Difficulty difficulty, BlockGenerator generator, GameClock clock, GameListener listener) {
+        this(mode, difficulty, generator, clock, listener, SpawnBoundary.IMMEDIATE);
+    }
+
+    /** Versus hook: settlement is observable before the next block is spawned. */
+    public GameSession(GameMode mode, Difficulty difficulty, BlockGenerator generator, GameClock clock,
+                       GameListener listener, SpawnBoundary spawnBoundary) {
         if (mode == null) throw new IllegalArgumentException("mode cannot be null");
         if (difficulty == null) throw new IllegalArgumentException("difficulty cannot be null");
         if (generator == null) throw new IllegalArgumentException("generator cannot be null");
@@ -78,6 +91,7 @@ public class GameSession {
                 ? new ItemBlockGenerator(generator, WeightBlock::new, new Random()) : generator;
         this.clock = clock;
         this.listener = listener;
+        this.spawnBoundary = Objects.requireNonNull(spawnBoundary, "spawnBoundary");
     }
 
     // ── 수명주기 ─────────────────────────────
@@ -91,6 +105,7 @@ public class GameSession {
         nextQueue = new NextBlockQueue(generator, PREVIEW_COUNT);
         currentBlock = null;
         quitPending = false;
+        spawnPending = false;
         stateBeforeQuit = null;
         pendingClear = null;
         pausedDuringClearing = false;
@@ -114,6 +129,7 @@ public class GameSession {
         clock.stop();
         currentBlock = null;
         quitPending = false;
+        spawnPending = false;
         stateBeforeQuit = null;
         pendingClear = null;
         pausedDuringClearing = false;
@@ -122,31 +138,31 @@ public class GameSession {
 
     // ── 조작 (PLAYING에서만 유효, 실패는 무시) ──
     public void moveLeft() {
-        if (state != GameState.PLAYING) return;
+        if (state != GameState.PLAYING || spawnPending) return;
         shift(-1);
     }
 
     public void moveRight() {
-        if (state != GameState.PLAYING) return;
+        if (state != GameState.PLAYING || spawnPending) return;
         shift(1);
     }
 
     /** Soft Drop: 자동 낙하와 같은 하강 시도. 낙하 타이머는 리셋하지 않는다 (TMR-4) */
     public void moveDown() {
-        if (state != GameState.PLAYING) return;
+        if (state != GameState.PLAYING || spawnPending) return;
         descendOrLock();
     }
 
     /** 실패하면 모양·위치·회전 상태를 바꾸지 않는다 (ROT-3) */
     public void rotateRight() {
-        if (state != GameState.PLAYING) return;
+        if (state != GameState.PLAYING || spawnPending) return;
         if (currentBlock.isWeight()) return; // ITW-1: 무게추는 회전하지 않는다
         if (rotationPolicy.rotate(board, currentBlock)) listener.onChanged(snapshot());
     }
 
     /** 내려갈 수 있는 만큼 한 번에 내리고 +칸수 x Level (SCR-2) 후 즉시 Lock. 점수는 Level이 바뀔 수 있는 Lock 전에 더한다 */
     public void hardDrop() {
-        if (state != GameState.PLAYING) return;
+        if (state != GameState.PLAYING || spawnPending) return;
 
         if (currentBlock.isWeight()) {
             crushToBottom(); // ITW-6, ITW-7: 점수 없음
@@ -166,7 +182,7 @@ public class GameSession {
             finishClearing(); // 150 ms가 지났다 (ANI-3)
             return;
         }
-        if (state != GameState.PLAYING) return;
+        if (state != GameState.PLAYING || spawnPending) return;
         descendOrLock();
     }
 
@@ -191,7 +207,7 @@ public class GameSession {
             clock.start(CLEAR_ANIMATION_MILLIS);
         } else {
             state = GameState.PLAYING;
-            clock.start(currentFallIntervalMillis);
+            if (!spawnPending) clock.start(currentFallIntervalMillis);
         }
         pausedDuringClearing = false;
         listener.onChanged(snapshot());
@@ -243,6 +259,33 @@ public class GameSession {
 
     public Difficulty getDifficulty() {
         return difficulty;
+    }
+
+    public boolean isSpawnPending() { return spawnPending; }
+
+    /** Compatibility hook; an in-flight lock keeps its original boundary. */
+    public void setSpawnBoundary(SpawnBoundary boundary) {
+        if (boundary == null) throw new IllegalArgumentException("spawnBoundary");
+        if (pendingClear != null || spawnPending) {
+            throw new IllegalStateException("lock settlement is in progress");
+        }
+        spawnBoundary = boundary;
+    }
+
+    /** Apply received attacks only after lock settlement and before the next Spawn. */
+    public void applyPendingAttack(AttackRows attack) {
+        if (!spawnPending || state != GameState.PLAYING || quitPending) {
+            throw new IllegalStateException("attacks require a settled Spawn boundary");
+        }
+        if (board.insertAttackRows(attack)) gameOver();
+    }
+
+    /** Engine resumes after applying its pending rows; repeated/paused/ended calls do nothing. */
+    public void resumeSpawn() {
+        if (!spawnPending || state != GameState.PLAYING || quitPending) return;
+        spawnPending = false;
+        spawnNextBlock();
+        if (state == GameState.PLAYING) listener.onChanged(snapshot());
     }
 
     public GameSnapshot snapshot() {
@@ -326,7 +369,11 @@ public class GameSession {
     }
 
     /** 한 번의 Lock에서 지워질 줄 R (§5 L2). 아이템이 지우는 칸 C는 아이템 구현 때 여기에 더한다 */
-    private record ClearPlan(List<Integer> rows, Set<Cell> cells) {
+    private record ClearPlan(List<Integer> rows, Set<Cell> cells, AttackRows attack) {
+        // Existing scoring audit constructs the single-player plan reflectively.
+        private ClearPlan(List<Integer> rows, Set<Cell> cells) {
+            this(rows, cells, AttackRows.NONE);
+        }
         boolean isEmpty() {
             return rows.isEmpty() && cells.isEmpty();
         }
@@ -380,7 +427,14 @@ public class GameSession {
         awardClearScore(plan, clearedCells);          // L5
         updateCounters(plan);                         // L6
         modifiers.finishLock();                       // L8: 이번에 획득한 D는 유지
-        spawnNextBlock();
+        if (spawnBoundary == SpawnBoundary.IMMEDIATE) {
+            spawnNextBlock(); // preserve the existing single-player path
+            return;
+        }
+        spawnPending = true;
+        clock.stop();
+        spawnBoundary.onLockResolved(new LockResult(plan.rowCount(), plan.attack()));
+        if (spawnPending && state == GameState.PLAYING && !spawnBoundary.deferSpawn()) resumeSpawn();
     }
 
     /** L1: 현재 블록 칸을 보드에 기록 */
@@ -404,7 +458,10 @@ public class GameSession {
 
         rows.removeIf(row -> row < -Board.MARGIN || row >= Board.HEIGHT); // 보드 밖 행은 무시
         cells.removeIf(cell -> rows.contains(cell.row()));
-        return new ClearPlan(new ArrayList<>(rows), cells);
+        List<Integer> deletedRows = new ArrayList<>(rows);
+        AttackRows attack = spawnBoundary == SpawnBoundary.IMMEDIATE ? AttackRows.NONE
+                : AttackRowExtractor.extract(board.copyCells(), deletedRows, placed);
+        return new ClearPlan(deletedRows, cells, attack);
     }
 
     // Lock한 블록의 아이템 칸마다 효과를 불러 지울 행·칸을 모은다. 아이템 칸의 보드 좌표 = 블록 위치 + 격자 위치

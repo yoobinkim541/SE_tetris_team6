@@ -1,0 +1,88 @@
+{
+  "checkedAtUtc": "2026-10-27T04:00:49.8307122Z",
+  "branch": "fix/checklist-compliance",
+  "baseCommit": "19b4f6f",
+  "sourceSheet": "https://docs.google.com/spreadsheets/d/1847XgHhucPiS1QZ23Hl1oCWT2MuSXmjq2V7wriGUftM/edit?gid=1911909482",
+  "requirementCount": 80,
+  "os": "Microsoft Windows 11 Home 10.0.26200",
+  "suites": {
+    "test": {
+      "tests": 897,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 9
+    },
+    "guiAcceptance": {
+      "tests": 9,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "requirementsAudit": {
+      "tests": 73,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "resourceAcceptance": {
+      "tests": 23,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "lineCoverage": {
+    "requiredPercent": 70,
+    "covered": 1986,
+    "percent": 90.11,
+    "missed": 218
+  },
+  "package": {
+    "observedStartupWorkingSetBytes": 123047936,
+    "maxInstalledBytes": 500000000,
+    "runtimeVersion": "JAVA_VERSION=\"21.0.12.1\"",
+    "installedBytes": 160792669,
+    "observedStartupPeakWorkingSetBytes": 123559936,
+    "exitCode": 0,
+    "zipSha256": "569025617018B3070145CF344D4C15B9130600AA3C86C42C02CD51DC5D21441B",
+    "jarSha256": "9B1F421EF1DE77AAFFDA90E7BEB33CAEA928D0199F8AB96B14040AF01BDD3146",
+    "windowCreated": true
+  },
+  "inputLatencyLogs": [
+    "test [checklist-input] mode=CLASSIC inputs=21 rate<=3Hz maxLatencyMs=19.978",
+    "test [checklist-input] mode=ITEM inputs=21 rate<=3Hz maxLatencyMs=5.301",
+    "resourceAcceptance [checklist-input] mode=CLASSIC inputs=21 rate<=3Hz maxLatencyMs=24.945",
+    "resourceAcceptance [checklist-input] mode=ITEM inputs=21 rate<=3Hz maxLatencyMs=5.532"
+  ],
+  "limitedHeapMiB": 256,
+  "limitations": [
+    "Minimum 1.2GHz CPU / total 1GB RAM hardware not reproduced.",
+    "Latency measures software EDT/action/offscreen render, not physical keyboard/display.",
+    "Heap limit excludes native JVM and OS memory.",
+    "Startup memory is not peak full-game memory.",
+    "Trello/Notion management evidence and tool-substitution acceptance require confirmation.",
+    "Changes not yet merged or published as a new release."
+  ],
+  "validationJavaRuntime": "Eclipse Temurin OpenJDK 21.0.12.1+1 (JAVA_HOME set for test/check/guiAcceptance/requirementsAudit/packageApp/resourceAcceptance)",
+  "supplementalJvmVerification": [
+    {
+      "task": "guiAcceptance",
+      "java21": true,
+      "heap256MiB": false,
+      "jacocoAgent": false
+    },
+    {
+      "task": "resourceAcceptance",
+      "java21": true,
+      "heap256MiB": true,
+      "jacocoAgent": false
+    },
+    {
+      "task": "requirementsAudit",
+      "java21": true,
+      "heap256MiB": false,
+      "jacocoAgent": false
+    }
+  ],
+  "jvmIncident": "One Java21 native C2 crash while compiling JaCoCo ClassReader; root cause not established. Removed redundant JaCoCo agents only from supplemental acceptance tasks; final full verification passed. Default test/check coverage unchanged."
+}

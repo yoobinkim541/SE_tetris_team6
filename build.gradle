@@ -13,7 +13,7 @@ repositories {
 }
 
 dependencies {
-    implementation 'com.fasterxml.jackson.core:jackson-databind:2.22.3' // 저장 계층(feature.save)에서만 사용 (PER-3)
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.22.3' // 저장 계층(feature.save, PER-3)과 P2P 전송 프레임(feature.network.protocol)에서만 사용
 
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
@@ -34,14 +34,43 @@ sourceSets.test.java.srcDir 'audit/java'
 
 tasks.register('guiAcceptance', Test) {
     group = 'verification'
-    description = '실제 Windows 화면의 메뉴·세션·결과 저장 연결 검증'
+    description = '실제 Windows 화면의 메뉴·세션·결과 저장 연결과 대전 화면 수명 검증'
     testClassesDirs = sourceSets.test.output.classesDirs
     classpath = sourceSets.test.runtimeClasspath
     useJUnitPlatform()
-    filter { includeTestsMatching 'tetris.ui.ProductionWiringAuditTest' }
+    // LINE coverage is collected by the default test task. Avoid duplicate agent
+    // instrumentation in native GUI checks (Java 21 C2/JaCoCo crash observed).
+    jacoco.enabled = false
+    filter {
+        includeTestsMatching 'tetris.ui.ProductionWiringAuditTest'
+        includeTestsMatching 'tetris.ui.BattleMainFrameTest'
+        // 3차 대전 화면: 실제 창 표시·숨김과 포커스 콜백의 키 해제·리스너 정리 (S7-B2)
+        includeTestsMatching 'tetris.versus.ui.BattleLifecycleTest'
+    }
     systemProperty 'java.awt.headless', 'false'
     systemProperty 'audit.gui', 'true'
+    systemProperty 'audit.native', providers.gradleProperty('nativeInput').getOrElse('false')
     systemProperty 'sun.java2d.uiScale', providers.gradleProperty('guiScale').getOrElse('1.0')
+}
+
+// 제한된 Java heap에서 UI 경로·개별 입력 지연·아이템 스트레스를 실행한다.
+// OS 전체 RAM 1GB / 1.2GHz 실기 인증과는 별개인 소프트웨어 자원 회귀 검증이다.
+tasks.register('resourceAcceptance', Test) {
+    group = 'verification'
+    description = '256MB Java heap에서 실제 창·입력 지연·스트레스 검증'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    maxHeapSize = '256m'
+    useJUnitPlatform()
+    // This task measures UI/resource behavior, not coverage.
+    jacoco.enabled = false
+    filter {
+        includeTestsMatching 'tetris.ui.ProductionWiringAuditTest'
+        includeTestsMatching 'tetris.ui.ChecklistInputLatencyTest'
+        includeTestsMatching 'tetris.feature.RandomInputStressTest'
+    }
+    systemProperty 'java.awt.headless', 'false'
+    systemProperty 'audit.gui', 'true'
 }
 
 jacocoTestReport {

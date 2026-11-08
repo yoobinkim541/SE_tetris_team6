@@ -1,4 +1,7 @@
-param([string]$Executable = 'build/jpackage/image-v2/SE Tetris/SE Tetris.exe')
+param(
+    [string]$Executable = 'build/jpackage/image-v2/SE Tetris/SE Tetris.exe',
+    [ValidateRange(1, [long]::MaxValue)][long]$MaxInstalledBytes = 500000000
+)
 $ErrorActionPreference = 'Stop'
 $workspace = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $exePath = [IO.Path]::GetFullPath((Join-Path $workspace $Executable))
@@ -6,6 +9,12 @@ if (-not $exePath.StartsWith($workspace + [IO.Path]::DirectorySeparatorChar, [St
     throw 'Executable must be inside this workspace.'
 }
 if (-not (Test-Path -LiteralPath $exePath -PathType Leaf)) { throw "Executable missing: $exePath" }
+$appDirectory = [IO.Path]::GetDirectoryName($exePath)
+$installedBytes = [long](Get-ChildItem -LiteralPath $appDirectory -File -Recurse |
+    Measure-Object -Property Length -Sum).Sum
+if ($installedBytes -gt $MaxInstalledBytes) {
+    throw "6-4: Installed package exceeds disk budget: $installedBytes > $MaxInstalledBytes bytes."
+}
 $outputDir = Join-Path $workspace 'build/verification'
 $profileDir = Join-Path $outputDir 'package-smoke-profile'
 New-Item -ItemType Directory -Path $profileDir -Force | Out-Null
@@ -46,8 +55,13 @@ try {
         windowProcessId = $windowProcess.Id
         windowTitle = $windowProcess.MainWindowTitle
         windowCreated = $true
+        installedBytes = $installedBytes
+        maxInstalledBytes = $MaxInstalledBytes
+        observedWindowWorkingSetBytes = $windowProcess.WorkingSet64
+        observedWindowPeakWorkingSetBytes = $windowProcess.PeakWorkingSet64
+        operatingSystem = [Environment]::OSVersion.VersionString
         isolatedAppData = $profileDir
-        scope = 'Native EXE window opens and closes; manual IME/play testing is separate.'
+        scope = 'Native EXE startup/exit and installed disk budget only. Observed startup memory is not a 1GB RAM / 1.2GHz hardware certification. Manual IME/play testing is separate.'
     }
     if (-not $windowProcess.CloseMainWindow()) { throw 'Package window rejected the close request.' }
     if (-not $windowProcess.WaitForExit(10000)) { throw 'Package GUI process did not exit after window close.' }

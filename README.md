@@ -1,6 +1,18 @@
 # SE Tetris · Team 6
 
+3차 Sprint 8 B: [대전 메뉴·2인 입력·공격 미리보기·결과 화면](docs/sprint8-b.md). 현재 기본 진입은 S8-A2 실제 엔진 연결 전의 Fake 미리보기입니다.
+
 Java 21과 Swing으로 구현한 테트리스입니다. 일반 모드의 난이도 3종과 아이템 모드, 키 설정, 분류별 스코어보드, Windows 실행 패키지를 제공합니다.
+
+3차 Sprint 7 B: [두 보드·대기열 Fake 데모와 2인 입력 사용법](docs/sprint7-b.md). 실제 엔진·네트워크 연결 전의 독립 화면 모형입니다.
+
+Sprint 7 마감: [A2 공격·대기열, 공통 계약 인수, AI 대리 시연·KPT와 검증 결과](docs/req3/s7-closeout.md).
+
+평가 준비: [체크리스트 80항목 대조·보완 결과](docs/checklist-compliance-2026-10-27.md) · [Java 21 검증 결과](docs/checklist-verification-2026-10-27.json). 최소 사양 실기 검증과 프로젝트 관리 도구 확인은 별도로 남아 있습니다.
+
+아이템 평가·플레이 안내: [아이템 모드 명세서 — L/B/D/S/W 효과·점수·검증 화면](docs/item-specification.md).
+
+2차 구현 및 검증: [요구사항 v2](docs/requirements-spec-v2.md). 일반 게임 난이도는 설정에서 선택하며 아이템 모드는 메인 메뉴에서 시작합니다. 스코어보드에서 좌우 키로 네 분류를 전환합니다.
 
 **[Windows ZIP 바로 다운로드](https://github.com/yoobinkim541/SE_tetris_team6/releases/download/v0.4.0-rc.3/SE-Tetris-windows.zip)** · **[실행 JAR 다운로드](https://github.com/yoobinkim541/SE_tetris_team6/releases/download/v0.4.0-rc.3/SE-Tetris.jar)** · **[릴리스 보기](https://github.com/yoobinkim541/SE_tetris_team6/releases/tag/v0.4.0-rc.3)** · [전체 릴리스](https://github.com/yoobinkim541/SE_tetris_team6/releases)
 

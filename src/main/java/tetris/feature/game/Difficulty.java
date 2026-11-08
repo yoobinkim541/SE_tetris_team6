@@ -6,15 +6,16 @@ import tetris.component.block.BlockType;
 
 /**
  * 난이도 (DIF-1~3, DIF-7). 난이도별 값은 이 enum 한 곳에서만 계산한다.
- * I 블록 가중치는 EASY +20%, HARD -20%이고 나머지 6종은 항상 10이다.
+ * I 블록 실제 확률은 NORMAL의 EASY 1.2배, HARD 0.8배이다.
+ * 합계 210의 정수 가중치로 정규화 오차 없이 표현하며 나머지 6종은 균등하다.
  * 레벨당 낙하 간격 감소폭은 EASY -20%, HARD +20% 비율을 유지한다.
  */
 public enum Difficulty {
-    EASY(12, 80, 400),
-    NORMAL(10, 100, 300),
-    HARD(8, 120, 250);
+    EASY(36, 80, 400),
+    NORMAL(30, 100, 300),
+    HARD(24, 120, 250);
 
-    private static final int OTHER_WEIGHT = 10;
+    private static final int TOTAL_WEIGHT = 210;
 
     private final int iWeight;
     private final int levelStepMillis;
@@ -43,7 +44,8 @@ public enum Difficulty {
     /** 블록 종류별 가중치. WeightedBlockGenerator의 입력 (GEN-4) */
     public Map<BlockType, Integer> weights() {
         Map<BlockType, Integer> weights = new EnumMap<>(BlockType.class);
-        for (BlockType type : BlockType.ordinary()) weights.put(type, OTHER_WEIGHT);
+        int otherWeight = (TOTAL_WEIGHT - iWeight) / 6;
+        for (BlockType type : BlockType.ordinary()) weights.put(type, otherWeight);
         weights.put(BlockType.I, iWeight);
         return weights;
     }

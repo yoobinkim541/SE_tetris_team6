@@ -29,6 +29,10 @@ import tetris.feature.score.ScoreEntry;
 import tetris.feature.score.Scoreboard;
 import tetris.feature.setting.ScreenSize;
 import tetris.feature.setting.Settings;
+import tetris.feature.versus.api.*;
+import tetris.ui.versus.*;
+import java.util.function.Function;
+import javax.swing.JOptionPane;
 
 /**
  * 메인 윈도우. CardLayout으로 화면을 전환한다 (명세 9, 13장). 크기 조절 불가.
@@ -37,7 +41,7 @@ import tetris.feature.setting.Settings;
  */
 public class MainFrame extends JFrame {
     /** 앱 화면 흐름 (GameState와 별개) */
-    public enum Screen { MAIN_MENU, GAME, SETTINGS, SCOREBOARD, NAME_INPUT, GAME_OVER }
+    public enum Screen { MAIN_MENU, GAME, SETTINGS, SCOREBOARD, NAME_INPUT, GAME_OVER, BATTLE_MODES, BATTLE, BATTLE_RESULT }
 
     private static final int MIN_CELL_PIXELS = 12;
 
@@ -61,10 +65,21 @@ public class MainFrame extends JFrame {
     private Screen currentScreen;
     private ScreenSize appliedScreenSize;
     private GameSnapshot finalResult; // 방금 끝난 게임의 마지막 상태 (Name 입력·스코어보드 등록용)
+    private final Function<MatchConfig, BattleClient> battleFactory;
+    private BattleScreenController battleController;
+    private long battleGeneration;
+    private final BattleResultPanel battleResultPanel;
 
     public MainFrame(Settings settings, Scoreboard scoreboard,
                      SettingsRepository settingsRepository, ScoreboardRepository scoreboardRepository) {
+        this(settings, scoreboard, settingsRepository, scoreboardRepository, LocalBattleClient::new);
+    }
+
+    public MainFrame(Settings settings, Scoreboard scoreboard,
+                     SettingsRepository settingsRepository, ScoreboardRepository scoreboardRepository,
+                     Function<MatchConfig, BattleClient> battleFactory) {
         super(Messages.get("app.title"));
+        this.battleFactory = java.util.Objects.requireNonNull(battleFactory);
         this.settings = settings;
         this.scoreboard = scoreboard;
         this.settingsRepository = settingsRepository;
@@ -75,7 +90,8 @@ public class MainFrame extends JFrame {
                 new MenuItem("아이템 모드", () -> startGame(GameMode.ITEM)),
                 new MenuItem(Messages.get("menu.settings"), this::openSettings),
                 new MenuItem(Messages.get("menu.scoreboard"), this::openScoreboard),
-                new MenuItem(Messages.get("menu.exit"), this::exitApplication)));
+                new MenuItem(Messages.get("menu.exit"), this::exitApplication),
+                new MenuItem("대전", this::openBattleModes)));
         PausePanel pausePanel = new PausePanel(this::resumeGame, this::confirmRestart, this::requestQuit);
         gamePanel = new GamePanel(settings, pausePanel, this::onGameOver);
         gameOverPanel = new GameOverPanel(this::afterGameOver);
@@ -94,6 +110,14 @@ public class MainFrame extends JFrame {
         addScreen(Screen.NAME_INPUT, nameInputPanel);
         addScreen(Screen.SCOREBOARD, scoreBoardPanel);
         addScreen(Screen.SETTINGS, settingPanel);
+        var modes = new MainMenuPanel(List.of(
+                new MenuItem("로컬 일반 대전", () -> startBattle(BattleMode.CLASSIC)),
+                new MenuItem("아이템 대전 · 준비 중", () -> {}),
+                new MenuItem("시간제한 대전 · 준비 중", () -> {}),
+                new MenuItem("메인 메뉴", () -> showScreen(Screen.MAIN_MENU))));
+        addScreen(Screen.BATTLE_MODES, modes);
+        battleResultPanel = new BattleResultPanel(this::openBattleModes, () -> showScreen(Screen.MAIN_MENU));
+        addScreen(Screen.BATTLE_RESULT, battleResultPanel);
         setContentPane(root);
 
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE); // EXT-1: 확인 없이 종료, 진행 중 게임은 폐기
@@ -103,12 +127,14 @@ public class MainFrame extends JFrame {
             public void windowDeactivated(WindowEvent e) {
                 onFocusLost();
             }
+            @Override public void windowClosing(WindowEvent e) { closeBattle(); }
         });
         applyScreenSize(settings.getScreenSize());
     }
 
     /** 화면 전환. 기존 ReturnToMain 역할 = showScreen(MAIN_MENU) */
     public void showScreen(Screen screen) {
+        if (currentScreen == Screen.BATTLE && screen != Screen.BATTLE) closeBattle();
         currentScreen = screen;
         cards.show(root, screen.name());
         if (screen == Screen.NAME_INPUT) nameInputPanel.focusField();
@@ -128,6 +154,7 @@ public class MainFrame extends JFrame {
 
     /** 프로그램 종료 (Main Menu '게임 종료', 창 닫기) */
     public void exitApplication() {
+        closeBattle();
         session.end();
         dispose();
         System.exit(0);
@@ -163,6 +190,7 @@ public class MainFrame extends JFrame {
     }
 
     private void startGame(GameMode mode) {
+        closeBattle();
         session.end();
         session = createSession(mode);
         keyBindings.bindGameKeys(gamePanel, settings.getKeyMap(), session);
@@ -259,8 +287,51 @@ public class MainFrame extends JFrame {
     /** 창 포커스 이탈: 게임 중이면 자동 Pause, 눌림 상태 초기화 (PAU-3, KEY-8) */
     private void onFocusLost() {
         keyBindings.clearPressedKeys();
+        if (currentScreen == Screen.BATTLE && battleController != null) battleController.focusLost();
         if (currentScreen == Screen.GAME) session.onFocusLost();
     }
+
+    public void openBattleModes() {
+        session.end();
+        keyBindings.setSuspended(true);
+        keyBindings.clearPressedKeys();
+        closeBattle();
+        showScreen(Screen.BATTLE_MODES);
+    }
+
+    public void startBattle(BattleMode mode) {
+        if (mode != BattleMode.CLASSIC) throw new IllegalArgumentException("mode is not available yet");
+        session.end();
+        keyBindings.setSuspended(true);
+        keyBindings.clearPressedKeys();
+        closeBattle();
+        JComponent previous = screens.remove(Screen.BATTLE);
+        if (previous != null) root.remove(previous);
+        var keys = new BattleKeyMap();
+        var panel = new BattlePanel(settings.isColorBlindMode(), keys.guide());
+        panel.setPreferredSize(GamePanel.preferredSizeFor(fitCellSize(settings.getScreenSize().cellPixels())));
+        addScreen(Screen.BATTLE, panel);
+        showScreen(Screen.BATTLE);
+        long generation = battleGeneration;
+        battleController = new BattleScreenController(getRootPane(),
+                battleFactory.apply(new MatchConfig(mode, settings.getDifficulty(), 0)), keys, panel,
+                snapshot -> javax.swing.SwingUtilities.invokeLater(() -> {
+                    if (currentScreen != Screen.BATTLE || generation != battleGeneration) return;
+                    battleResultPanel.setSnapshot(snapshot);
+                    showScreen(Screen.BATTLE_RESULT);
+                }),
+                () -> JOptionPane.showOptionDialog(this, "대전을 종료하시겠습니까?", "대전 종료",
+                        JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE, null,
+                        new Object[]{"예", "아니요"}, "아니요") == JOptionPane.YES_OPTION,
+                this::openBattleModes);
+    }
+
+    private void closeBattle() {
+        battleGeneration++;
+        if (battleController != null) { battleController.close(); battleController = null; }
+    }
+
+    @Override public void dispose() { closeBattle(); super.dispose(); }
 
     // ── 설정·저장 ────────────────────────────
     private boolean onSettingsChanged() {

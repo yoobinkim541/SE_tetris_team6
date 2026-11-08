@@ -23,7 +23,7 @@ jobs:
         with:
           gradle-version: '8.10.2'
       - name: Windows acceptance and package
-        run: gradle check guiAcceptance releaseJar packageApp --no-daemon
+        run: gradle check guiAcceptance resourceAcceptance releaseJar packageApp --no-daemon
       - name: Verify packaged EXE
         run: ./scripts/verify-package.ps1
       - name: Upload Windows acceptance evidence

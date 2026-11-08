@@ -63,6 +63,7 @@ public class RandomInputStressTest {
         int previousLevel = 1;
         int games = 1;
         long elapsedNanos = 0;
+        long maxOperationNanos = 0;
 
         for (int i = 0; i < OPERATIONS; i++) {
             Input input = choices[inputs.nextInt(choices.length)];
@@ -70,7 +71,9 @@ public class RandomInputStressTest {
                 seenWeight |= observeItems(session.snapshot().currentBlock(), seenItems);
             long start = System.nanoTime();
             apply(session, input);
-            elapsedNanos += System.nanoTime() - start;
+            long operationNanos = System.nanoTime() - start;
+            elapsedNanos += operationNanos;
+            maxOperationNanos = Math.max(maxOperationNanos, operationNanos);
 
             GameSnapshot snapshot = session.snapshot();
             String where = "seed " + seed + ", op " + i + " (" + input + ")";
@@ -92,6 +95,9 @@ public class RandomInputStressTest {
         System.out.printf("[stress] seed %d: %,d ops, %d games, avg %,d ns/op, total %,d ms%n",
                 seed, OPERATIONS, games, average, elapsedNanos / 1_000_000);
         assertTrue(average < MAX_AVERAGE_NANOS, "입력 1회 평균 처리 시간이 너무 길다: " + average + " ns");
+        assertTrue(maxOperationNanos < 1_000_000_000L, "6-5: 개별 엔진 조작 지연이 1초 이상: " + maxOperationNanos + " ns");
+        System.out.printf("[stress-max] seed=%d mode=%s forceItems=%s maxOperationMs=%.3f%n",
+                seed, itemMode ? "ITEM" : "CLASSIC", forceItems, maxOperationNanos / 1_000_000.0);
         if (forceItems) {
             assertEquals(EnumSet.allOf(ItemType.class), seenItems, "네 칸 아이템 모두 실제 Lock되어야 한다");
             assertTrue(seenWeight, "무게추 Hard Drop도 실제 실행되어야 한다");
