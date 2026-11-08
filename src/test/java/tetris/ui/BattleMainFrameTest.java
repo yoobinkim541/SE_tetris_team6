@@ -19,6 +19,54 @@ class BattleMainFrameTest {
     private Object field(Object owner, String name) throws Exception {
         Field f = owner.getClass().getDeclaredField(name); f.setAccessible(true); return f.get(owner);
     }
+    private static int firstVisibleColumn(int[][] cells) {
+        for (int[] row : cells) for (int col=0; col<row.length; col++) if(row[col]!=0) return col;
+        return -1;
+    }
+    @Test void defaultFactoryRunsRealMatchAndReachesResultWithoutSaving() throws Exception {
+        MainFrame[] frame = new MainFrame[1]; var scores = new Scoreboard(java.util.List.of());
+        var moved = new java.util.concurrent.CountDownLatch(1);
+        int[] initialColumns = {-1, -1};
+        var client = new java.util.concurrent.atomic.AtomicReference<LocalBattleClient>();
+        Path scoreFile = directory.resolve("real-scores.json");
+        var robot = new java.awt.Robot(); robot.setAutoDelay(60);
+        try {
+            SwingUtilities.invokeAndWait(() -> {
+                frame[0] = new MainFrame(new Settings(), scores,
+                    new JsonSettingsRepository(directory.resolve("settings.json")), new JsonScoreboardRepository(scoreFile));
+                frame[0].setVisible(true); frame[0].startBattle(BattleMode.CLASSIC); frame[0].toFront();
+                try {
+                    Object controller = field(frame[0], "battleController");
+                    client.set((LocalBattleClient) field(controller, "client"));
+                    client.get().subscribe(state -> {
+                        int one=firstVisibleColumn(state.one().cells()), two=firstVisibleColumn(state.two().cells());
+                        if(initialColumns[0]<0) { initialColumns[0]=one; initialColumns[1]=two; }
+                        else if(one==initialColumns[0]-1 && two==initialColumns[1]+1) moved.countDown();
+                    });
+                } catch(Exception e) { throw new RuntimeException(e); }
+            });
+            robot.waitForIdle();
+            // Actual OS events, overlapping across both players, through the production root router.
+            robot.keyPress(java.awt.event.KeyEvent.VK_LEFT); robot.keyPress(java.awt.event.KeyEvent.VK_D);
+            robot.keyRelease(java.awt.event.KeyEvent.VK_D); robot.keyRelease(java.awt.event.KeyEvent.VK_LEFT);
+            assertTrue(moved.await(3, java.util.concurrent.TimeUnit.SECONDS), "OS input must move both real sessions");
+            var capture = robot.createScreenCapture(new java.awt.Rectangle(0,0,1280,1024));
+            java.nio.file.Files.createDirectories(Path.of("build/verification"));
+            javax.imageio.ImageIO.write(capture,"png",Path.of("build/verification/sprint8-local-screen.png").toFile());
+            SwingUtilities.invokeAndWait(() -> client.get().send(new PlayerCommand(PlayerId.TWO,
+                tetris.feature.setting.GameAction.QUIT,true,10000)));
+            SwingUtilities.invokeAndWait(() -> {
+                try {
+                    assertEquals(MainFrame.Screen.BATTLE_RESULT, field(frame[0], "currentScreen"));
+                    assertTrue(((BattleResultPanel)field(frame[0],"battleResultPanel")).getSummaryText().contains("P1"));
+                    assertTrue(scores.entries().isEmpty()); assertFalse(java.nio.file.Files.exists(scoreFile));
+                } catch(Exception e) { throw new RuntimeException(e); }
+            });
+        } finally {
+            robot.keyRelease(java.awt.event.KeyEvent.VK_LEFT); robot.keyRelease(java.awt.event.KeyEvent.VK_D);
+            SwingUtilities.invokeAndWait(() -> { if(frame[0]!=null)frame[0].dispose(); });
+        }
+    }
     @Test
     @EnabledIfSystemProperty(named="audit.native", matches="true")
     void nativeOverlappingPlayerKeysReachOneWindow() throws Exception { overlappingKeys(true); }

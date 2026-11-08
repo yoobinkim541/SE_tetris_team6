@@ -65,7 +65,12 @@ public final class BattleScreenController implements AutoCloseable {
             try { quit = confirmQuit.getAsBoolean(); }
             finally { confirming = false; }
             if (closed) return;
-            if (quit) { dispatch(command); close(); onExit.run(); }
+            if (quit) {
+                dispatch(command);
+                // The real client publishes a forfeit result synchronously. Preserve
+                // that result screen; only preview/legacy clients need an explicit exit.
+                if (current.phase() != MatchPhase.FINISHED) { close(); onExit.run(); }
+            }
             else if (wasPlaying && current.phase() == MatchPhase.PAUSED) pauseCommand();
         } else {
             if (command.action() == GameAction.PAUSE) router.clearGameplayKeys();
@@ -74,6 +79,8 @@ public final class BattleScreenController implements AutoCloseable {
     }
 
     private void pauseCommand() {
+        // Automatic pause/resume is a fresh transition even while physical P is held.
+        dispatch(new PlayerCommand(PlayerId.ONE, GameAction.PAUSE, false, 0));
         dispatch(new PlayerCommand(PlayerId.ONE, GameAction.PAUSE, true, 0));
         dispatch(new PlayerCommand(PlayerId.ONE, GameAction.PAUSE, false, 0));
     }
