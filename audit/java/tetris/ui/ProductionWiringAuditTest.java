@@ -28,9 +28,9 @@ class ProductionWiringAuditTest {
     @TempDir Path directory;
 
     @Test
-    void actualMainMenuContainsFiveEntries() throws Exception {
-        withFrame(new Settings(), frame -> assertEquals(5, menuItems(frame).size(),
-                "Production menu must expose classic, item, settings, scoreboard and exit"));
+    void actualMainMenuContainsSixEntries() throws Exception {
+        withFrame(new Settings(), frame -> assertEquals(6, menuItems(frame).size(),
+                "Production menu must expose classic, item, settings, scoreboard, exit and versus"));
     }
 
     @Test

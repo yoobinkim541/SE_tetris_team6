@@ -81,6 +81,12 @@ public final class BattleInputRouter implements AutoCloseable {
         var previous=List.copyOf(held); held.clear();
         for(Target target:previous) send(target,false);
     }
+    /** Keep shared key latches until physical release to prevent pause/quit auto-repeat. */
+    public void clearGameplayKeys() {
+        for (Target target : List.copyOf(held)) {
+            if (!BattleKeyMap.isShared(target.action())) release(target);
+        }
+    }
     /** Sequence stays monotonic for this router; a new match never inherits held keys. */
     public void resetForMatch(String matchId) {
         Objects.requireNonNull(matchId);

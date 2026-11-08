@@ -37,4 +37,21 @@ public final class BattleKeyMap {
         keys.put(target,code); return true;
     }
     public Map<Target,Integer> bindings() { return Collections.unmodifiableMap(new LinkedHashMap<>(keys)); }
+
+    /** Display the actual current bindings, including remapped shared actions. */
+    public String guide() {
+        return playerGuide(PlayerId.ONE, "P1") + "\n" + playerGuide(PlayerId.TWO, "P2")
+            + "\n공통: 일시정지 " + keyName(PlayerId.ONE, GameAction.PAUSE)
+            + " / 나가기 " + keyName(PlayerId.ONE, GameAction.QUIT);
+    }
+    private String playerGuide(PlayerId player, String label) {
+        return label + ": 왼쪽 " + keyName(player, GameAction.MOVE_LEFT)
+            + " / 오른쪽 " + keyName(player, GameAction.MOVE_RIGHT)
+            + " / 내리기 " + keyName(player, GameAction.SOFT_DROP)
+            + " / 회전 " + keyName(player, GameAction.ROTATE)
+            + " / 즉시 내리기 " + keyName(player, GameAction.HARD_DROP);
+    }
+    private String keyName(PlayerId player, GameAction action) {
+        return KeyEvent.getKeyText(keyOf(player, action));
+    }
 }
