@@ -187,21 +187,32 @@ class PeerEstablisherTest {
         AtomicReference<Thread> clientCompletionThread = new AtomicReference<>();
         CountDownLatch bothCallbacks = new CountDownLatch(2);
 
-        PeerEstablisher.Attempt hostAttempt = track(hostEst.host(0));
-        hostAttempt.result().thenRun(() -> {
-            hostCompletionThread.set(Thread.currentThread());
-            bothCallbacks.countDown();
-        });
+        // Register callbacks before either dispatcher can complete its future.
+        // A late thenRun (or a get helping completion) can run on the test worker.
+        CountDownLatch allowCompletion = new CountDownLatch(1);
+        hostDispatcher.submit(() -> { allowCompletion.await(); return null; });
+        clientDispatcher.submit(() -> { allowCompletion.await(); return null; });
+        PeerEstablisher.Attempt hostAttempt;
+        PeerEstablisher.Attempt clientAttempt;
+        try {
+            hostAttempt = track(hostEst.host(0));
+            hostAttempt.result().thenRun(() -> {
+                hostCompletionThread.set(Thread.currentThread());
+                bothCallbacks.countDown();
+            });
 
-        PeerEstablisher.Attempt clientAttempt = track(clientEst.connect("127.0.0.1", hostAttempt.localPort()));
-        clientAttempt.result().thenRun(() -> {
-            clientCompletionThread.set(Thread.currentThread());
-            bothCallbacks.countDown();
-        });
-
+            clientAttempt = track(clientEst.connect("127.0.0.1", hostAttempt.localPort()));
+            clientAttempt.result().thenRun(() -> {
+                clientCompletionThread.set(Thread.currentThread());
+                bothCallbacks.countDown();
+            });
+        } finally {
+            allowCompletion.countDown();
+        }
+        boolean callbacksReceived = bothCallbacks.await(WAIT_SECONDS, TimeUnit.SECONDS);
         track(hostAttempt.result().get(WAIT_SECONDS, TimeUnit.SECONDS));
         track(clientAttempt.result().get(WAIT_SECONDS, TimeUnit.SECONDS));
-        assertTrue(bothCallbacks.await(WAIT_SECONDS, TimeUnit.SECONDS));
+        assertTrue(callbacksReceived);
 
         assertEquals(expectedHostThread, hostCompletionThread.get());
         assertEquals(expectedClientThread, clientCompletionThread.get());
