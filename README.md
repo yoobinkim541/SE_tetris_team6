@@ -1,6 +1,6 @@
 # SE Tetris · Team 6
 
-3차 Sprint 8 B: [대전 메뉴·2인 입력·공격 미리보기·결과 화면](docs/sprint8-b.md). 현재 기본 진입은 S8-A2 실제 엔진 연결 전의 Fake 미리보기입니다.
+3차 Sprint 8: [실제 로컬 대전·공격 삽입·승패](docs/sprint8-local.md) · [검증·리뷰와 남은 실키보드 인수](docs/sprint8-closeout.md). 메인 메뉴의 대전은 실제 두 게임 세션을 실행합니다.
 
 Java 21과 Swing으로 구현한 테트리스입니다. 일반 모드의 난이도 3종과 아이템 모드, 키 설정, 분류별 스코어보드, Windows 실행 패키지를 제공합니다.
 

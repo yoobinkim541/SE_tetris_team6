@@ -74,7 +74,9 @@ class LocalMatchEngineTest {
     }
     @Test void oneTopOutHasOtherWinnerAndStopsBothClocks() throws Exception {
         var e=engine();for(int i=0;i<20&&e.snapshot().phase()!=MatchPhase.FINISHED;i++){
+            long before=e.snapshot().revision();
             release(e,PlayerId.ONE,GameAction.HARD_DROP);press(e,PlayerId.ONE,GameAction.HARD_DROP);e.advance(i);
+            if(e.snapshot().phase()==MatchPhase.FINISHED)assertEquals(before+1,e.snapshot().revision());
         }
         assertEquals(PlayerId.TWO,e.snapshot().result().winner());
         long score=e.snapshot().two().score();e.advance(100000);assertEquals(score,e.snapshot().two().score());
@@ -95,6 +97,10 @@ class LocalMatchEngineTest {
         assertEquals(PlayerId.ONE,e.snapshot().result().winner());assertEquals(MatchResult.EndReason.FORFEIT,e.snapshot().result().reason());
         e.start(MatchConfig.of(BattleMode.CLASSIC));assertNotEquals(id,e.snapshot().matchId());
         assertEquals(MatchPhase.PLAYING,e.snapshot().phase());assertEquals(0,e.snapshot().one().score());
+        e.submit(new PlayerCommand(PlayerId.ONE,GameAction.HARD_DROP,true,0));e.advance(0);
+        assertTrue(e.snapshot().one().score()>0,"fresh match accepts a reset sequence and fresh press");
+        e.submit(new PlayerCommand(PlayerId.TWO,GameAction.QUIT,true,0));e.advance(0);
+        assertEquals(MatchPhase.FINISHED,e.snapshot().phase(),"previous Quit latch must not survive restart");
         e.close();e.close();assertThrows(IllegalStateException.class,()->e.start(MatchConfig.of(BattleMode.CLASSIC)));
     }
     @Test void unsupportedSprintNineModesAreExplicitlyRejected() {
