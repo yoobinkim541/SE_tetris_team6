@@ -35,6 +35,8 @@ gradle check guiAcceptance releaseJar -PnativeInput=true --offline --no-daemon -
 
 ## 남은 실기·협업 인수
 
+최신 팀원 승인·main 병합과 후속 권고 처리 상태는 [Sprint 8 마감 인수 기록](sprint8-closeout.md)을 따른다. 아래는 #138 작성 당시의 남은 작업 이력이다.
+
 - 실제 사용자 물리 키보드의 동시 입력/롤오버 확인: 가상 X11 OS 키 주입으로 인증할 수 없다.
 - 다른 팀원 1명의 실제 리뷰 및 PR 병합.
 - Windows CI 결과는 PR의 해당 실행 결과로 별도 확인한다. 이 문서의 로컬 Linux 통과를 Windows 실행 근거로 쓰지 않는다.

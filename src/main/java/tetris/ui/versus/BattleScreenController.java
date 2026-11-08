@@ -3,6 +3,7 @@ package tetris.ui.versus;
 import java.util.Objects;
 import java.util.function.BooleanSupplier;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 import javax.swing.JRootPane;
 import tetris.feature.setting.GameAction;
 import tetris.feature.versus.api.*;
@@ -13,7 +14,7 @@ public final class BattleScreenController implements AutoCloseable {
     private final BattleInputRouter router;
     private BattleClient.Subscription subscription;
     private final Consumer<MatchSnapshot> onResult;
-    private final BooleanSupplier confirmQuit;
+    private final Supplier<PlayerId> confirmQuit;
     private final Runnable onExit;
     private MatchSnapshot current;
     private boolean confirming;
@@ -22,26 +23,48 @@ public final class BattleScreenController implements AutoCloseable {
 
     public BattleScreenController(JRootPane root, BattleClient client, BattleKeyMap keys,
             BattlePanel panel, Consumer<MatchSnapshot> onResult, BooleanSupplier confirmQuit, Runnable onExit) {
+        this(root, client, keys, panel, onResult, legacyConfirmation(confirmQuit), onExit);
+    }
+
+    private static Supplier<PlayerId> legacyConfirmation(BooleanSupplier confirm) {
+        return confirm == null ? null : () -> confirm.getAsBoolean() ? PlayerId.ONE : null;
+    }
+
+    /** Shared Quit chooses the forfeiting player; null cancels and resumes the match. */
+    public BattleScreenController(JRootPane root, BattleClient client, BattleKeyMap keys,
+            BattlePanel panel, Consumer<MatchSnapshot> onResult, Supplier<PlayerId> confirmQuit, Runnable onExit) {
         this.client = Objects.requireNonNull(client);
-        this.onResult = Objects.requireNonNull(onResult);
-        this.confirmQuit = Objects.requireNonNull(confirmQuit);
-        this.onExit = Objects.requireNonNull(onExit);
-        router = new BattleInputRouter(root, keys, this::send, this::accepts);
-        var subscribed = client.subscribe(snapshot -> {
-            if (closed) return;
-            MatchSnapshot previous = current;
-            current = snapshot;
-            router.resetForMatch(snapshot.matchId());
-            if (previous != null && previous.phase() != snapshot.phase()) router.clearGameplayKeys();
-            panel.setSnapshot(snapshot);
-            if (snapshot.phase() == MatchPhase.FINISHED) {
-                router.close();
-                if (subscription != null) subscription.close();
-                this.onResult.accept(snapshot);
+        BattleInputRouter installed = null;
+        try {
+            this.onResult = Objects.requireNonNull(onResult);
+            this.confirmQuit = Objects.requireNonNull(confirmQuit);
+            this.onExit = Objects.requireNonNull(onExit);
+            Objects.requireNonNull(panel);
+            router = new BattleInputRouter(root, keys, this::send, this::accepts);
+            installed = router;
+            var subscribed = client.subscribe(snapshot -> {
+                if (closed) return;
+                MatchSnapshot previous = current;
+                current = snapshot;
+                router.resetForMatch(snapshot.matchId());
+                if (previous != null && previous.phase() != snapshot.phase()) router.clearGameplayKeys();
+                panel.setSnapshot(snapshot);
+                if (snapshot.phase() == MatchPhase.FINISHED) {
+                    router.close();
+                    if (subscription != null) subscription.close();
+                    this.onResult.accept(snapshot);
+                }
+            });
+            subscription = subscribed;
+            if (closed || current != null && current.phase() == MatchPhase.FINISHED) subscribed.close();
+        } catch (RuntimeException | Error failure) {
+            closed = true;
+            if (installed != null) {
+                try { installed.close(); } catch (RuntimeException | Error cleanup) { failure.addSuppressed(cleanup); }
             }
-        });
-        subscription = subscribed;
-        if (closed || current != null && current.phase() == MatchPhase.FINISHED) subscribed.close();
+            try { client.close(); } catch (RuntimeException | Error cleanup) { failure.addSuppressed(cleanup); }
+            throw failure;
+        }
     }
 
     private boolean accepts(GameAction action) {
@@ -61,12 +84,13 @@ public final class BattleScreenController implements AutoCloseable {
             router.clearGameplayKeys();
             boolean wasPlaying = current.phase() == MatchPhase.PLAYING;
             if (wasPlaying) pauseCommand();
-            boolean quit;
-            try { quit = confirmQuit.getAsBoolean(); }
+            if (closed || current.phase() == MatchPhase.FINISHED) { confirming = false; return; }
+            PlayerId forfeiting;
+            try { forfeiting = confirmQuit.get(); }
             finally { confirming = false; }
-            if (closed) return;
-            if (quit) {
-                dispatch(command);
+            if (closed || current.phase() == MatchPhase.FINISHED) return;
+            if (forfeiting != null) {
+                dispatch(new PlayerCommand(forfeiting,GameAction.QUIT,true,0));
                 // The real client publishes a forfeit result synchronously. Preserve
                 // that result screen; only preview/legacy clients need an explicit exit.
                 if (current.phase() != MatchPhase.FINISHED) { close(); onExit.run(); }

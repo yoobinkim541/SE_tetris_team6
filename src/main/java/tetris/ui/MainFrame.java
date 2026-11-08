@@ -320,10 +320,15 @@ public class MainFrame extends JFrame {
                     battleResultPanel.setSnapshot(snapshot);
                     showScreen(Screen.BATTLE_RESULT);
                 }),
-                () -> JOptionPane.showOptionDialog(this, "대전을 종료하시겠습니까?", "대전 종료",
-                        JOptionPane.YES_NO_OPTION, JOptionPane.QUESTION_MESSAGE, null,
-                        new Object[]{"예", "아니요"}, "아니요") == JOptionPane.YES_OPTION,
+                this::confirmBattleForfeit,
                 this::openBattleModes);
+    }
+
+    private PlayerId confirmBattleForfeit() {
+        int choice = JOptionPane.showOptionDialog(this, "기권할 플레이어를 선택하세요.", "대전 기권",
+                JOptionPane.DEFAULT_OPTION, JOptionPane.QUESTION_MESSAGE, null,
+                new Object[]{"P1 기권", "P2 기권", "취소"}, "취소");
+        return switch (choice) { case 0 -> PlayerId.ONE; case 1 -> PlayerId.TWO; default -> null; };
     }
 
     private void closeBattle() {

@@ -65,6 +65,7 @@ public class GameSession {
     private final Difficulty difficulty;
     private SpawnBoundary spawnBoundary;
     private boolean spawnPending;
+    private boolean attackApplied;
 
     /** 일반 모드·NORMAL 난이도 */
     public GameSession(BlockGenerator generator, GameClock clock, GameListener listener) {
@@ -106,6 +107,7 @@ public class GameSession {
         currentBlock = null;
         quitPending = false;
         spawnPending = false;
+        attackApplied = false;
         stateBeforeQuit = null;
         pendingClear = null;
         pausedDuringClearing = false;
@@ -130,6 +132,7 @@ public class GameSession {
         currentBlock = null;
         quitPending = false;
         spawnPending = false;
+        attackApplied = false;
         stateBeforeQuit = null;
         pendingClear = null;
         pausedDuringClearing = false;
@@ -274,16 +277,19 @@ public class GameSession {
 
     /** Apply received attacks only after lock settlement and before the next Spawn. */
     public void applyPendingAttack(AttackRows attack) {
-        if (!spawnPending || state != GameState.PLAYING || quitPending) {
+        if (!spawnPending || attackApplied || state != GameState.PLAYING || quitPending) {
             throw new IllegalStateException("attacks require a settled Spawn boundary");
         }
-        if (board.insertAttackRows(attack)) gameOver();
+        boolean overflow = board.insertAttackRows(attack);
+        attackApplied = true;
+        if (overflow) gameOver();
     }
 
     /** Engine resumes after applying its pending rows; repeated/paused/ended calls do nothing. */
     public void resumeSpawn() {
         if (!spawnPending || state != GameState.PLAYING || quitPending) return;
         spawnPending = false;
+        attackApplied = false;
         spawnNextBlock();
         if (state == GameState.PLAYING) listener.onChanged(snapshot());
     }
@@ -432,6 +438,7 @@ public class GameSession {
             return;
         }
         spawnPending = true;
+        attackApplied = false;
         clock.stop();
         spawnBoundary.onLockResolved(new LockResult(plan.rowCount(), plan.attack()));
         if (spawnPending && state == GameState.PLAYING && !spawnBoundary.deferSpawn()) resumeSpawn();
@@ -525,6 +532,8 @@ public class GameSession {
     }
 
     private void gameOver() {
+        spawnPending = false;
+        attackApplied = false;
         state = GameState.GAME_OVER;
         clock.stop();
         listener.onGameOver(snapshot());
