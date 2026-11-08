@@ -64,6 +64,19 @@ class GarbageInsertionTest {
         assertThrows(IllegalStateException.class,()->s.applyPendingAttack(rows()));
         s.resumeSpawn();assertEquals(9,s.snapshot().cells()[19][0]);
     }
+    @Test void secondInsertionAtSameBoundaryIsRejectedWithoutChangingBoard() {
+        var s=session();s.start();s.hardDrop();s.applyPendingAttack(rows());
+        var before=s.snapshot().cells();
+        assertThrows(IllegalStateException.class,()->s.applyPendingAttack(rows()));
+        assertArrayEquals(before,s.snapshot().cells());
+        s.resumeSpawn();s.hardDrop();assertDoesNotThrow(()->s.applyPendingAttack(rows()));
+    }
+    @Test void insertingGarbageRemovesBottomItemMarks() {
+        var b=new Board();var marked=cell(19,2);marked.attachItem(0,0,ItemType.DOUBLE_SCORE);
+        assertTrue(b.tryPlaceBlock(marked));b.insertAttackRows(rows());
+        assertEquals(ItemType.DOUBLE_SCORE,b.copyItemCells().get(new Cell(17,2)));
+        assertFalse(b.copyItemCells().containsKey(new Cell(19,2)));
+    }
     @Test void clearingMustSettleBeforeInsertionAndOverflowEndsSession() throws Exception {
         GameSession s=session();s.start();
         for(int r:new int[]{18,19})for(int c=0;c<10;c++)if(c!=4&&c!=5)assertTrue(board(s).tryPlaceBlock(cell(r,c)));
@@ -71,6 +84,7 @@ class GarbageInsertionTest {
         assertThrows(IllegalStateException.class,()->s.applyPendingAttack(rows()));
         s.tick();assertTrue(s.isSpawnPending());
         assertTrue(board(s).tryPlaceBlock(cell(0,0)));s.applyPendingAttack(rows());
-        assertEquals(GameState.GAME_OVER,s.getState());s.resumeSpawn();assertNull(s.snapshot().currentBlock());
+        assertEquals(GameState.GAME_OVER,s.getState());assertFalse(s.isSpawnPending());
+        s.resumeSpawn();assertNull(s.snapshot().currentBlock());
     }
 }

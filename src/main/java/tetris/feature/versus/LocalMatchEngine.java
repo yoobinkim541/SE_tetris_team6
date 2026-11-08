@@ -131,7 +131,7 @@ public final class LocalMatchEngine implements MatchEngine {
         if (phase != MatchPhase.FINISHED) {
             commands.addAll(deferred);
             if (phase == MatchPhase.PLAYING) settleSpawnBoundaries();
-            revision++; updateSnapshot();
+            if (phase != MatchPhase.FINISHED) { revision++; updateSnapshot(); }
         }
     }
 

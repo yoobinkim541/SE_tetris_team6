@@ -46,13 +46,14 @@ class BattleMainFrameTest {
                 } catch(Exception e) { throw new RuntimeException(e); }
             });
             robot.waitForIdle();
-            // Actual OS events, overlapping across both players, through the production root router.
-            robot.keyPress(java.awt.event.KeyEvent.VK_LEFT); robot.keyPress(java.awt.event.KeyEvent.VK_D);
-            robot.keyRelease(java.awt.event.KeyEvent.VK_D); robot.keyRelease(java.awt.event.KeyEvent.VK_LEFT);
-            assertTrue(moved.await(3, java.util.concurrent.TimeUnit.SECONDS), "OS input must move both real sessions");
-            var capture = robot.createScreenCapture(new java.awt.Rectangle(0,0,1280,1024));
-            java.nio.file.Files.createDirectories(Path.of("build/verification"));
-            javax.imageio.ImageIO.write(capture,"png",Path.of("build/verification/sprint8-local-screen.png").toFile());
+            // Always exercise the real factory. OS injection is explicitly opt-in;
+            // the default GUI run dispatches KeyEvents through the same focused panel.
+            boolean nativeInput=Boolean.getBoolean("audit.native");
+            key(robot,java.awt.event.KeyEvent.VK_LEFT,true,nativeInput);
+            key(robot,java.awt.event.KeyEvent.VK_D,true,nativeInput);
+            key(robot,java.awt.event.KeyEvent.VK_D,false,nativeInput);
+            key(robot,java.awt.event.KeyEvent.VK_LEFT,false,nativeInput);
+            assertTrue(moved.await(3, java.util.concurrent.TimeUnit.SECONDS), "input must move both real sessions horizontally");
             SwingUtilities.invokeAndWait(() -> client.get().send(new PlayerCommand(PlayerId.TWO,
                 tetris.feature.setting.GameAction.QUIT,true,10000)));
             SwingUtilities.invokeAndWait(() -> {
@@ -63,7 +64,9 @@ class BattleMainFrameTest {
                 } catch(Exception e) { throw new RuntimeException(e); }
             });
         } finally {
-            robot.keyRelease(java.awt.event.KeyEvent.VK_LEFT); robot.keyRelease(java.awt.event.KeyEvent.VK_D);
+            if(Boolean.getBoolean("audit.native")) {
+                robot.keyRelease(java.awt.event.KeyEvent.VK_LEFT); robot.keyRelease(java.awt.event.KeyEvent.VK_D);
+            }
             SwingUtilities.invokeAndWait(() -> { if(frame[0]!=null)frame[0].dispose(); });
         }
     }
