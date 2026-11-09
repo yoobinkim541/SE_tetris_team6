@@ -11,10 +11,16 @@ import tetris.component.block.Block;
 import tetris.feature.game.*;
 import tetris.feature.rule.BlockGenerator;
 import tetris.feature.rule.WeightedBlockGenerator;
+import tetris.feature.item.Cell;
+import tetris.feature.item.ItemType;
 import tetris.feature.setting.GameAction;
 import tetris.feature.versus.api.*;
 
-/** EDT-confined authority for one local classic match. A pulse settles both players before deciding a result. */
+/**
+ * EDT-confined authority for one match (CLASSIC, ITEM, TIMED). A pulse settles both players before deciding a result.
+ * TIMED: the deadline freezes while PAUSED, inputs stamped at or after it are ignored, due work at the deadline
+ * is not executed, and a top-out decided in the same pulse wins over TIME_UP (D-05, D-06).
+ */
 public final class LocalMatchEngine implements MatchEngine {
     private final MatchClock time;
     private final Function<PlayerId, BlockGenerator> generators;
@@ -33,6 +39,9 @@ public final class LocalMatchEngine implements MatchEngine {
     private MatchResult result;
     private MatchSnapshot snapshot;
     private boolean closed;
+    private boolean timed;
+    private long deadline = Long.MAX_VALUE;
+    private long pausedAt;
 
     public LocalMatchEngine() { this(MatchClock.system(), null); }
 
@@ -45,16 +54,18 @@ public final class LocalMatchEngine implements MatchEngine {
     @Override public void start(MatchConfig config) {
         if (closed) throw new IllegalStateException("engine closed");
         Objects.requireNonNull(config);
-        if (config.mode() != BattleMode.CLASSIC) throw new IllegalArgumentException("only CLASSIC is available in Sprint 8");
         for (var session : sessions) if (session != null) session.end();
         pulseTime = time.nowMillis(); revision = 0; matchId = UUID.randomUUID().toString();
         phase = MatchPhase.PLAYING; result = null; commands.clear(); Arrays.fill(lastSequence, -1);
+        timed = config.mode().timed();
+        deadline = timed ? pulseTime + config.timeLimitMillis() : Long.MAX_VALUE;
+        GameMode sessionMode = config.mode().itemsEnabled() ? GameMode.ITEM : GameMode.CLASSIC;
         for (PlayerId player : PlayerId.values()) {
             int i = player.ordinal(); held.get(i).clear(); pending[i].clear(); outgoing[i] = AttackRows.NONE;
             clocks[i] = new DueTimeClock(() -> pulseTime);
             BlockGenerator generator = generators == null
                     ? new WeightedBlockGenerator(config.difficulty().weights(), new Random()) : generators.apply(player);
-            sessions[i] = new GameSession(GameMode.CLASSIC, config.difficulty(), generator, clocks[i], new GameListener() {
+            sessions[i] = new GameSession(sessionMode, config.difficulty(), generator, clocks[i], new GameListener() {
                 @Override public void onChanged(GameSnapshot state) { }
                 @Override public void onGameOver(GameSnapshot state) { } // collected after both Spawn attempts
             }, new SpawnBoundary() {
@@ -72,6 +83,11 @@ public final class LocalMatchEngine implements MatchEngine {
         if (snapshot == null) throw new IllegalStateException("match not started");
         int i = command.playerId().ordinal();
         if (command.sequence() <= lastSequence[i]) return;
+        // D-05: anything that reaches the authority at or after the deadline is ignored.
+        if (timed && phase == MatchPhase.PLAYING && time.nowMillis() >= deadline) {
+            if (!command.pressed()) held.get(i).remove(command.action());
+            return;
+        }
         lastSequence[i] = command.sequence();
         // Latch physical transitions before deferring gameplay. Otherwise a duplicate
         // press followed by release could be replayed as a fresh press next pulse.
@@ -89,7 +105,7 @@ public final class LocalMatchEngine implements MatchEngine {
             while (true) {
                 long due = Long.MAX_VALUE;
                 for (var clock : clocks) if (clock.isDue(nowMillis)) due = Math.min(due, clock.dueAt());
-                if (due == Long.MAX_VALUE) break;
+                if (due == Long.MAX_VALUE || due >= deadline) break;
                 pulseTime = due;
                 for (int i = 0; i < 2; i++) if (clocks[i].isDue(due)) {
                     long fired = clocks[i].dueAt(); sessions[i].tick(); clocks[i].onTicked(fired);
@@ -131,6 +147,8 @@ public final class LocalMatchEngine implements MatchEngine {
         if (phase != MatchPhase.FINISHED) {
             commands.addAll(deferred);
             if (phase == MatchPhase.PLAYING) settleSpawnBoundaries();
+            // D-06: a top-out settled in this pulse already finished the match before the deadline check.
+            if (phase == MatchPhase.PLAYING && pulseTime >= deadline) finishTimeUp();
             if (phase != MatchPhase.FINISHED) { revision++; updateSnapshot(); }
         }
     }
@@ -154,10 +172,25 @@ public final class LocalMatchEngine implements MatchEngine {
         // Keep the shared-key latch until release; drop gameplay held keys at the pause boundary.
         for (var keys : held) keys.removeIf(a -> a != GameAction.PAUSE && a != GameAction.QUIT);
         if (phase == MatchPhase.PLAYING) {
-            for (var session : sessions) session.pause(); phase = MatchPhase.PAUSED;
+            if (pulseTime >= deadline) return; // the match ends in this pulse; nothing left to freeze
+            for (var session : sessions) session.pause(); phase = MatchPhase.PAUSED; pausedAt = pulseTime;
         } else if (phase == MatchPhase.PAUSED) {
             for (var session : sessions) session.resume(); phase = MatchPhase.PLAYING;
+            if (timed) deadline += pulseTime - pausedAt;
         }
+    }
+
+    /** Only scores settled before the deadline exist; an unfinished CLEARING has not added its bonus yet. */
+    private void finishTimeUp() {
+        long one = sessions[0].snapshot().score(), two = sessions[1].snapshot().score();
+        finish(one == two ? MatchResult.draw(MatchResult.EndReason.TIME_UP)
+                : MatchResult.win(one > two ? PlayerId.ONE : PlayerId.TWO, MatchResult.EndReason.TIME_UP));
+    }
+
+    private long remainingMillis() {
+        if (!timed) return -1;
+        long reference = phase == MatchPhase.PAUSED ? pausedAt : pulseTime;
+        return Math.max(0, deadline - reference);
     }
 
     private void finish(MatchResult outcome) {
@@ -168,17 +201,26 @@ public final class LocalMatchEngine implements MatchEngine {
     }
 
     private void updateSnapshot() {
-        snapshot = new MatchSnapshot(matchId, revision, view(0), view(1), -1, phase, result);
+        snapshot = new MatchSnapshot(matchId, revision, view(0), view(1), remainingMillis(), phase, result);
     }
 
     private MatchSnapshot.PlayerView view(int i) {
         GameSnapshot state = sessions[i].snapshot(); int[][] cells = state.cells();
+        int[][] items = new int[VersusRules.BOARD_ROWS][VersusRules.BOARD_COLS];
+        for (var locked : state.lockedItems().entrySet()) {
+            Cell cell = locked.getKey();
+            if (cells[cell.row()][cell.col()] != 0) items[cell.row()][cell.col()] = locked.getValue().symbol();
+        }
         Block block = state.currentBlock();
         if (block != null) {
             int[][] shape = block.getShape();
             for (int r = 0; r < shape.length; r++) for (int c = 0; c < shape[r].length; c++) {
                 int row = block.getRow() + r, col = block.getCol() + c;
-                if (shape[r][c] != 0 && row >= 0 && row < 20 && col >= 0 && col < 10) cells[row][col] = block.getType().cellValue();
+                if (shape[r][c] != 0 && row >= 0 && row < 20 && col >= 0 && col < 10) {
+                    cells[row][col] = block.getType().cellValue();
+                    ItemType item = block.itemCellAt(r, c).orElse(null);
+                    items[row][col] = item == null ? 0 : item.symbol();
+                }
             }
         }
         Block next = state.nextBlock();
@@ -187,7 +229,7 @@ public final class LocalMatchEngine implements MatchEngine {
             nextCells = Arrays.stream(nextCells).map(row -> Arrays.stream(row)
                     .map(value -> value == 0 ? 0 : next.getType().cellValue()).toArray()).toArray(int[][]::new);
         }
-        return new MatchSnapshot.PlayerView(cells, nextCells, state.score(), pending[i].rows());
+        return new MatchSnapshot.PlayerView(cells, nextCells, state.score(), pending[i].rows(), items);
     }
 
     @Override public MatchSnapshot snapshot() {

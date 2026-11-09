@@ -8,6 +8,8 @@ public final class VersusRules {
     public static final int MAX_PENDING_ROWS = 10;
     /** 공격으로 들어온 칸의 보드 값. 블록 색 1~8과 겹치지 않고 아이템이 없다 (R3-GARBAGE, D-04) */
     public static final int ATTACK_CELL = 9;
+    /** 대전 화면에 표시하는 아이템 문자 (L·B·D·S). 무게추는 블록 값 8(W)로 표시한다 (R3-ITEM) */
+    public static final String ITEM_SYMBOLS = "LBDS";
     public static final int BOARD_ROWS = 20;
     public static final int BOARD_COLS = 10;
     /** TIMED 기본 제한 시간 (D-05) */
