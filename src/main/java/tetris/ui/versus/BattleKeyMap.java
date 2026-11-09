@@ -12,13 +12,16 @@ public final class BattleKeyMap {
         public Target { Objects.requireNonNull(playerId); Objects.requireNonNull(action); }
     }
     private final Map<Target,Integer> keys = new LinkedHashMap<>();
-    public BattleKeyMap() {
+    public BattleKeyMap() { this(true); }
+    /** P2P: 이 PC의 참가자 한 명만 조작한다. P1 키(방향키/Space)와 공통 P/Q만 둔다 (S9-B2) */
+    public static BattleKeyMap online() { return new BattleKeyMap(false); }
+    private BattleKeyMap(boolean twoPlayers) {
         GameAction[] actions={GameAction.MOVE_LEFT,GameAction.MOVE_RIGHT,GameAction.SOFT_DROP,GameAction.ROTATE,GameAction.HARD_DROP};
         int[] one={KeyEvent.VK_LEFT,KeyEvent.VK_RIGHT,KeyEvent.VK_DOWN,KeyEvent.VK_UP,KeyEvent.VK_SPACE};
         int[] two={KeyEvent.VK_A,KeyEvent.VK_D,KeyEvent.VK_S,KeyEvent.VK_W,KeyEvent.VK_F};
         for(int i=0;i<actions.length;i++) {
             keys.put(new Target(PlayerId.ONE,actions[i]),one[i]);
-            keys.put(new Target(PlayerId.TWO,actions[i]),two[i]);
+            if(twoPlayers) keys.put(new Target(PlayerId.TWO,actions[i]),two[i]);
         }
         keys.put(new Target(PlayerId.ONE,GameAction.PAUSE),KeyEvent.VK_P);
         keys.put(new Target(PlayerId.ONE,GameAction.QUIT),KeyEvent.VK_Q);
@@ -27,6 +30,7 @@ public final class BattleKeyMap {
         return new Target(isShared(action) ? PlayerId.ONE : Objects.requireNonNull(player),action);
     }
     public static boolean isShared(GameAction action) { return action==GameAction.PAUSE || action==GameAction.QUIT; }
+    public boolean isOnline() { return keys.keySet().stream().noneMatch(t -> t.playerId()==PlayerId.TWO); }
     public int keyOf(PlayerId player,GameAction action) { return keys.get(target(player,action)); }
     /** Reject conflicts across both players and shared actions without swapping keys. */
     public boolean assign(PlayerId player,GameAction action,int code) {
@@ -40,6 +44,9 @@ public final class BattleKeyMap {
 
     /** Display the actual current bindings, including remapped shared actions. */
     public String guide() {
+        if (isOnline()) return playerGuide(PlayerId.ONE, "나")
+            + "\n공통: 일시정지 " + keyName(PlayerId.ONE, GameAction.PAUSE)
+            + " / 기권 " + keyName(PlayerId.ONE, GameAction.QUIT);
         return playerGuide(PlayerId.ONE, "P1") + "\n" + playerGuide(PlayerId.TWO, "P2")
             + "\n공통: 일시정지 " + keyName(PlayerId.ONE, GameAction.PAUSE)
             + " / 나가기 " + keyName(PlayerId.ONE, GameAction.QUIT);

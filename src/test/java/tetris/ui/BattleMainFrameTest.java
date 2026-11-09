@@ -70,6 +70,135 @@ class BattleMainFrameTest {
             SwingUtilities.invokeAndWait(() -> { if(frame[0]!=null)frame[0].dispose(); });
         }
     }
+    private static void until(String what, java.util.concurrent.Callable<Boolean> condition) throws Exception {
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(8);
+        boolean[] ok = new boolean[1];
+        while (System.nanoTime() < deadline) {
+            SwingUtilities.invokeAndWait(() -> {
+                try { ok[0] = condition.call(); } catch (Exception e) { throw new RuntimeException(e); }
+            });
+            if (ok[0]) return;
+            Thread.sleep(20);
+        }
+        fail("timed out waiting for " + what);
+    }
+    private void shot(MainFrame frame, String name) {
+        var image = new java.awt.image.BufferedImage(frame.getWidth(), frame.getHeight(), java.awt.image.BufferedImage.TYPE_INT_RGB);
+        var g = image.createGraphics(); frame.printAll(g); g.dispose();
+        var output = Path.of("build/verification/" + name + ".png");
+        try {
+            java.nio.file.Files.createDirectories(output.getParent());
+            javax.imageio.ImageIO.write(image, "png", output.toFile());
+        } catch (java.io.IOException e) { throw new RuntimeException(e); }
+    }
+
+    /** S9-B2: 두 창이 실제 소켓으로 접속 → 양쪽 준비 → 실제 키 입력 → 같은 결과 → 같은 연결의 로비 */
+    @Test void twoWindowsPlayARealSocketMatchFromLobbyToTheSameResult() throws Exception {
+        MainFrame[] frames = new MainFrame[2];
+        Object[] controllers = new Object[2];
+        var scores = new Scoreboard(java.util.List.of());
+        Path scoreFile = directory.resolve("p2p-scores.json");
+        try {
+            SwingUtilities.invokeAndWait(() -> {
+                for (int i = 0; i < 2; i++) {
+                    frames[i] = new MainFrame(new Settings(), scores,
+                        new JsonSettingsRepository(directory.resolve("settings" + i + ".json")), new JsonScoreboardRepository(scoreFile));
+                    frames[i].setVisible(true);
+                    frames[i].setLocation(40 + i * 520, 40);
+                    frames[i].openBattleModes();
+                    frames[i].openP2pLobby();
+                    try { controllers[i] = field(frames[i], "p2p"); } catch (Exception e) { throw new RuntimeException(e); }
+                }
+                var hostPanel = ((P2pLobbyController) controllers[0]).panel();
+                hostPanel.portField().setText("0");
+                hostPanel.hostButton().doClick();
+            });
+            int[] port = new int[1];
+            until("host listening", () -> {
+                var lobby = (tetris.feature.network.lobby.SocketLobbyClient) field(controllers[0], "lobby");
+                port[0] = lobby.localPort();
+                return port[0] > 0;
+            });
+            SwingUtilities.invokeAndWait(() -> {
+                var clientPanel = ((P2pLobbyController) controllers[1]).panel();
+                clientPanel.addressField().setText("127.0.0.1");
+                clientPanel.portField().setText(String.valueOf(port[0]));
+                clientPanel.connectButton().doClick();
+            });
+            until("both configured in LOBBY", () -> {
+                var host = ((P2pLobbyController) controllers[0]).snapshot();
+                var client = ((P2pLobbyController) controllers[1]).snapshot();
+                return host.state() == tetris.feature.network.lobby.LobbySnapshot.State.LOBBY && host.config() != null
+                    && client.state() == tetris.feature.network.lobby.LobbySnapshot.State.LOBBY && client.config() != null;
+            });
+            SwingUtilities.invokeAndWait(() -> {
+                var clientPanel = ((P2pLobbyController) controllers[1]).panel();
+                assertTrue(clientPanel.statusText().startsWith("연결 성공!"), clientPanel.statusText());
+                assertFalse(clientPanel.modeBox().isEnabled(), "client cannot edit the host's mode");
+                shot(frames[0], "s9-b2-host-lobby");
+                shot(frames[1], "s9-b2-client-lobby");
+                clientPanel.readyButton().doClick();
+            });
+            until("host sees the client's vote", () -> ((P2pLobbyController) controllers[0]).snapshot().peerReady());
+            SwingUtilities.invokeAndWait(() -> ((P2pLobbyController) controllers[0]).panel().readyButton().doClick());
+            until("both on the battle screen", () -> field(frames[0], "currentScreen") == MainFrame.Screen.BATTLE
+                && field(frames[1], "currentScreen") == MainFrame.Screen.BATTLE);
+
+            // the client's real key event moves only the right board on the host
+            Object[] hostClient = new Object[1];
+            int[] start = new int[2];
+            until("first STATE on the client", () -> {
+                hostClient[0] = field(field(frames[0], "battleController"), "client");
+                var clientView = (tetris.feature.network.match.ClientBattleClient) field(field(frames[1], "battleController"), "client");
+                return clientView.snapshot().phase() == MatchPhase.PLAYING;
+            });
+            SwingUtilities.invokeAndWait(() -> { try {
+                var state = ((tetris.feature.network.match.HostBattleClient) hostClient[0]).snapshot();
+                start[0] = firstVisibleColumn(state.one().cells());
+                start[1] = firstVisibleColumn(state.two().cells());
+                var panel = (BattlePanel) ((java.util.Map<?, ?>) field(frames[1], "screens")).get(MainFrame.Screen.BATTLE);
+                var manager = java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager();
+                for (int id : new int[]{java.awt.event.KeyEvent.KEY_PRESSED, java.awt.event.KeyEvent.KEY_RELEASED}) {
+                    manager.redispatchEvent(panel, new java.awt.event.KeyEvent(panel, id, System.currentTimeMillis(), 0,
+                        java.awt.event.KeyEvent.VK_LEFT, java.awt.event.KeyEvent.CHAR_UNDEFINED));
+                }
+            } catch (Exception e) { throw new RuntimeException(e); } });
+            until("client input applied by the host", () -> firstVisibleColumn(
+                ((tetris.feature.network.match.HostBattleClient) hostClient[0]).snapshot().two().cells()) == start[1] - 1);
+            until("client screen shows its own move", () -> firstVisibleColumn(
+                ((tetris.feature.network.match.ClientBattleClient) field(field(frames[1], "battleController"), "client"))
+                    .snapshot().two().cells()) == start[1] - 1);
+            SwingUtilities.invokeAndWait(() -> {
+                assertEquals(start[0], firstVisibleColumn(((tetris.feature.network.match.HostBattleClient) hostClient[0])
+                    .snapshot().one().cells()), "the client cannot move the host's board");
+                shot(frames[0], "s9-b2-host-match");
+                shot(frames[1], "s9-b2-client-match");
+                ((BattleClient) hostClient[0]).send(new PlayerCommand(PlayerId.ONE, tetris.feature.setting.GameAction.QUIT, true, 99));
+            });
+            until("both on the result screen", () -> field(frames[0], "currentScreen") == MainFrame.Screen.P2P_RESULT
+                && field(frames[1], "currentScreen") == MainFrame.Screen.P2P_RESULT);
+            SwingUtilities.invokeAndWait(() -> {
+                try {
+                    var hostResult = (BattleResultPanel) field(frames[0], "onlineResultPanel");
+                    var clientResult = (BattleResultPanel) field(frames[1], "onlineResultPanel");
+                    assertTrue(hostResult.getSummaryText().endsWith("P2 승리 · 기권"), hostResult.getSummaryText());
+                    assertTrue(clientResult.getSummaryText().endsWith("P2 승리 · 기권"), clientResult.getSummaryText());
+                    assertEquals(hostResult.getScoresText(), clientResult.getScoresText());
+                    shot(frames[1], "s9-b2-client-result");
+                    var back = MainFrame.class.getDeclaredMethod("backToP2pLobby"); back.setAccessible(true);
+                    back.invoke(frames[1]);
+                    assertEquals(MainFrame.Screen.P2P_LOBBY, field(frames[1], "currentScreen"));
+                } catch (Exception e) { throw new RuntimeException(e); }
+            });
+            until("client back in the same lobby", () -> ((P2pLobbyController) controllers[1]).snapshot().state()
+                == tetris.feature.network.lobby.LobbySnapshot.State.LOBBY);
+            assertTrue(scores.entries().isEmpty());
+            assertFalse(java.nio.file.Files.exists(scoreFile), "P2P results are never saved");
+        } finally {
+            SwingUtilities.invokeAndWait(() -> { for (var f : frames) if (f != null) f.dispose(); });
+        }
+    }
+
     /** S9-B1: 세 모드 모두 메뉴에서 실제 엔진으로 진입하고, 결과까지 가도 스코어보드 파일이 그대로다 */
     @Test void everyLocalModeReachesItsResultWithoutTouchingTheScoreboardFile() throws Exception {
         Path scoreFile = directory.resolve("modes-scores.json");

@@ -20,10 +20,22 @@ public final class BattleScreenController implements AutoCloseable {
     private boolean confirming;
     private boolean closed;
     private long sequence;
+    private boolean online;
 
     public BattleScreenController(JRootPane root, BattleClient client, BattleKeyMap keys,
             BattlePanel panel, Consumer<MatchSnapshot> onResult, BooleanSupplier confirmQuit, Runnable onExit) {
         this(root, client, keys, panel, onResult, legacyConfirmation(confirmQuit), onExit);
+    }
+
+    /**
+     * P2P 경기 화면 (S9-B2). 결과는 호스트가 정하므로 기권을 보낸 뒤에도 결과 STATE를 기다리고,
+     * 이 창의 포커스가 빠져도 두 PC의 경기를 자동으로 멈추지 않는다(눌린 키만 놓는다).
+     */
+    public static BattleScreenController online(JRootPane root, BattleClient client, BattleKeyMap keys,
+            BattlePanel panel, Consumer<MatchSnapshot> onResult, BooleanSupplier confirmForfeit) {
+        var controller = new BattleScreenController(root, client, keys, panel, onResult, legacyConfirmation(confirmForfeit), () -> { });
+        controller.online = true;
+        return controller;
     }
 
     private static Supplier<PlayerId> legacyConfirmation(BooleanSupplier confirm) {
@@ -93,7 +105,7 @@ public final class BattleScreenController implements AutoCloseable {
                 dispatch(new PlayerCommand(forfeiting,GameAction.QUIT,true,0));
                 // The real client publishes a forfeit result synchronously. Preserve
                 // that result screen; only preview/legacy clients need an explicit exit.
-                if (current.phase() != MatchPhase.FINISHED) { close(); onExit.run(); }
+                if (!online && current.phase() != MatchPhase.FINISHED) { close(); onExit.run(); }
             }
             else if (wasPlaying && current.phase() == MatchPhase.PAUSED) pauseCommand();
         } else {
@@ -112,7 +124,7 @@ public final class BattleScreenController implements AutoCloseable {
     public void focusLost() {
         if (closed) return;
         router.clearPressedKeys();
-        if (!confirming && current != null && current.phase() == MatchPhase.PLAYING) pauseCommand();
+        if (!online && !confirming && current != null && current.phase() == MatchPhase.PLAYING) pauseCommand();
     }
 
     @Override public void close() {

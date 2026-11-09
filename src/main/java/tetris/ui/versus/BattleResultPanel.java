@@ -12,10 +12,16 @@ import tetris.feature.versus.api.PlayerId;
 /** Display-only versus result. No score persistence or single-player result dependencies. EDT confined. */
 public final class BattleResultPanel extends JPanel {
     private final JLabel summary = new JLabel("대전 결과", SwingConstants.CENTER);
+    private String summaryText = "대전 결과";
     private final JLabel scores = new JLabel("", SwingConstants.CENTER);
 
     public BattleResultPanel(Runnable onModes, Runnable onMain) {
-        Objects.requireNonNull(onModes); Objects.requireNonNull(onMain);
+        this("모드 선택", onModes, onMain);
+    }
+
+    /** primaryLabel: Enter 버튼 이름 (로컬 "모드 선택", P2P "로비로") */
+    public BattleResultPanel(String primaryLabel, Runnable onModes, Runnable onMain) {
+        Objects.requireNonNull(primaryLabel); Objects.requireNonNull(onModes); Objects.requireNonNull(onMain);
         setLayout(new GridBagLayout());
         setBackground(new Color(0x1B1E24));
         setPreferredSize(new Dimension(960, 720));
@@ -24,10 +30,10 @@ public final class BattleResultPanel extends JPanel {
         var content = new JPanel(new GridLayout(0, 1, 0, 24)); content.setOpaque(false);
         content.add(summary); content.add(scores);
         var actions = new JPanel(new FlowLayout(FlowLayout.CENTER, 24, 0)); actions.setOpaque(false);
-        actions.add(new JButton(navigation("모드 선택", onModes)));
+        actions.add(new JButton(navigation(primaryLabel, onModes)));
         actions.add(new JButton(navigation("메인 메뉴", onMain)));
         content.add(actions);
-        var hint = new JLabel("Enter: 모드 선택   Esc: 메인 메뉴", SwingConstants.CENTER);
+        var hint = new JLabel("Enter: " + primaryLabel + "   Esc: 메인 메뉴", SwingConstants.CENTER);
         hint.setForeground(Color.WHITE); content.add(hint); add(content);
         bind(KeyEvent.VK_ENTER, "modes", onModes);
         bind(KeyEvent.VK_ESCAPE, "main", onMain);
@@ -50,11 +56,18 @@ public final class BattleResultPanel extends JPanel {
             case TIME_UP -> "시간 종료";
             case FORFEIT -> "기권";
         };
-        summary.setText((modeLabel.isEmpty() ? "" : modeLabel + " · ") + outcome + " · " + reason);
+        summaryText = (modeLabel.isEmpty() ? "" : modeLabel + " · ") + outcome + " · " + reason;
+        // 긴 모드 이름(P2P 표시 포함)이 잘리지 않도록 모드는 위 줄에 작게, 승패는 아래 줄에 크게 쓴다
+        summary.setText(modeLabel.isEmpty() ? outcome + " · " + reason
+                : "<html><div style='text-align:center'><span style='font-size:16pt'>" + escape(modeLabel)
+                + "</span><br>" + outcome + " · " + reason + "</div></html>");
         scores.setText("P1: " + snapshot.one().score() + "   P2: " + snapshot.two().score());
         getAccessibleContext().setAccessibleDescription(getSummaryText() + ". " + getScoresText());
     }
-    public String getSummaryText() { return summary.getText(); }
+    public String getSummaryText() { return summaryText; }
+    private static String escape(String text) {
+        return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+    }
     public String getScoresText() { return scores.getText(); }
 
     private static Action navigation(String name, Runnable callback) {
