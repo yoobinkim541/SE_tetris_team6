@@ -41,6 +41,7 @@ public final class HostBattleClient implements BattleClient {
     private final SnapshotListeners listeners = new SnapshotListeners();
     private final MatchPulse.Handle pulse;
     private long localSequence;
+    private long lastRemoteSequence = -1;
     private long lastSentRevision = -1;
     private long nextStateAt = Long.MIN_VALUE;
     private MatchPhase lastSentPhase;
@@ -86,10 +87,11 @@ public final class HostBattleClient implements BattleClient {
             return;
         }
         PlayerCommand command = MatchPayloads.readInput(message);
-        if (command.playerId() != PlayerId.TWO) {
+        if (command.playerId() != PlayerId.TWO || command.sequence() <= lastRemoteSequence) {
             rejectedInputs++;
             return;
         }
+        lastRemoteSequence = command.sequence();
         submit(command);
     }
 
@@ -119,8 +121,11 @@ public final class HostBattleClient implements BattleClient {
         lastSentRevision = snapshot.revision();
         lastSentPhase = snapshot.phase();
         // 주기 기준으로 다음 송신 시각을 잡는다. 16 ms pulse에서 "마지막 송신 뒤 33 ms"로 세면 48 ms마다(21 Hz)가 된다
-        nextStateAt = nextStateAt == Long.MIN_VALUE ? now + STATE_INTERVAL_MILLIS
-                : Math.max(nextStateAt + STATE_INTERVAL_MILLIS, now);
+        if (nextStateAt == Long.MIN_VALUE) {
+            nextStateAt = now + STATE_INTERVAL_MILLIS;
+        } else if (now >= nextStateAt) {
+            nextStateAt = Math.max(nextStateAt + STATE_INTERVAL_MILLIS, now);
+        }
     }
 
     private void finish(MatchSnapshot snapshot) {
