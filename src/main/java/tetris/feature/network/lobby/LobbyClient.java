@@ -32,6 +32,10 @@ public interface LobbyClient extends AutoCloseable {
     void returnToLobby();
     /** Delivers the current snapshot first, then ordered updates until unsubscribed. */
     Subscription subscribe(Consumer<LobbySnapshot> listener);
+    /** Delivers the current link health first, then updates whenever link health status changes. */
+    default Subscription subscribeHealth(Consumer<LinkHealth> listener) {
+        return () -> { };
+    }
     /** Idempotently cancels work, releases resources and removes subscriptions. */
     @Override void close();
 

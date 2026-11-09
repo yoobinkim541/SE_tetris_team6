@@ -90,7 +90,7 @@ TCP 연결 하나가 곧 한 세대다. 순번이 연결마다 1부터 시작하
 
 - 위반 프레임 **앞에** 도착한 정상 메시지는 위반을 알리기 전에 넘긴다(`FrameDecoder.feed(..., sink)`). 한 번의 read에 함께 들어왔는지와 관계없이 결과가 같다.
 - 오류를 한 번 만난 디코더는 이후 입력을 받지 않는다(`IllegalStateException`). 오류 뒤 바이트를 다시 해석해 엉뚱한 프레임을 만들지 않기 위해서다.
-- LEAVE는 정상 종료, EOF는 즉시 종료, 일정 시간 무응답 판정(heartbeat 500ms, 지연·5초 단절)은 S10-C1에서 이 프레임 위에 구현한다.
+- LEAVE는 정상 종료(`LinkHealth.Status.PEER_LEFT`), EOF·송신 대기열 초과·프로토콜 오류는 즉시 종료(`LinkHealth.Status.LOST`), 일정 시간 무응답 판정(heartbeat 500ms, RTT>200ms 3회·1.5초 무수신 지연, 5초 무수신 단절)은 이 프레임 위에 구현됨(S10-C1, `ConnectionHealth`·`SocketLobbyClient`).
 - payload 내부 검증(예: `Hello.from`)도 같은 `ProtocolException(INVALID_FIELD)`를 쓴다.
 
 ## 5. 스레드 규칙 (S7-C2 구현 기준)
