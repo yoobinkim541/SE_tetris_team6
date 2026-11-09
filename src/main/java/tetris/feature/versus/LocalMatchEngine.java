@@ -52,10 +52,17 @@ public final class LocalMatchEngine implements MatchEngine {
     }
 
     @Override public void start(MatchConfig config) {
+        start(config, UUID.randomUUID().toString());
+    }
+
+    /** P2P host: the lobby already announced matchId in START, so the engine must publish under the same id. */
+    public void start(MatchConfig config, String matchId) {
         if (closed) throw new IllegalStateException("engine closed");
         Objects.requireNonNull(config);
+        Objects.requireNonNull(matchId);
+        if (matchId.isBlank()) throw new IllegalArgumentException("blank matchId");
         for (var session : sessions) if (session != null) session.end();
-        pulseTime = time.nowMillis(); revision = 0; matchId = UUID.randomUUID().toString();
+        pulseTime = time.nowMillis(); revision = 0; this.matchId = matchId;
         phase = MatchPhase.PLAYING; result = null; commands.clear(); Arrays.fill(lastSequence, -1);
         timed = config.mode().timed();
         deadline = timed ? pulseTime + config.timeLimitMillis() : Long.MAX_VALUE;

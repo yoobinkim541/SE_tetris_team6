@@ -23,7 +23,13 @@ public interface LobbyClient extends AutoCloseable {
     void ready(long configRevision, boolean ready);
     /** Idempotently releases the lobby/match and returns to INITIAL. */
     void leave();
+    /**
+     * After START: the match handoff. The host's engine starts on the first call (STARTING -> PLAYING);
+     * the client's receiver already exists. Empty outside STARTING/PLAYING/RESULT.
+     */
     Optional<BattleClient> battleClient();
+    /** RESULT -> LOBBY on the same connection (F-07). Keeps config and the peer's vote; clears the local vote. */
+    void returnToLobby();
     /** Delivers the current snapshot first, then ordered updates until unsubscribed. */
     Subscription subscribe(Consumer<LobbySnapshot> listener);
     /** Idempotently cancels work, releases resources and removes subscriptions. */
