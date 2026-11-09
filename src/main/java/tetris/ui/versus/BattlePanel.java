@@ -11,6 +11,7 @@ public final class BattlePanel extends JPanel {
     private final BoardRenderer renderer;
     private final String guide;
     private final String modeLabel;
+    private String notice = "";
     private MatchSnapshot snapshot;
     public BattlePanel(boolean colorBlind) {
         this(colorBlind, new BattleKeyMap().guide());
@@ -28,6 +29,9 @@ public final class BattlePanel extends JPanel {
         setBackground(new Color(0x1B1E24)); setPreferredSize(new Dimension(960,720));
     }
     public String modeLabel() { return modeLabel; }
+    public String notice() { return notice; }
+    /** 경기 화면 가운데 위에 잠깐 띄우는 안내 (예: 온라인 기권 확인). 빈 문자열이면 지운다 */
+    public void setNotice(String text) { notice = Objects.requireNonNull(text); repaint(); }
     /** 시간제한 대전의 남은 시간. 올림해서 0:00이면 끝났다는 뜻. 시간 제한이 없으면 빈 문자열 */
     public static String timeText(long remainingMillis) {
         if (remainingMillis < 0) return "";
@@ -69,6 +73,10 @@ public final class BattlePanel extends JPanel {
             String time = timeText(snapshot.remainingMillis());
             g.drawString(time, 932 - g.getFontMetrics().stringWidth(time), 32);
             paintPlayer(g,snapshot.one(),28,"P1"); paintPlayer(g,snapshot.two(),500,"P2");
+            if (!notice.isEmpty()) {
+                g.setColor(new Color(0xFFD54F));
+                g.drawString(notice, 480 - g.getFontMetrics().stringWidth(notice) / 2, 630);
+            }
             g.setFont(new Font(Font.DIALOG,Font.PLAIN,18)); g.setColor(Color.WHITE);
             g.drawString("X = Attack cell   W = Weight   Queue: top -> bottom (max " + VersusRules.MAX_PENDING_ROWS + ")",28,650);
             g.setFont(new Font(Font.DIALOG,Font.PLAIN,14));

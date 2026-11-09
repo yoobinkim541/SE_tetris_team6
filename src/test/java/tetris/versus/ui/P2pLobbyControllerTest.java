@@ -236,4 +236,21 @@ class P2pLobbyControllerTest {
         assertFalse(keys.guide().contains("P2"));
         assertFalse(new BattleKeyMap().isOnline());
     }
+
+    /** Review I-1: 결과가 나온 뒤 상대가 나가도 결과 화면을 지우지 않는다 */
+    @Test
+    void peerLeavingAfterTheResultKeepsTheResultScreen() {
+        panel.hostButton().doClick();
+        enterLobby(Role.HOST);
+        lobby.battle = new FakeBattleClient();
+        var s = lobby.snapshot;
+        lobby.publish(new LobbySnapshot(Role.HOST, State.PLAYING, s.config(), 1, true, true, s.peerIdentity()));
+        lobby.publish(new LobbySnapshot(Role.HOST, State.RESULT, s.config(), 1, false, false, s.peerIdentity()));
+        lobby.publish(new LobbySnapshot(Role.NONE, State.INITIAL, null, 0, false, false, null));
+        assertEquals(List.of("start CLASSIC HOST"), nav.events, "no navigation away from the result");
+        assertEquals("상대가 나갔습니다.", panel.statusText());
+        controller.returnToLobby();
+        assertFalse(lobby.calls.contains("returnToLobby"), "nothing to return to on a closed connection");
+        assertTrue(panel.hostButton().isEnabled());
+    }
 }

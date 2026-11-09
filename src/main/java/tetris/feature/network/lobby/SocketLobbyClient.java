@@ -456,11 +456,11 @@ public final class SocketLobbyClient implements LobbyClient {
                     if (snapshot.role() != Role.CLIENT) {
                         return;
                     }
+                    // 호스트 권위: 호스트는 이쪽 READY를 받은 뒤에만 START를 보낸다. 그 사이 준비를 취소했더라도
+                    // 같은 설정 revision이면 따라 들어가야 호스트 혼자 경기하는 일이 없다
                     if (snapshot.state() == State.LOBBY
                             && snapshot.config() != null
-                            && message.configRevision() == snapshot.configRevision()
-                            && snapshot.localReady()
-                            && snapshot.peerReady()) {
+                            && message.configRevision() == snapshot.configRevision()) {
                         currentMatchId = message.matchId();
                         clientBattle = new ClientBattleClient(currentMatchId, snapshot.config(), link::send,
                                 SocketLobbyClient.this::onMatchFinished);

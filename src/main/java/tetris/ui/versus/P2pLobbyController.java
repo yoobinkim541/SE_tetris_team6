@@ -170,9 +170,11 @@ public final class P2pLobbyController implements P2pLobbyPanel.Actions, AutoClos
         }
         if (inMatch && state == State.INITIAL) {
             inMatch = false;
-            message = "상대와 연결이 끊어졌습니다.";
+            // 결과가 이미 나왔으면 결과 화면을 지우지 않는다. "로비로"를 누르면 이 안내가 보인다
+            boolean afterResult = previous != null && previous.state() == State.RESULT;
+            message = afterResult ? "상대가 나갔습니다." : "상대와 연결이 끊어졌습니다.";
             render();
-            navigation.connectionLost();
+            if (!afterResult) navigation.connectionLost();
             return;
         }
         if (state == State.INITIAL && previous != null && previous.state() == State.LOBBY && message.isEmpty()) {

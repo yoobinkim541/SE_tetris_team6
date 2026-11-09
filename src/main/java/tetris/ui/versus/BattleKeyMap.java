@@ -46,7 +46,7 @@ public final class BattleKeyMap {
     public String guide() {
         if (isOnline()) return playerGuide(PlayerId.ONE, "나")
             + "\n공통: 일시정지 " + keyName(PlayerId.ONE, GameAction.PAUSE)
-            + " / 기권 " + keyName(PlayerId.ONE, GameAction.QUIT);
+            + " / 기권 " + keyName(PlayerId.ONE, GameAction.QUIT) + " 두 번";
         return playerGuide(PlayerId.ONE, "P1") + "\n" + playerGuide(PlayerId.TWO, "P2")
             + "\n공통: 일시정지 " + keyName(PlayerId.ONE, GameAction.PAUSE)
             + " / 나가기 " + keyName(PlayerId.ONE, GameAction.QUIT);

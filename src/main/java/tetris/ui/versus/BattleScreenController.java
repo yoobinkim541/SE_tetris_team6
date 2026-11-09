@@ -21,6 +21,10 @@ public final class BattleScreenController implements AutoCloseable {
     private boolean closed;
     private long sequence;
     private boolean online;
+    private boolean forfeitArmed;
+    private BattlePanel panel;
+    private BattleKeyMap keys;
+    private javax.swing.Timer forfeitTimeout;
 
     public BattleScreenController(JRootPane root, BattleClient client, BattleKeyMap keys,
             BattlePanel panel, Consumer<MatchSnapshot> onResult, BooleanSupplier confirmQuit, Runnable onExit) {
@@ -30,12 +34,41 @@ public final class BattleScreenController implements AutoCloseable {
     /**
      * P2P 경기 화면 (S9-B2). 결과는 호스트가 정하므로 기권을 보낸 뒤에도 결과 STATE를 기다리고,
      * 이 창의 포커스가 빠져도 두 PC의 경기를 자동으로 멈추지 않는다(눌린 키만 놓는다).
+     * 기권은 모달 확인창 대신 Q를 3초 안에 한 번 더 누르는 것으로 확인한다. 확인창이 떠 있는 동안 상대가 Resume하면
+     * 이 화면은 입력을 못 하는 채로 블록이 떨어지기 때문이다. 첫 Q는 경기를 멈추지 않고, 다른 키를 누르면 취소된다.
      */
     public static BattleScreenController online(JRootPane root, BattleClient client, BattleKeyMap keys,
-            BattlePanel panel, Consumer<MatchSnapshot> onResult, BooleanSupplier confirmForfeit) {
-        var controller = new BattleScreenController(root, client, keys, panel, onResult, legacyConfirmation(confirmForfeit), () -> { });
+            BattlePanel panel, Consumer<MatchSnapshot> onResult) {
+        var controller = new BattleScreenController(root, client, keys, panel, onResult,
+                (Supplier<PlayerId>) () -> null, () -> { });
         controller.online = true;
+        controller.panel = panel;
+        controller.keys = keys;
+        controller.forfeitTimeout = new javax.swing.Timer(FORFEIT_CONFIRM_MILLIS, e -> controller.disarmForfeit());
+        controller.forfeitTimeout.setRepeats(false);
         return controller;
+    }
+
+    /** 온라인 기권 확인 대기 시간 */
+    public static final int FORFEIT_CONFIRM_MILLIS = 3000;
+
+    private void onlineQuit() {
+        if (forfeitArmed) {
+            disarmForfeit();
+            dispatch(new PlayerCommand(PlayerId.ONE, GameAction.QUIT, true, 0));
+            return;
+        }
+        forfeitArmed = true;
+        panel.setNotice("기권하려면 " + java.awt.event.KeyEvent.getKeyText(keys.keyOf(PlayerId.ONE, GameAction.QUIT))
+                + "를 한 번 더 누르세요");
+        forfeitTimeout.restart();
+    }
+
+    private void disarmForfeit() {
+        if (!forfeitArmed) return;
+        forfeitArmed = false;
+        forfeitTimeout.stop();
+        panel.setNotice("");
     }
 
     private static Supplier<PlayerId> legacyConfirmation(BooleanSupplier confirm) {
@@ -91,6 +124,10 @@ public final class BattleScreenController implements AutoCloseable {
     private void send(PlayerCommand command) {
         if (closed) return;
         if (!command.pressed()) { dispatch(command); return; }
+        if (online) {
+            if (command.action() == GameAction.QUIT) { onlineQuit(); return; }
+            disarmForfeit();
+        }
         if (command.action() == GameAction.QUIT) {
             confirming = true;
             router.clearGameplayKeys();
@@ -131,6 +168,7 @@ public final class BattleScreenController implements AutoCloseable {
         if (closed) return;
         router.close();
         closed = true;
+        if (forfeitTimeout != null) forfeitTimeout.stop();
         if (subscription != null) subscription.close();
         client.close();
     }

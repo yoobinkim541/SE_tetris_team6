@@ -397,13 +397,7 @@ public class MainFrame extends JFrame {
                     if (currentScreen != Screen.BATTLE || generation != battleGeneration) return;
                     onlineResultPanel.setSnapshot(snapshot, label);
                     showScreen(Screen.P2P_RESULT);
-                }),
-                this::confirmOnlineForfeit);
-    }
-
-    private boolean confirmOnlineForfeit() {
-        return JOptionPane.showConfirmDialog(this, "기권하면 상대가 승리합니다. 기권할까요?", "대전 기권",
-                JOptionPane.YES_NO_OPTION) == JOptionPane.YES_OPTION;
+                }));
     }
 
     private void backToP2pLobby() {

@@ -346,6 +346,31 @@ class P2pMatchTest {
         assertTrue(call(clientExec, client::battleClient).isEmpty());
     }
 
+    /** Review I-2: 호스트가 START를 보낸 직후 클라이언트가 준비를 취소해도 같은 경기에 들어간다 (호스트 권위) */
+    @Test
+    void clientFollowsTheHostStartEvenIfItsLastVoteWasWithdrawnInFlight() throws Exception {
+        var cs = lobbyQueue(clientExec, client);
+        ServerSocket server = new ServerSocket(0, 1, InetAddress.getLoopbackAddress());
+        raw.add(server);
+        CompletableFuture<Socket> accepted = CompletableFuture.supplyAsync(() -> {
+            try { return server.accept(); } catch (IOException e) { throw new RuntimeException(e); }
+        });
+        CompletionStage<Void> stage = call(clientExec, () -> client.connect("127.0.0.1", server.getLocalPort()));
+        RawPeer peer = new RawPeer(accepted.get(WAIT, TimeUnit.SECONDS));
+        raw.add(peer);
+        assertEquals(MessageType.HELLO, peer.next().type());
+        peer.send(ControlPayloads.Hello.message(PeerRole.HOST));
+        stage.toCompletableFuture().get(WAIT, TimeUnit.SECONDS);
+        peer.send(MatchPayloads.configMessage(MatchConfig.of(BattleMode.CLASSIC), 1), LobbyPayloads.readyMessage(1, true));
+        await(cs, LobbySnapshot::peerReady);
+        run(clientExec, () -> client.ready(1, true));
+        run(clientExec, () -> client.ready(1, false)); // withdrawn while the host's START is already on the wire
+        peer.send(LobbyPayloads.startMessage("m-race", 1));
+        await(cs, s -> s.state() == State.PLAYING);
+        assertEquals(Optional.of("m-race"), call(clientExec, client::matchId));
+        assertTrue(call(clientExec, client::battleClient).isPresent(), "the client must not leave the host playing alone");
+    }
+
     // ── STATE coalescing (unit) ─────────────
 
     @Test
