@@ -13,6 +13,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import tetris.feature.network.CloseReason;
@@ -33,6 +34,7 @@ import tetris.feature.network.protocol.MatchPayloads;
 import tetris.feature.network.protocol.Message;
 import tetris.feature.network.protocol.PeerRole;
 import tetris.feature.network.protocol.ProtocolException;
+import tetris.feature.save.RecentPeers;
 import tetris.feature.versus.LocalMatchEngine;
 import tetris.feature.versus.api.BattleClient;
 import tetris.feature.versus.api.MatchClock;
@@ -56,6 +58,11 @@ public final class SocketLobbyClient implements LobbyClient {
     private static final LobbySnapshot INITIAL_SNAPSHOT =
             new LobbySnapshot(Role.NONE, State.INITIAL, null, 0, false, false, null);
     private static final int MAX_PENDING_PINGS = 16;
+    private static final Executor DEFAULT_IO = Executors.newSingleThreadExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "lobby-recent-peers-io");
+        thread.setDaemon(true);
+        return thread;
+    });
 
     private static final class Subscriber {
         final Consumer<LobbySnapshot> listener;
@@ -93,6 +100,8 @@ public final class SocketLobbyClient implements LobbyClient {
     private final MatchClock clock;
     private final MatchPulse pulse;
     private final HeartbeatPolicy policy;
+    private final RecentPeers recentPeers;
+    private final Executor io;
     private final ArrayDeque<LobbySnapshot> pendingPublications = new ArrayDeque<>();
     private boolean publishing;
     private final ArrayDeque<LinkHealth> pendingHealthPublications = new ArrayDeque<>();
@@ -121,12 +130,34 @@ public final class SocketLobbyClient implements LobbyClient {
     /** heartbeat 정책까지 주입해 연결 건강 판정을 결정적으로 검증한다 (S10-C1) */
     public SocketLobbyClient(Executor dispatcher, PeerEstablisher establisher, Supplier<LocalMatchEngine> engines,
                              MatchClock clock, MatchPulse pulse, HeartbeatPolicy policy) {
+        this(dispatcher, establisher, engines, clock, pulse, policy, RecentPeers.NONE, DEFAULT_IO);
+    }
+
+    /** 최근 접속 주소 저장소와 디스크 I/O 실행기까지 주입한다 (S10-C2) */
+    public SocketLobbyClient(Executor dispatcher, PeerEstablisher establisher, Supplier<LocalMatchEngine> engines,
+                             MatchClock clock, MatchPulse pulse, HeartbeatPolicy policy,
+                             RecentPeers recentPeers, Executor io) {
         this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
         this.establisher = Objects.requireNonNull(establisher, "establisher");
         this.engines = Objects.requireNonNull(engines, "engines");
         this.clock = Objects.requireNonNull(clock, "clock");
         this.pulse = Objects.requireNonNull(pulse, "pulse");
         this.policy = Objects.requireNonNull(policy, "policy");
+        this.recentPeers = Objects.requireNonNull(recentPeers, "recentPeers");
+        this.io = Objects.requireNonNull(io, "io");
+    }
+
+    /**
+     * 저장된 최근 접속 성공 주소 목록(최신순, 최대 5개)을 돌려준다 (S10-C2).
+     *
+     * <p>파일 읽기가 포함될 수 있으므로 호출 측은 시작 시 한 번 읽거나 EDT 밖에서 부른다.
+     */
+    public List<String> recentPeers() {
+        try {
+            return recentPeers.load();
+        } catch (RuntimeException e) {
+            return List.of();
+        }
     }
 
     /** 현재 연결 건강 상태와 최근 RTT (S10-C1) */
@@ -362,6 +393,20 @@ public final class SocketLobbyClient implements LobbyClient {
         currentMatchId = null;
         startHeartbeat(link);
         Role lobbyRole = (link.role() == PeerRole.HOST) ? Role.HOST : Role.CLIENT;
+        if (lobbyRole == Role.CLIENT) {
+            String peerAddress = link.peerAddress();
+            try {
+                io.execute(() -> {
+                    try {
+                        recentPeers.record(peerAddress);
+                    } catch (RuntimeException ignored) {
+                        // 최근 주소 저장 실패가 접속이나 EDT를 막지 않는다
+                    }
+                });
+            } catch (RuntimeException ignored) {
+                // 실행기 거부 시에도 접속은 유지한다
+            }
+        }
         String peerIdentity = link.peerAddress() + "#" + (++connectionSequence);
         publish(new LobbySnapshot(lobbyRole, State.LOBBY, null, 0, false, false, peerIdentity));
         if (!closed && activeLink == link) {

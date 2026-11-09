@@ -1,7 +1,7 @@
-# S10 C 트랙: heartbeat·지연·끊김 판정(S10-C1)
+# S10 C 트랙: heartbeat·지연·끊김 판정(S10-C1)과 재대전·최근 IP 저장(S10-C2)
 
-- 소유: C 네트워크. 코드: `src/main/java/tetris/feature/network`, 테스트: `src/test/java/tetris/versus/network`
-- 근거: [#152 S10-C1](https://github.com/yoobinkim541/SE_tetris_team6/issues/152), 규칙 R3-LAG, R3-DISCONNECT, `docs/req3/decisions.md` ("C 소유 결정"), `docs/req3/network-protocol.md`
+- 소유: C 네트워크. 코드: `src/main/java/tetris/feature/network`, `src/main/java/tetris/feature/save`, 테스트: `src/test/java/tetris/versus/network`, `src/test/java/tetris/feature/RecentPeerRepositoryTest.java`
+- 근거: [#152 S10-C1](https://github.com/yoobinkim541/SE_tetris_team6/issues/152), [#153 S10-C2](https://github.com/yoobinkim541/SE_tetris_team6/issues/153), 규칙 R3-LAG, R3-DISCONNECT, R3-REMATCH, R3-RECENT, `docs/req3/decisions.md` ("C 소유 결정"), `docs/req3/network-protocol.md`
 
 ## 1. 구성 요소
 
@@ -11,7 +11,8 @@
 | `ConnectionHealth` | 시계를 주입받아 정상 프레임 수신 시각·RTT로 `NORMAL` / `LAGGING` / `LOST`를 판정하는 순수 상태 기계 |
 | `LinkHealth` | UI/소비자 구독에 전달하는 연결 건강 상태(`NONE`, `NORMAL`, `LAGGING`, `LOST`, `PEER_LEFT`)와 최근 RTT(`rttMillis`, 없으면 `-1`) |
 | `LobbyClient#subscribeHealth` | 현재 `LinkHealth`를 즉시 1회 전달하고 이후 `status`가 바뀔 때만 알리는 default 메서드 |
-| `SocketLobbyClient` | 연결이 `LOBBY`로 수립될 때마다 전용 heartbeat `MatchPulse`를 시작해 `PING`을 보내고, 모든 정상 수신 프레임과 `PONG` RTT를 `ConnectionHealth`에 반영 |
+| `RecentPeers` / `JsonRecentPeerRepository` | 클라이언트 접속에 성공한 최근 IPv4 주소 최대 5개를 중복 없이 최신순으로 `recent-peers.json`에 저장·로드 |
+| `SocketLobbyClient` | 연결별 heartbeat `PING` 송신·판정 연결, 클라이언트 `LOBBY` 진입 시 비동기 최근 주소 기록, 같은 연결 위 연속 재대전(`returnToLobby()`) |
 
 ## 2. 지연·회복·끊김 판정 표 (`HeartbeatPolicy.DEFAULT` · `ConnectionHealth`)
 
@@ -37,10 +38,22 @@
 | 5초 무수신 heartbeat 판정 `LOST` | `INITIAL` | `LOST` (1회) | 부분 프레임만 오는 경우 포함 |
 | 이쪽에서 `leave()` / `cancel()` / `close()` 호출 | `INITIAL` | 발행 없음 (`NONE`으로 복귀) | 로컬 의도 종료이므로 끊김 경고를 띄우지 않음 |
 
-## 4. B 트랙(`ui`)의 `subscribeHealth` 사용법
+## 4. 최근 접속 주소 저장과 재대전 연결 유지 (S10-C2)
 
-- 모든 콜백은 `SocketLobbyClient`에 주입한 `dispatcher`(앱에서는 Swing EDT)에서 실행된다.
-- 구독 즉시 현재 `LinkHealth`(미연결 시 `LinkHealth.NONE`)가 1회 전달되고, 이후에는 **`status`가 바뀔 때만** 호출된다. 최신 수치 RTT가 필요하면 `SocketLobbyClient#health()`로 읽을 수 있다.
+- **최근 접속 주소 (`RecentPeers` · `JsonRecentPeerRepository`)**:
+  - 저장 위치: `JsonRecentPeerRepository.defaultFile()` (`%APPDATA%\SETetrisTeam6\recent-peers.json`).
+  - 파일 형식: `{"schemaVersion": 1, "peers": ["192.168.0.7", ...]}` (최신순, 최대 5개, 같은 주소 재접속 시 맨 앞으로 이동·중복 제거).
+  - 검증·복구: 각 항목은 `PeerAddress.parse(text, 1)`로 점 4개 IPv4 형식을 검증하며, 잘못된 항목은 무시한다. 파일이 없거나 읽을 수 없으면 빈 목록을 돌려주고, JSON 구문이 손상되었으면 `recent-peers.json.corrupt`로 옮긴 뒤 빈 목록으로 복구한다.
+  - 기록 시점과 스레드 격리: 클라이언트의 `connect(address, port)`가 `HELLO` 핸드셰이크를 마치고 `LOBBY`에 진입했을 때만 주입한 `io` 실행기(기본 데몬 단일 스레드)에서 `recentPeers.record(peerAddress)`를 호출한다. 접속 실패·취소·호스트 역할은 기록하지 않으며, 디스크 쓰기 실패나 예외는 실행기 내부에서 삼켜 접속이나 EDT를 막지 않는다.
+- **재대전 연결 유지 (`returnToLobby()`, R3-REMATCH)**:
+  - 정상 경기 종료(`RESULT`) 시 양쪽 `localReady`·`peerReady`가 `false`로 초기화되고, `returnToLobby()`를 호출하면 기존 TCP 소켓과 `peerIdentity`·설정을 유지한 채 `LOBBY`로 돌아간다.
+  - 다시 양쪽이 `ready(configRevision, true)`를 보내면 호스트가 새로운 `UUID` `matchId`로 `START`를 발행한다. 새 판이 시작된 뒤 이전 `matchId`로 늦게 도착하는 `INPUT`·`STATE`·`RESULT`는 모두 거부·무시되어 새 판 상태를 오염시키지 않는다.
+
+## 5. B 트랙(`ui`) 연결 안내 (`subscribeHealth` · `RecentPeers`)
+
+- **`subscribeHealth` 구독**:
+  - 모든 콜백은 `SocketLobbyClient`에 주입한 `dispatcher`(앱에서는 Swing EDT)에서 실행된다.
+  - 구독 즉시 현재 `LinkHealth`(미연결 시 `LinkHealth.NONE`)가 1회 전달되고, 이후에는 **`status`가 바뀔 때만** 호출된다. 최신 수치 RTT가 필요하면 `SocketLobbyClient#health()`로 읽을 수 있다.
 
 ```java
 LobbyClient.Subscription healthSub = lobbyClient.subscribeHealth(health -> {
@@ -54,7 +67,10 @@ LobbyClient.Subscription healthSub = lobbyClient.subscribeHealth(health -> {
 });
 ```
 
-## 5. 테스트 대응표
+- **최근 접속 주소 주입 및 조회 (#156)**:
+  - `MainFrame`(B 소유, 작업 #156)에서 `SocketLobbyClient`를 생성할 때 `new JsonRecentPeerRepository(JsonRecentPeerRepository.defaultFile())`를 넘기거나, `SocketLobbyClient#recentPeers()`로 최근 접속 IP 최대 5개를 읽어 접속 화면 목록에 표시한다(파일 읽기가 포함되므로 시작 시 한 번 읽거나 EDT 밖에서 호출).
+
+## 6. 테스트 대응표
 
 | 요구사항 / 검토 항목 | 테스트 클래스 · 메서드 |
 |---|---|
@@ -63,8 +79,10 @@ LobbyClient.Subscription healthSub = lobbyClient.subscribeHealth(health -> {
 | 로비 진입 시 `NORMAL` 및 heartbeat `PING` 송신, `PONG` RTT 지연·회복 전이 | `LinkHealthLobbyTest#연결되면_NORMAL을_알리고_heartbeat가_PING을_보낸다`, `PONG_RTT가_3회_200ms를_넘으면_LAGGING_150ms이하_3회면_NORMAL` |
 | 부분 바이트 수신 시 무수신 미갱신·5초 후 `LOST`, 모르는 `nonce` `PONG` RTT 미반영 | `LinkHealthLobbyTest#부분_프레임만_오면_5초_뒤_LOST로_끊기고_INITIAL이다`, `모르는_nonce의_PONG은_RTT에_쓰지_않는다` |
 | `LEAVE`(`PEER_LEFT`) vs EOF/송신 큐 초과(`LOST`) 단일 발행 vs 로컬 `leave()`(`NONE` 무발행), 재접속 후 이전 heartbeat 격리 | `LinkHealthLobbyTest#상대가_LEAVE하면_PEER_LEFT를_한_번_알린다`, `상대가_소켓을_닫으면_LOST를_한_번_알린다`, `상대가_읽지_않아_송신_큐가_넘치면_LOST를_한_번_알린다`, `이쪽이_leave하면_발행_없이_NONE이고_heartbeat가_멈춘다`, `재접속_뒤_이전_연결의_heartbeat는_새_연결에_영향이_없다` |
+| `recent-peers.json` 최신순·중복 제거·5개 상한·손상 파일 `.corrupt` 복구·무효 항목 무시·쓰기 실패 무시·재실행 (R3-RECENT) | `RecentPeerRepositoryTest` (8건) |
+| 접속 성공 주소만 기록·저장 실패 시 접속 유지·같은 연결 10판 연속 재대전·재대전 후 이전 판 메시지 무시 (R3-REMATCH, R3-RECENT) | `RematchLobbyTest#접속에_성공한_주소만_기록한다`, `저장_실패가_접속을_막지_않는다`, `같은_연결로_10판을_연속으로_한다`, `재대전_뒤_이전_판_메시지는_무시한다` |
 
-## 6. 남은 일
+## 7. 남은 일
 
-- **최근 접속 주소 저장소와 재대전 검증**: S10-C2 (#153)에서 이어서 구현한다.
+- **UI 최근 IP 표시 및 끊김·지연 배너 연결**: B 트랙 작업 #156에서 `MainFrame`과 로비/경기 화면에 연결한다.
 - **두 PC 실제 LAN 실측**: S11-C1에서 별도 두 PC 환경으로 지연·끊김·재대전을 실측한다.
