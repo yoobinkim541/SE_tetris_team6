@@ -58,7 +58,8 @@ TCP 연결 하나가 곧 한 세대다. 순번이 연결마다 1부터 시작하
 | ERROR | - | - | 보내고 바로 종료 | C: `{"code":ErrorCode,"detail":string}` |
 
 - `sentAtNanos`는 보낸 PC의 `System.nanoTime()`이다. 다른 PC의 시계와 비교하지 않고 RTT 계산에만 쓴다.
-- STATE를 합치는 송신 큐 정책과 30Hz 상한은 S9-C2에서 구현한다. v1 코덱은 모든 종류를 순서대로 보낸다.
+- STATE 발행(S9-C2): 호스트는 16 ms pulse마다 엔진을 진행하고, STATE는 33 ms 주기 일정(약 30 Hz)에 맞춰 최신 스냅샷만 보낸다. 단계(PLAYING·PAUSED·FINISHED)가 바뀌면 일정과 관계없이 바로 보낸다. 경기가 끝나면 마지막 STATE 뒤에 RESULT를 정확히 한 번 보내므로 RESULT는 합치기로 사라지지 않는다. 코덱은 여전히 모든 프레임을 순서대로 보내며, 합치기는 호스트가 보낼 개수를 줄이는 방식이다.
+- 받는 쪽(S9-C1/C2): 호스트는 현재 matchId의 INPUT 중 `player`가 TWO인 것만 엔진에 넣는다(위조 playerId·이전 matchId는 버림, 순번 중복·역순은 엔진이 버림). 클라이언트는 현재 matchId의 더 큰 revision STATE만 화면에 반영하고, FINISHED STATE보다 RESULT가 먼저 오면 마지막 STATE에 결과를 붙여 끝낸다. 남은 시간은 항상 호스트 엔진 값이다.
 - 네트워크로 `Block`·`GameSession` 객체를 그대로 직렬화하지 않는다. STATE는 계약 `MatchSnapshot`의 칸 값·Next·점수·대기열·단계·결과만 보낸다.
 
 ### 3.1 경기 payload (`MatchPayloads`)
@@ -67,7 +68,7 @@ TCP 연결 하나가 곧 한 세대다. 순번이 연결마다 1부터 시작하
 |---|---|---|
 | CONFIG | `{"mode":"TIMED","difficulty":"NORMAL","timeLimitMillis":180000}` | 봉투 `configRevision`은 로비가 설정을 바꿀 때마다 올린 값 |
 | INPUT | `{"player":"ONE","action":"MOVE_LEFT","pressed":true,"sequence":12}` | `action`은 `GameAction` 이름 |
-| STATE | `{"revision":41,"remainingMillis":95000,"phase":"PLAYING","result":null,"one":{...},"two":{...}}` | 플레이어: `{"cells":[[..10]×20],"next":[[..]],"score":1200,"pendingRows":[[..10]×0~10]}` |
+| STATE | `{"revision":41,"remainingMillis":95000,"phase":"PLAYING","result":null,"one":{...},"two":{...}}` | 플레이어: `{"cells":[[..10]×20],"next":[[..]],"score":1200,"pendingRows":[[..10]×0~10]}`. 아이템 대전에서 아이템 칸이 있으면 `"items":[[..10]×20]`(0 또는 L·B·D·S 문자 코드)를 더한다. 없으면 생략하고 받는 쪽은 빈 표시로 만든다 |
 | RESULT | `{"winner":"ONE","reason":"FORFEIT"}` | 무승부는 `"winner":null` |
 
 - matchId는 봉투에만 싣는다. STATE를 읽을 때 봉투의 matchId로 `MatchSnapshot`을 만든다.
@@ -103,7 +104,7 @@ TCP 연결 하나가 곧 한 세대다. 순번이 연결마다 1부터 시작하
 | 항목 | 상대 | 상태 |
 |---|---|---|
 | CONFIG·INPUT·STATE·RESULT payload 모양 | A (계약 v1, #122) | 반영. `MatchPayloads`가 계약 타입만 사용 |
-| GameClock due-time과 STATE 발행 | A (D-07) | C는 tick을 보내지 않는다. 호스트가 pulse 결과 `MatchSnapshot`을 STATE로 보낸다. 발행 주기·합치기는 S9-C2 |
+| GameClock due-time과 STATE 발행 | A (D-07) | C는 tick을 보내지 않는다. 호스트가 pulse 결과 `MatchSnapshot`을 STATE로 보낸다. 발행 주기·합치기는 S9-C2에서 구현(`HostBattleClient`) |
 | 로비 상태·행동 API (`LobbyClient`, `LobbySnapshot`) | B | C 소유 계약을 별도 PR로 정의. 구현은 S8-C1(#127)·S8-C2(#128) |
 | R3-D08 결정 기록 | 팀 | `decisions.md`가 네트워크 정책을 C 소유로 정리. 연결 세대를 봉투에 넣지 않는 선택(2절)을 Notion Discussion에 반영 필요 |
 
