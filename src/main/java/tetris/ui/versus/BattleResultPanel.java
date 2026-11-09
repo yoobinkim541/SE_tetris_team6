@@ -34,7 +34,13 @@ public final class BattleResultPanel extends JPanel {
     }
 
     public void setSnapshot(MatchSnapshot snapshot) {
+        setSnapshot(snapshot, "");
+    }
+
+    /** modeLabel이 있으면 결과 앞에 모드 이름을 붙인다. 대전 결과는 표시만 하고 저장하지 않는다 (R3-NOSCORE) */
+    public void setSnapshot(MatchSnapshot snapshot, String modeLabel) {
         Objects.requireNonNull(snapshot);
+        Objects.requireNonNull(modeLabel);
         if (snapshot.phase() != MatchPhase.FINISHED || snapshot.result() == null)
             throw new IllegalArgumentException("result screen requires a finished match");
         var result = snapshot.result();
@@ -44,7 +50,7 @@ public final class BattleResultPanel extends JPanel {
             case TIME_UP -> "시간 종료";
             case FORFEIT -> "기권";
         };
-        summary.setText(outcome + " · " + reason);
+        summary.setText((modeLabel.isEmpty() ? "" : modeLabel + " · ") + outcome + " · " + reason);
         scores.setText("P1: " + snapshot.one().score() + "   P2: " + snapshot.two().score());
         getAccessibleContext().setAccessibleDescription(getSummaryText() + ". " + getScoresText());
     }

@@ -70,6 +70,56 @@ class BattleMainFrameTest {
             SwingUtilities.invokeAndWait(() -> { if(frame[0]!=null)frame[0].dispose(); });
         }
     }
+    /** S9-B1: 세 모드 모두 메뉴에서 실제 엔진으로 진입하고, 결과까지 가도 스코어보드 파일이 그대로다 */
+    @Test void everyLocalModeReachesItsResultWithoutTouchingTheScoreboardFile() throws Exception {
+        Path scoreFile = directory.resolve("modes-scores.json");
+        var seeded = new Scoreboard(java.util.List.of());
+        seeded.add(new tetris.feature.score.ScoreEntry("SEED", 1234, 1, 0, tetris.feature.game.GameMode.CLASSIC,
+            tetris.feature.game.Difficulty.NORMAL, java.time.Instant.parse("2026-11-01T00:00:00Z")));
+        assertTrue(new JsonScoreboardRepository(scoreFile).save(seeded));
+        byte[] before = java.nio.file.Files.readAllBytes(scoreFile);
+        MainFrame[] frame = new MainFrame[1];
+        var screens = new java.util.ArrayList<Object>();
+        try {
+            SwingUtilities.invokeAndWait(() -> {
+                frame[0] = new MainFrame(new Settings(), seeded,
+                    new JsonSettingsRepository(directory.resolve("settings.json")), new JsonScoreboardRepository(scoreFile));
+                frame[0].setVisible(true);
+            });
+            String[] labels = {"일반 대전", "아이템 대전", "시간제한 대전"};
+            for (int index = 0; index < 3; index++) {
+                int menuIndex = index;
+                SwingUtilities.invokeAndWait(() -> {
+                    try {
+                        frame[0].openBattleModes();
+                        var modes = (MainMenuPanel) ((java.util.Map<?, ?>) field(frame[0], "screens"))
+                            .get(MainFrame.Screen.BATTLE_MODES);
+                        while (modes.getSelectedIndex() != menuIndex) modes.moveSelection(1);
+                        modes.activateSelected();
+                        assertEquals(MainFrame.Screen.BATTLE, field(frame[0], "currentScreen"));
+                        var panel = (BattlePanel) ((java.util.Map<?, ?>) field(frame[0], "screens")).get(MainFrame.Screen.BATTLE);
+                        assertEquals(labels[menuIndex], panel.modeLabel());
+                        var client = (LocalBattleClient) field(field(frame[0], "battleController"), "client");
+                        client.send(new PlayerCommand(PlayerId.TWO, tetris.feature.setting.GameAction.QUIT, true, 1_000_000));
+                    } catch (Exception e) { throw new RuntimeException(e); }
+                });
+                SwingUtilities.invokeAndWait(() -> {
+                    try {
+                        screens.add(field(frame[0], "currentScreen"));
+                        var result = (BattleResultPanel) field(frame[0], "battleResultPanel");
+                        assertTrue(result.getSummaryText().startsWith(labels[menuIndex]), result.getSummaryText());
+                        assertTrue(result.getSummaryText().contains("기권"));
+                    } catch (Exception e) { throw new RuntimeException(e); }
+                });
+            }
+            assertEquals(java.util.List.of(MainFrame.Screen.BATTLE_RESULT, MainFrame.Screen.BATTLE_RESULT,
+                MainFrame.Screen.BATTLE_RESULT), screens, "no NAME_INPUT or SCOREBOARD after a battle");
+            assertArrayEquals(before, java.nio.file.Files.readAllBytes(scoreFile), "battle results are never saved");
+            assertEquals(1, seeded.entries().size());
+        } finally {
+            SwingUtilities.invokeAndWait(() -> { if(frame[0]!=null) frame[0].dispose(); });
+        }
+    }
     @Test
     @EnabledIfSystemProperty(named="audit.native", matches="true")
     void nativeOverlappingPlayerKeysReachOneWindow() throws Exception { overlappingKeys(true); }

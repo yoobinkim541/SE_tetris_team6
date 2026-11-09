@@ -111,9 +111,9 @@ public class MainFrame extends JFrame {
         addScreen(Screen.SCOREBOARD, scoreBoardPanel);
         addScreen(Screen.SETTINGS, settingPanel);
         var modes = new MainMenuPanel(List.of(
-                new MenuItem("로컬 일반 대전", () -> startBattle(BattleMode.CLASSIC)),
-                new MenuItem("아이템 대전 · 준비 중", () -> {}),
-                new MenuItem("시간제한 대전 · 준비 중", () -> {}),
+                new MenuItem("로컬 " + BattleModes.label(BattleMode.CLASSIC), () -> startBattle(BattleMode.CLASSIC)),
+                new MenuItem("로컬 " + BattleModes.label(BattleMode.ITEM), () -> startBattle(BattleMode.ITEM)),
+                new MenuItem("로컬 " + BattleModes.label(BattleMode.TIMED), () -> startBattle(BattleMode.TIMED)),
                 new MenuItem("메인 메뉴", () -> showScreen(Screen.MAIN_MENU))));
         addScreen(Screen.BATTLE_MODES, modes);
         battleResultPanel = new BattleResultPanel(this::openBattleModes, () -> showScreen(Screen.MAIN_MENU));
@@ -299,8 +299,9 @@ public class MainFrame extends JFrame {
         showScreen(Screen.BATTLE_MODES);
     }
 
+    /** 로컬 대전 (S9-B1). 결과는 대전 결과 화면으로만 가고 이름 입력·스코어보드 저장을 거치지 않는다 (R3-NOSCORE) */
     public void startBattle(BattleMode mode) {
-        if (mode != BattleMode.CLASSIC) throw new IllegalArgumentException("mode is not available yet");
+        java.util.Objects.requireNonNull(mode);
         session.end();
         keyBindings.setSuspended(true);
         keyBindings.clearPressedKeys();
@@ -308,16 +309,17 @@ public class MainFrame extends JFrame {
         JComponent previous = screens.remove(Screen.BATTLE);
         if (previous != null) root.remove(previous);
         var keys = new BattleKeyMap();
-        var panel = new BattlePanel(settings.isColorBlindMode(), keys.guide());
+        String label = BattleModes.label(mode);
+        var panel = new BattlePanel(settings.isColorBlindMode(), keys.guide(), label);
         panel.setPreferredSize(GamePanel.preferredSizeFor(fitCellSize(settings.getScreenSize().cellPixels())));
         addScreen(Screen.BATTLE, panel);
         showScreen(Screen.BATTLE);
         long generation = battleGeneration;
         battleController = new BattleScreenController(getRootPane(),
-                battleFactory.apply(new MatchConfig(mode, settings.getDifficulty(), 0)), keys, panel,
+                battleFactory.apply(BattleModes.localConfig(mode, settings.getDifficulty())), keys, panel,
                 snapshot -> javax.swing.SwingUtilities.invokeLater(() -> {
                     if (currentScreen != Screen.BATTLE || generation != battleGeneration) return;
-                    battleResultPanel.setSnapshot(snapshot);
+                    battleResultPanel.setSnapshot(snapshot, label);
                     showScreen(Screen.BATTLE_RESULT);
                 }),
                 this::confirmBattleForfeit,
