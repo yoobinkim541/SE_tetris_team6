@@ -29,6 +29,9 @@ import tetris.feature.score.ScoreEntry;
 import tetris.feature.score.Scoreboard;
 import tetris.feature.setting.ScreenSize;
 import tetris.feature.setting.Settings;
+import tetris.feature.network.lobby.LobbyClient;
+import tetris.feature.network.lobby.LobbySnapshot;
+import tetris.feature.network.lobby.SocketLobbyClient;
 import tetris.feature.versus.api.*;
 import tetris.ui.versus.*;
 import java.util.function.Function;
@@ -41,7 +44,7 @@ import javax.swing.JOptionPane;
  */
 public class MainFrame extends JFrame {
     /** 앱 화면 흐름 (GameState와 별개) */
-    public enum Screen { MAIN_MENU, GAME, SETTINGS, SCOREBOARD, NAME_INPUT, GAME_OVER, BATTLE_MODES, BATTLE, BATTLE_RESULT }
+    public enum Screen { MAIN_MENU, GAME, SETTINGS, SCOREBOARD, NAME_INPUT, GAME_OVER, BATTLE_MODES, BATTLE, BATTLE_RESULT, P2P_LOBBY, P2P_RESULT }
 
     private static final int MIN_CELL_PIXELS = 12;
 
@@ -69,6 +72,10 @@ public class MainFrame extends JFrame {
     private BattleScreenController battleController;
     private long battleGeneration;
     private final BattleResultPanel battleResultPanel;
+    private final java.util.function.Supplier<LobbyClient> lobbyFactory;
+    private final BattleResultPanel onlineResultPanel;
+    private P2pLobbyController p2p;
+    private boolean battleOnline;
 
     public MainFrame(Settings settings, Scoreboard scoreboard,
                      SettingsRepository settingsRepository, ScoreboardRepository scoreboardRepository) {
@@ -78,8 +85,18 @@ public class MainFrame extends JFrame {
     public MainFrame(Settings settings, Scoreboard scoreboard,
                      SettingsRepository settingsRepository, ScoreboardRepository scoreboardRepository,
                      Function<MatchConfig, BattleClient> battleFactory) {
+        this(settings, scoreboard, settingsRepository, scoreboardRepository, battleFactory,
+                () -> new SocketLobbyClient(javax.swing.SwingUtilities::invokeLater));
+    }
+
+    /** lobbyFactory: P2P 화면에 들어갈 때마다 새 로비(소켓) 하나를 만든다. 모든 콜백은 EDT에서 실행된다 */
+    public MainFrame(Settings settings, Scoreboard scoreboard,
+                     SettingsRepository settingsRepository, ScoreboardRepository scoreboardRepository,
+                     Function<MatchConfig, BattleClient> battleFactory,
+                     java.util.function.Supplier<LobbyClient> lobbyFactory) {
         super(Messages.get("app.title"));
         this.battleFactory = java.util.Objects.requireNonNull(battleFactory);
+        this.lobbyFactory = java.util.Objects.requireNonNull(lobbyFactory);
         this.settings = settings;
         this.scoreboard = scoreboard;
         this.settingsRepository = settingsRepository;
@@ -111,13 +128,17 @@ public class MainFrame extends JFrame {
         addScreen(Screen.SCOREBOARD, scoreBoardPanel);
         addScreen(Screen.SETTINGS, settingPanel);
         var modes = new MainMenuPanel(List.of(
-                new MenuItem("로컬 일반 대전", () -> startBattle(BattleMode.CLASSIC)),
-                new MenuItem("아이템 대전 · 준비 중", () -> {}),
-                new MenuItem("시간제한 대전 · 준비 중", () -> {}),
+                new MenuItem("로컬 " + BattleModes.label(BattleMode.CLASSIC), () -> startBattle(BattleMode.CLASSIC)),
+                new MenuItem("로컬 " + BattleModes.label(BattleMode.ITEM), () -> startBattle(BattleMode.ITEM)),
+                new MenuItem("로컬 " + BattleModes.label(BattleMode.TIMED), () -> startBattle(BattleMode.TIMED)),
+                new MenuItem("P2P 대전 (같은 LAN)", this::openP2pLobby),
                 new MenuItem("메인 메뉴", () -> showScreen(Screen.MAIN_MENU))));
         addScreen(Screen.BATTLE_MODES, modes);
         battleResultPanel = new BattleResultPanel(this::openBattleModes, () -> showScreen(Screen.MAIN_MENU));
         addScreen(Screen.BATTLE_RESULT, battleResultPanel);
+        onlineResultPanel = new BattleResultPanel("로비로", this::backToP2pLobby, () -> showScreen(Screen.MAIN_MENU));
+        addScreen(Screen.P2P_RESULT, onlineResultPanel);
+        addScreen(Screen.P2P_LOBBY, new JPanel());
         setContentPane(root);
 
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE); // EXT-1: 확인 없이 종료, 진행 중 게임은 폐기
@@ -127,7 +148,7 @@ public class MainFrame extends JFrame {
             public void windowDeactivated(WindowEvent e) {
                 onFocusLost();
             }
-            @Override public void windowClosing(WindowEvent e) { closeBattle(); }
+            @Override public void windowClosing(WindowEvent e) { closeBattle(); closeP2p(); }
         });
         applyScreenSize(settings.getScreenSize());
     }
@@ -135,6 +156,9 @@ public class MainFrame extends JFrame {
     /** 화면 전환. 기존 ReturnToMain 역할 = showScreen(MAIN_MENU) */
     public void showScreen(Screen screen) {
         if (currentScreen == Screen.BATTLE && screen != Screen.BATTLE) closeBattle();
+        // P2P 화면 묶음(로비·온라인 경기·온라인 결과)을 떠나면 연결을 닫는다
+        if (p2p != null && screen != Screen.P2P_LOBBY && screen != Screen.P2P_RESULT
+                && !(screen == Screen.BATTLE && battleOnline)) closeP2p();
         currentScreen = screen;
         cards.show(root, screen.name());
         if (screen == Screen.NAME_INPUT) nameInputPanel.focusField();
@@ -155,6 +179,7 @@ public class MainFrame extends JFrame {
     /** 프로그램 종료 (Main Menu '게임 종료', 창 닫기) */
     public void exitApplication() {
         closeBattle();
+        closeP2p();
         session.end();
         dispose();
         System.exit(0);
@@ -299,29 +324,93 @@ public class MainFrame extends JFrame {
         showScreen(Screen.BATTLE_MODES);
     }
 
+    /** 로컬 대전 (S9-B1). 결과는 대전 결과 화면으로만 가고 이름 입력·스코어보드 저장을 거치지 않는다 (R3-NOSCORE) */
     public void startBattle(BattleMode mode) {
-        if (mode != BattleMode.CLASSIC) throw new IllegalArgumentException("mode is not available yet");
-        session.end();
-        keyBindings.setSuspended(true);
-        keyBindings.clearPressedKeys();
-        closeBattle();
-        JComponent previous = screens.remove(Screen.BATTLE);
-        if (previous != null) root.remove(previous);
+        java.util.Objects.requireNonNull(mode);
         var keys = new BattleKeyMap();
-        var panel = new BattlePanel(settings.isColorBlindMode(), keys.guide());
-        panel.setPreferredSize(GamePanel.preferredSizeFor(fitCellSize(settings.getScreenSize().cellPixels())));
-        addScreen(Screen.BATTLE, panel);
-        showScreen(Screen.BATTLE);
+        String label = BattleModes.label(mode);
+        BattlePanel panel = prepareBattleScreen(keys, label, false);
         long generation = battleGeneration;
         battleController = new BattleScreenController(getRootPane(),
-                battleFactory.apply(new MatchConfig(mode, settings.getDifficulty(), 0)), keys, panel,
+                battleFactory.apply(BattleModes.localConfig(mode, settings.getDifficulty())), keys, panel,
                 snapshot -> javax.swing.SwingUtilities.invokeLater(() -> {
                     if (currentScreen != Screen.BATTLE || generation != battleGeneration) return;
-                    battleResultPanel.setSnapshot(snapshot);
+                    battleResultPanel.setSnapshot(snapshot, label);
                     showScreen(Screen.BATTLE_RESULT);
                 }),
                 this::confirmBattleForfeit,
                 this::openBattleModes);
+    }
+
+    private BattlePanel prepareBattleScreen(BattleKeyMap keys, String label, boolean online) {
+        session.end();
+        keyBindings.setSuspended(true);
+        keyBindings.clearPressedKeys();
+        closeBattle();
+        battleOnline = online;
+        JComponent previous = screens.remove(Screen.BATTLE);
+        if (previous != null) root.remove(previous);
+        var panel = new BattlePanel(settings.isColorBlindMode(), keys.guide(), label);
+        panel.setPreferredSize(GamePanel.preferredSizeFor(fitCellSize(settings.getScreenSize().cellPixels())));
+        addScreen(Screen.BATTLE, panel);
+        showScreen(Screen.BATTLE);
+        return panel;
+    }
+
+    // ── P2P 대전 (S9-B2) ─────────────────────
+    /** 대전 메뉴의 P2P: 호스트 대기·IP 접속·로비 화면. 들어올 때마다 새 연결을 쓴다 */
+    public void openP2pLobby() {
+        session.end();
+        keyBindings.setSuspended(true);
+        keyBindings.clearPressedKeys();
+        closeBattle();
+        if (p2p == null) {
+            LobbyClient lobby = lobbyFactory.get();
+            java.util.function.IntSupplier port = lobby instanceof SocketLobbyClient socket ? socket::localPort : () -> -1;
+            p2p = new P2pLobbyController(lobby, new P2pLobbyController.Navigation() {
+                @Override public void startMatch(BattleClient client, MatchConfig config, LobbySnapshot.Role role) {
+                    startOnlineBattle(client, config, role);
+                }
+                @Override public void connectionLost() {
+                    if (currentScreen == Screen.BATTLE || currentScreen == Screen.P2P_RESULT) showScreen(Screen.P2P_LOBBY);
+                }
+                @Override public void back() { openBattleModes(); }
+            }, port, tetris.feature.network.LanAddresses::current);
+            JComponent previous = screens.remove(Screen.P2P_LOBBY);
+            if (previous != null) root.remove(previous);
+            var panel = p2p.panel();
+            panel.setPreferredSize(GamePanel.preferredSizeFor(fitCellSize(settings.getScreenSize().cellPixels())));
+            addScreen(Screen.P2P_LOBBY, panel);
+        }
+        showScreen(Screen.P2P_LOBBY);
+    }
+
+    /** 이 화면은 자기 참가자 한 명만 조작한다. 결과는 호스트가 정한 것을 양쪽이 같이 본다 (R3-LIVE, R3-LOSS) */
+    private void startOnlineBattle(BattleClient client, MatchConfig config, LobbySnapshot.Role role) {
+        var keys = BattleKeyMap.online();
+        String label = BattleModes.label(config.mode()) + " · P2P "
+                + (role == LobbySnapshot.Role.HOST ? "(나: P1 왼쪽)" : "(나: P2 오른쪽)");
+        BattlePanel panel = prepareBattleScreen(keys, label, true);
+        long generation = battleGeneration;
+        battleController = BattleScreenController.online(getRootPane(), client, keys, panel,
+                snapshot -> javax.swing.SwingUtilities.invokeLater(() -> {
+                    if (currentScreen != Screen.BATTLE || generation != battleGeneration) return;
+                    onlineResultPanel.setSnapshot(snapshot, label);
+                    showScreen(Screen.P2P_RESULT);
+                }));
+    }
+
+    private void backToP2pLobby() {
+        if (p2p == null) { openBattleModes(); return; }
+        p2p.returnToLobby();
+        showScreen(Screen.P2P_LOBBY);
+    }
+
+    private void closeP2p() {
+        if (p2p == null) return;
+        var closing = p2p;
+        p2p = null;
+        closing.close();
     }
 
     private PlayerId confirmBattleForfeit() {
@@ -336,7 +425,7 @@ public class MainFrame extends JFrame {
         if (battleController != null) { battleController.close(); battleController = null; }
     }
 
-    @Override public void dispose() { closeBattle(); super.dispose(); }
+    @Override public void dispose() { closeBattle(); closeP2p(); super.dispose(); }
 
     // ── 설정·저장 ────────────────────────────
     private boolean onSettingsChanged() {

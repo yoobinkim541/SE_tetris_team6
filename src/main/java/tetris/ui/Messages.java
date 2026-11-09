@@ -150,6 +150,8 @@ public class Messages {
             case BATTLE_MODES -> "↑↓ 선택 · Enter 확인";
             case BATTLE -> new tetris.ui.versus.BattleKeyMap().guide();
             case BATTLE_RESULT -> "Enter 모드 선택 · Esc 메인 메뉴";
+            case P2P_LOBBY -> "호스트 대기 또는 IP 접속 · 양쪽 모두 게임 시작";
+            case P2P_RESULT -> "Enter 로비로 · Esc 메인 메뉴";
             case MAIN_MENU -> get("guide.mainMenu");
             case SETTINGS -> get("guide.settings");
             case SCOREBOARD -> get("guide.scoreboard");

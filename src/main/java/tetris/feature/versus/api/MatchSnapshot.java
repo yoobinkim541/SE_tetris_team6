@@ -36,8 +36,15 @@ public record MatchSnapshot(String matchId, long revision, PlayerView one, Playe
      * @param cells       20x10. 고정 칸 + 떨어지는 블록
      * @param next        다음 블록 모양, 최대 4x4. 비어 있을 수 있다
      * @param pendingRows 다음 Spawn 전에 보드 아래로 들어올 공격 줄. 위에서 아래 순서, 0~10줄
+     * @param items       cells와 같은 20x10. 아이템이 붙은 칸은 표시 문자({@link VersusRules#ITEM_SYMBOLS}), 나머지는 0.
+     *                    아이템 대전에서만 채워진다 (R3-ITEM). 공격 칸에는 아이템이 없다
      */
-    public record PlayerView(int[][] cells, int[][] next, long score, List<int[]> pendingRows) {
+    public record PlayerView(int[][] cells, int[][] next, long score, List<int[]> pendingRows, int[][] items) {
+        /** 아이템 표시가 없는 화면 정보 (일반·시간제한 대전) */
+        public PlayerView(int[][] cells, int[][] next, long score, List<int[]> pendingRows) {
+            this(cells, next, score, pendingRows, new int[VersusRules.BOARD_ROWS][VersusRules.BOARD_COLS]);
+        }
+
         public PlayerView {
             cells = copyGrid(cells, VersusRules.BOARD_ROWS, VersusRules.BOARD_COLS);
             if (next == null || next.length > 4) throw new IllegalArgumentException("Next must be at most 4 rows");
@@ -49,6 +56,32 @@ public record MatchSnapshot(String matchId, long revision, PlayerView one, Playe
                 throw new IllegalArgumentException("pendingRows must hold 0.." + VersusRules.MAX_PENDING_ROWS + " rows");
             }
             pendingRows = pendingRows.stream().map(AttackRows::copyRow).toList();
+            items = copyItems(items, cells);
+        }
+
+        @Override
+        public int[][] items() {
+            return copyItems(items, cells);
+        }
+
+        private static int[][] copyItems(int[][] source, int[][] cells) {
+            if (source == null || source.length != VersusRules.BOARD_ROWS) throw new IllegalArgumentException("items height");
+            int[][] result = new int[source.length][];
+            for (int r = 0; r < source.length; r++) {
+                if (source[r] == null || source[r].length != VersusRules.BOARD_COLS) {
+                    throw new IllegalArgumentException("items width");
+                }
+                for (int c = 0; c < source[r].length; c++) {
+                    int v = source[r][c];
+                    if (v == 0) continue;
+                    if (VersusRules.ITEM_SYMBOLS.indexOf(v) < 0) throw new IllegalArgumentException("item symbol " + v);
+                    if (cells[r][c] == 0 || cells[r][c] == VersusRules.ATTACK_CELL) {
+                        throw new IllegalArgumentException("item on an empty or attack cell");
+                    }
+                }
+                result[r] = source[r].clone();
+            }
+            return result;
         }
 
         @Override

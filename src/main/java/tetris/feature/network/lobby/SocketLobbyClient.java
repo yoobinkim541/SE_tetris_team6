@@ -11,11 +11,16 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 import tetris.feature.network.CloseReason;
 import tetris.feature.network.PeerEstablisher;
 import tetris.feature.network.PeerLink;
 import tetris.feature.network.PeerListener;
 import tetris.feature.network.lobby.LobbySnapshot.Role;
+import tetris.feature.network.match.ClientBattleClient;
+import tetris.feature.network.match.DispatcherPulse;
+import tetris.feature.network.match.HostBattleClient;
+import tetris.feature.network.match.MatchPulse;
 import tetris.feature.network.lobby.LobbySnapshot.State;
 import tetris.feature.network.protocol.ControlPayloads;
 import tetris.feature.network.protocol.LobbyPayloads;
@@ -24,13 +29,20 @@ import tetris.feature.network.protocol.Message;
 import tetris.feature.network.protocol.PeerRole;
 import tetris.feature.network.protocol.ProtocolException;
 import tetris.feature.versus.api.BattleClient;
+import tetris.feature.versus.LocalMatchEngine;
+import tetris.feature.versus.api.MatchClock;
 import tetris.feature.versus.api.MatchConfig;
+import tetris.feature.versus.api.MatchSnapshot;
 
 /**
  * {@link PeerEstablisher}와 {@link PeerLink} 위에서 동작하는 소켓 {@link LobbyClient} 구현 (S8-C2).
  *
  * <p>모든 명령 호출·상태 갱신·스냅샷 전달·비동기 stage 완료는 주입한 {@code dispatcher}(앱은 Swing EDT)
  * 한 스레드에서 순서대로 실행된다.
+ *
+ * <p>S9: START 뒤 경기 핸드오프. 호스트는 {@link #battleClient()}를 처음 부를 때 엔진을 시작하고(STARTING → PLAYING),
+ * 클라이언트는 START를 받는 즉시 STATE 수신기를 만든다(TCP 순서상 첫 STATE보다 START가 먼저 온다).
+ * 경기가 끝나면 RESULT, {@link #returnToLobby()}로 같은 연결의 LOBBY로 돌아간다. 연결이 끊기면 경기도 함께 닫는다.
  */
 public final class SocketLobbyClient implements LobbyClient {
     private static final LobbySnapshot INITIAL_SNAPSHOT =
@@ -57,14 +69,30 @@ public final class SocketLobbyClient implements LobbyClient {
     private long connectionSequence;
     private String currentMatchId;
     private boolean closed;
+    private final Supplier<LocalMatchEngine> engines;
+    private final MatchClock clock;
+    private final MatchPulse pulse;
+    private final java.util.ArrayDeque<LobbySnapshot> pendingPublications = new java.util.ArrayDeque<>();
+    private boolean publishing;
+    private HostBattleClient hostBattle;
+    private ClientBattleClient clientBattle;
 
     public SocketLobbyClient(Executor dispatcher) {
         this(dispatcher, new PeerEstablisher(dispatcher));
     }
 
     public SocketLobbyClient(Executor dispatcher, PeerEstablisher establisher) {
+        this(dispatcher, establisher, LocalMatchEngine::new, MatchClock.system(), new DispatcherPulse(dispatcher));
+    }
+
+    /** 엔진·시계·pulse를 주입해 경기 핸드오프를 결정적으로 검증한다 */
+    public SocketLobbyClient(Executor dispatcher, PeerEstablisher establisher, Supplier<LocalMatchEngine> engines,
+                             MatchClock clock, MatchPulse pulse) {
         this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
         this.establisher = Objects.requireNonNull(establisher, "establisher");
+        this.engines = Objects.requireNonNull(engines, "engines");
+        this.clock = Objects.requireNonNull(clock, "clock");
+        this.pulse = Objects.requireNonNull(pulse, "pulse");
     }
 
     /** START 확정 이후 경기 핸드오프(S9)에 넘길 matchId */
@@ -166,7 +194,47 @@ public final class SocketLobbyClient implements LobbyClient {
 
     @Override
     public Optional<BattleClient> battleClient() {
-        return Optional.empty();
+        ensureOpen();
+        if (snapshot.role() == Role.HOST && snapshot.state() == State.STARTING && hostBattle == null
+                && activeLink != null && currentMatchId != null) {
+            PeerLink link = activeLink;
+            hostBattle = new HostBattleClient(currentMatchId, snapshot.config(), engines.get(), clock, pulse,
+                    link::send, this::onMatchFinished);
+            if (snapshot.state() == State.STARTING) publishState(State.PLAYING, true, true);
+        }
+        State state = snapshot.state();
+        if (state != State.STARTING && state != State.PLAYING && state != State.RESULT) return Optional.empty();
+        return Optional.ofNullable(hostBattle != null ? hostBattle : clientBattle);
+    }
+
+    @Override
+    public void returnToLobby() {
+        ensureOpen();
+        if (snapshot.state() != State.RESULT) throw new IllegalStateException("returnToLobby requires RESULT");
+        closeBattle();
+        currentMatchId = null;
+        publishState(State.LOBBY, false, snapshot.peerReady());
+    }
+
+    private void onMatchFinished(MatchSnapshot finalState) {
+        if (closed || !finalState.matchId().equals(currentMatchId)) return;
+        if (snapshot.state() == State.PLAYING || snapshot.state() == State.STARTING) {
+            publishState(State.RESULT, false, false);
+        }
+    }
+
+    private void publishState(State state, boolean localReady, boolean peerReady) {
+        publish(new LobbySnapshot(snapshot.role(), state, snapshot.config(), snapshot.configRevision(),
+                localReady, peerReady, snapshot.peerIdentity()));
+    }
+
+    private void closeBattle() {
+        HostBattleClient host = hostBattle;
+        ClientBattleClient client = clientBattle;
+        hostBattle = null;
+        clientBattle = null;
+        if (host != null) host.close();
+        if (client != null) client.close();
     }
 
     @Override
@@ -269,6 +337,7 @@ public final class SocketLobbyClient implements LobbyClient {
         activeLink = null;
         boundPort = -1;
         currentMatchId = null;
+        closeBattle();
         if (attempt != null) {
             attempt.cancel();
         }
@@ -282,10 +351,22 @@ public final class SocketLobbyClient implements LobbyClient {
 
     private void publish(LobbySnapshot next) {
         snapshot = next;
-        for (Subscriber sub : List.copyOf(subscribers)) {
-            if (sub.active && !closed) {
-                sub.listener.accept(next);
+        // 구독자 콜백 안에서 다시 발행해도(예: STARTING을 받고 battleClient()로 PLAYING) 모든 구독자가 같은 순서로 받는다
+        pendingPublications.addLast(next);
+        if (publishing) return;
+        publishing = true;
+        try {
+            while (!pendingPublications.isEmpty()) {
+                LobbySnapshot value = pendingPublications.removeFirst();
+                for (Subscriber sub : List.copyOf(subscribers)) {
+                    if (sub.active && !closed) {
+                        sub.listener.accept(value);
+                    }
+                }
             }
+        } finally {
+            publishing = false;
+            pendingPublications.clear();
         }
     }
 
@@ -335,12 +416,15 @@ public final class SocketLobbyClient implements LobbyClient {
                         return; // 호스트가 받은 CONFIG는 무시한다
                     }
                     MatchConfig nextConfig = MatchPayloads.readConfig(message);
-                    if (snapshot.state() != State.LOBBY || message.configRevision() <= snapshot.configRevision()) {
+                    State state = snapshot.state();
+                    // 호스트가 먼저 로비로 돌아가 설정을 바꿨을 수 있다. RESULT에서도 받아 둔다
+                    if ((state != State.LOBBY && state != State.RESULT)
+                            || message.configRevision() <= snapshot.configRevision()) {
                         return;
                     }
                     publish(new LobbySnapshot(
                             Role.CLIENT,
-                            State.LOBBY,
+                            state,
                             nextConfig,
                             message.configRevision(),
                             false,
@@ -349,20 +433,22 @@ public final class SocketLobbyClient implements LobbyClient {
                 }
                 case READY -> {
                     boolean peerReady = LobbyPayloads.readReady(message);
-                    if (snapshot.state() != State.LOBBY
+                    State state = snapshot.state();
+                    // RESULT 화면에 남아 있는 동안 온 상대 준비도 기억했다가 로비로 돌아갈 때 반영한다
+                    if ((state != State.LOBBY && state != State.RESULT)
                             || snapshot.config() == null
                             || message.configRevision() != snapshot.configRevision()) {
                         return;
                     }
                     publish(new LobbySnapshot(
                             snapshot.role(),
-                            State.LOBBY,
+                            state,
                             snapshot.config(),
                             snapshot.configRevision(),
                             snapshot.localReady(),
                             peerReady,
                             snapshot.peerIdentity()));
-                    if (snapshot.role() == Role.HOST) {
+                    if (snapshot.role() == Role.HOST && state == State.LOBBY) {
                         tryStartMatch();
                     }
                 }
@@ -370,12 +456,14 @@ public final class SocketLobbyClient implements LobbyClient {
                     if (snapshot.role() != Role.CLIENT) {
                         return;
                     }
+                    // 호스트 권위: 호스트는 이쪽 READY를 받은 뒤에만 START를 보낸다. 그 사이 준비를 취소했더라도
+                    // 같은 설정 revision이면 따라 들어가야 호스트 혼자 경기하는 일이 없다
                     if (snapshot.state() == State.LOBBY
                             && snapshot.config() != null
-                            && message.configRevision() == snapshot.configRevision()
-                            && snapshot.localReady()
-                            && snapshot.peerReady()) {
+                            && message.configRevision() == snapshot.configRevision()) {
                         currentMatchId = message.matchId();
+                        clientBattle = new ClientBattleClient(currentMatchId, snapshot.config(), link::send,
+                                SocketLobbyClient.this::onMatchFinished);
                         publish(new LobbySnapshot(
                                 Role.CLIENT,
                                 State.STARTING,
@@ -384,7 +472,16 @@ public final class SocketLobbyClient implements LobbyClient {
                                 true,
                                 true,
                                 snapshot.peerIdentity()));
+                        if (clientBattle != null && snapshot.state() == State.STARTING) {
+                            publishState(State.PLAYING, true, true);
+                        }
                     }
+                }
+                case INPUT -> {
+                    if (hostBattle != null) hostBattle.onRemote(message);
+                }
+                case STATE, RESULT -> {
+                    if (clientBattle != null) clientBattle.onRemote(message);
                 }
                 case PING -> {
                     ControlPayloads.Ping ping = ControlPayloads.Ping.from(message.payload());
@@ -405,6 +502,7 @@ public final class SocketLobbyClient implements LobbyClient {
             activeLink = null;
             boundPort = -1;
             currentMatchId = null;
+            closeBattle();
             if (snapshot.state() != State.INITIAL) {
                 publish(INITIAL_SNAPSHOT);
             }
@@ -414,6 +512,7 @@ public final class SocketLobbyClient implements LobbyClient {
             activeLink = null;
             boundPort = -1;
             currentMatchId = null;
+            closeBattle();
             link.close();
             if (snapshot.state() != State.INITIAL) {
                 publish(INITIAL_SNAPSHOT);
