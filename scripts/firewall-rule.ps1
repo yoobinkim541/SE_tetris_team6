@@ -1,4 +1,4 @@
-param(
+﻿param(
     [ValidateSet('Add', 'Remove', 'Show')][string]$Action = 'Add',
     [ValidateRange(0, 65535)][int]$Port = 47123,
     [string]$Program = '',
@@ -55,6 +55,17 @@ Write-Host "주의: 방화벽 전체 해제(Disable-NetFirewallProfile 등)는 �
 Write-Host ""
 
 if (-not $Apply) {
+    if ($Action -eq 'Show') {
+        # 조회는 읽기 전용이라 -Apply 없이도 실제 상태를 보여준다
+        $found = @(Get-NetFirewallRule -DisplayName $displayName -ErrorAction SilentlyContinue)
+        if ($found.Count -eq 0) {
+            Write-Host "규칙이 없습니다: $displayName"
+        } else {
+            Write-Host "현재 규칙:"
+            $found | Select-Object DisplayName, Enabled, Direction, Action | Format-Table -AutoSize | Out-String | Write-Host
+        }
+        exit 0
+    }
     Write-Host "다음 명령을 실행할 예정입니다 (dry run, 실제 변경 없음):"
     foreach ($line in $plan) { Write-Host "  $line" }
     Write-Host ""
