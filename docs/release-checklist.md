@@ -34,3 +34,46 @@ Get-FileHash build/distributions/SE-Tetris-windows.zip -Algorithm SHA256
 ```
 
 배율 검증은 별도 JVM의 Java UI 배율을 사용한다. Windows 설정 자체의 배율을 바꾼 수동 평가와 동일하지 않다.
+
+## 평가 빌드 고정 (S12-C2)
+
+평가일이 확정되기 전에는 **날짜를 적지 않는다**. 아래 `D-7`, `D-1` 칸은 실제 평가일이 정해진 뒤 그 날짜로 채운다. 제출일이나 임의의 12/13을 평가일로 가정해 쓰지 않는다.
+
+| 시점 | 할 일 | 날짜 | 담당 |
+|---|---|---|---|
+| D-7 | 기능 동결: `develop`에 새 기능 병합 중단, 버그 수정만 | (평가일 확정 후) | |
+| D-1 | 평가 빌드 고정: 아래 명령으로 번들 생성, 이후 커밋 동결 | (평가일 확정 후) | |
+| D-1 | 백업 사본 2곳(USB, 팀 드라이브)에 번들 zip 복사 | (평가일 확정 후) | |
+| 평가 당일 | USB 사본으로 설치, `SHA256SUMS.txt` 대조 | - | |
+
+### 번들 생성
+
+```powershell
+# 커밋되지 않은 변경이 있으면 거부된다. 의도한 것이면 -AllowDirty를 붙인다
+git status --porcelain
+
+# 빌드 + 검증 + 번들 (check, guiAcceptance, releaseJar, packageApp, coverage-summary 포함)
+powershell -File scripts/build-eval-bundle.ps1
+
+# 이미 빌드해 둔 산출물로 번들만 다시 만들 때
+powershell -File scripts/build-eval-bundle.ps1 -SkipBuild
+```
+
+출력: `build/eval-bundle/<yyyyMMdd>-<short commit>/` 에 `SE-Tetris-windows.zip`, `SE-Tetris.jar`, `SHA256SUMS.txt`, `build-info.json`, `test-summary.json`, `README.txt` 6개 파일과 같은 이름의 `.zip`.
+
+- `challenge/` 브랜치에서는 실행을 거부한다(평가 코드 유입 방지).
+- 체크섬 재확인: `Get-FileHash -LiteralPath <번들 폴더>\SE-Tetris-windows.zip -Algorithm SHA256` 값이 `SHA256SUMS.txt`와 같은지 본다.
+- `build-info.json`의 `commit`·`dirty`로 어느 커밋·상태에서 만든 번들인지 식별한다. `dirty=true`인 번들은 평가용으로 쓰지 않는다.
+
+### 평가 전 확인
+
+- [ ] 세 모드(CLASSIC·ITEM·TIMED) 로컬 인수표: (링크 자리 — 검증 후 채움)
+- [ ] 세 모드 P2P 인수표: (링크 자리 — 검증 후 채움)
+- [ ] `test-summary.json`의 `gatePassed=true`, `line.ratio ≥ 0.70`
+- [ ] `build-info.json`의 `commit`이 고정한 커밋과 같고 `dirty=false`
+- [ ] 번들에 `challenge` 관련 코드·브랜치 산출물이 없음(`git log --oneline` 및 zip 내용 확인)
+- [ ] 두 PC 네트워크 절차: `docs/req3/evaluation-network-guide.md`
+- [ ] 200ms 측정 절차: `docs/req3/s11-lan-measurement.md` (실제 두 PC 측정은 별도, **미검증**)
+
+릴리스 게시와 배포 PR은 팀 리뷰 PR로만 한다. 이 절차로 만든 번들은 로컬 증거이며, 태그·Release 발행을 대신하지 않는다.
+
