@@ -138,7 +138,7 @@ public final class P2pLobbyPanel extends JPanel {
     /** 긴 문구를 정해진 폭 안에서 줄바꿈하는 HTML. 화면 글자는 그대로다 */
     private static String wrap(String text) {
         String escaped = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
-        return "<html><div style='text-align:center;width:360px'>" + escaped + "</div></html>";
+        return "<html><div style='text-align:center;width:250px'>" + escaped + "</div></html>";
     }
 
     private static JPanel row() {
