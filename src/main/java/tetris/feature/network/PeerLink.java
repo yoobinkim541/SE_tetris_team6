@@ -72,6 +72,13 @@ public final class PeerLink {
         connection.close();
     }
 
+    /** 마지막 메시지를 보낸 뒤 닫는다. 이후 도착한 메시지·종료 통지는 전달하지 않는다 */
+    public void closeAfter(Message last) {
+        closedLocally = true;
+        bufferedMessages.clear();
+        connection.closeAfter(last);
+    }
+
     public boolean isOpen() {
         return connection.isOpen();
     }

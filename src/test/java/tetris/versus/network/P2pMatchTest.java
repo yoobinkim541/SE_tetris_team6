@@ -50,7 +50,7 @@ import tetris.feature.versus.LocalMatchEngine;
 import tetris.feature.versus.api.*;
 
 /** S9-C1/C2: 실제 loopback 소켓 위 호스트 권위 경기 핸드오프·입력·상태·결과 (R3-READY, R3-LIVE, R3-LOSS) */
-@Timeout(60)
+@Timeout(30)
 class P2pMatchTest {
     private static final long WAIT = 5;
 
@@ -212,11 +212,14 @@ class P2pMatchTest {
         var clientBattle = battleQueue(clientExec, client);
         await(clientBattle, s -> s.phase() == MatchPhase.PLAYING);
 
+        now.addAndGet(1_500);
+        tick();
+
         run(clientExec, () -> client.battleClient().orElseThrow()
                 .send(new PlayerCommand(PlayerId.ONE, GameAction.PAUSE, true, 0)));
         await(hostBattle, s -> s.phase() == MatchPhase.PAUSED);
         MatchSnapshot paused = await(clientBattle, s -> s.phase() == MatchPhase.PAUSED);
-        assertEquals(VersusRules.DEFAULT_TIME_LIMIT_MILLIS, paused.remainingMillis(), "remaining time is the host's");
+        assertEquals(VersusRules.DEFAULT_TIME_LIMIT_MILLIS - 1_500, paused.remainingMillis(), "remaining time is the host's");
     }
 
     @Test
@@ -283,9 +286,11 @@ class P2pMatchTest {
         peer.send(MatchPayloads.inputMessage(matchId, new PlayerCommand(PlayerId.ONE, GameAction.HARD_DROP, true, 0)),
                 MatchPayloads.inputMessage("old-match", new PlayerCommand(PlayerId.TWO, GameAction.HARD_DROP, true, 1)),
                 MatchPayloads.inputMessage(matchId, new PlayerCommand(PlayerId.TWO, GameAction.HARD_DROP, true, 2)),
-                MatchPayloads.inputMessage(matchId, new PlayerCommand(PlayerId.TWO, GameAction.HARD_DROP, false, 2)));
+                MatchPayloads.inputMessage(matchId, new PlayerCommand(PlayerId.TWO, GameAction.HARD_DROP, false, 3)));
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(WAIT);
-        while (call(hostExec, battle::rejectedInputs) < 2 && System.nanoTime() < deadline) Thread.sleep(10);
+        // 네 INPUT이 모두 처리될 때까지 기다린다. 거부 2건만 보고 판정하면 유효 입력이 아직 수신 전일 수 있다
+        while ((call(hostExec, battle::rejectedInputs) < 2 || call(hostExec, battle::acceptedRemoteInputs) < 2)
+                && System.nanoTime() < deadline) Thread.onSpinWait();
         now.addAndGet(16);
         tick();
         assertEquals(2, call(hostExec, battle::rejectedInputs), "forged player ONE and stale matchId");
@@ -293,10 +298,12 @@ class P2pMatchTest {
         assertEquals(0, state.one().score(), "the client can never move the host's board");
         assertTrue(state.two().score() > 0, "the valid input counted once");
         long scored = state.two().score();
-        peer.send(MatchPayloads.inputMessage(matchId, new PlayerCommand(PlayerId.TWO, GameAction.HARD_DROP, true, 2)));
-        Thread.sleep(100);
+        peer.send(MatchPayloads.inputMessage(matchId, new PlayerCommand(PlayerId.TWO, GameAction.HARD_DROP, true, 3)));
+        long dupDeadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(500);
+        while (call(hostExec, battle::rejectedInputs) < 3 && System.nanoTime() < dupDeadline) Thread.onSpinWait();
         now.addAndGet(16);
         tick();
+        assertEquals(3, call(hostExec, battle::rejectedInputs), "duplicate remote sequence rejected");
         assertEquals(scored, call(hostExec, battle::snapshot).two().score(), "duplicate sequence ignored");
     }
 
@@ -344,6 +351,10 @@ class P2pMatchTest {
         run(clientExec, client::returnToLobby);
         assertEquals(State.LOBBY, await(cs, s -> s.state() == State.LOBBY).state());
         assertTrue(call(clientExec, client::battleClient).isEmpty());
+        run(clientExec, client::leave);
+        Message last = peer.next();
+        assertEquals(MessageType.LEAVE, last == null ? null : last.type(), "RESULT 뒤 send는 INPUT 없이 나가기 LEAVE만 보낸다");
+        assertNull(peer.next(), "LEAVE 뒤에는 닫힌다");
     }
 
     /** Review I-2: 호스트가 START를 보낸 직후 클라이언트가 준비를 취소해도 같은 경기에 들어간다 (호스트 권위) */
@@ -374,7 +385,48 @@ class P2pMatchTest {
     // ── STATE coalescing (unit) ─────────────
 
     @Test
-    void stateIsCappedNearThirtyHertzAndResultFollowsTheFinalState() {
+    void hostIgnoresDuplicateRemotePauseSequence() throws Exception {
+        AtomicLong clock = new AtomicLong();
+        ManualPulse manual = new ManualPulse();
+        var battle = new HostBattleClient("m", MatchConfig.of(BattleMode.CLASSIC),
+                new LocalMatchEngine(clock::get, id -> OBlock::new), clock::get, manual, m -> true, s -> {});
+        battle.onRemote(MatchPayloads.inputMessage("m", new PlayerCommand(PlayerId.TWO, GameAction.PAUSE, true, 5)));
+        assertEquals(MatchPhase.PAUSED, battle.snapshot().phase());
+        assertEquals(0, battle.rejectedInputs());
+
+        battle.onRemote(MatchPayloads.inputMessage("m", new PlayerCommand(PlayerId.TWO, GameAction.PAUSE, true, 5)));
+        assertEquals(MatchPhase.PAUSED, battle.snapshot().phase());
+        assertEquals(1, battle.rejectedInputs());
+    }
+
+    @Test
+    void earlyPhaseChangeStateDoesNotDelayTheNextPeriodicState() throws Exception {
+        List<Message> sent = new ArrayList<>();
+        AtomicLong clock = new AtomicLong();
+        ManualPulse manual = new ManualPulse();
+        var battle = new HostBattleClient("m", MatchConfig.of(BattleMode.CLASSIC),
+                new LocalMatchEngine(clock::get, id -> OBlock::new), clock::get, manual,
+                m -> { sent.add(m); return true; }, s -> {});
+        assertEquals(1, sent.size(), "t=0 첫 STATE");
+
+        clock.set(5);
+        battle.send(new PlayerCommand(PlayerId.ONE, GameAction.PAUSE, true, 0));
+        assertEquals(2, sent.size(), "t=5 PAUSE 즉시 STATE");
+        assertEquals(MatchPhase.PAUSED, MatchPayloads.readState(sent.getLast()).phase());
+
+        clock.set(6);
+        battle.send(new PlayerCommand(PlayerId.ONE, GameAction.PAUSE, false, 1));
+        battle.send(new PlayerCommand(PlayerId.ONE, GameAction.PAUSE, true, 2));
+        assertEquals(3, sent.size(), "t=6 RESUME 즉시 STATE");
+        assertEquals(MatchPhase.PLAYING, MatchPayloads.readState(sent.getLast()).phase());
+
+        clock.set(33);
+        manual.tick.run();
+        assertEquals(4, sent.size(), "t=33 주기 STATE가 밀리지 않고 전송된다");
+    }
+
+    @Test
+    void stateIsCappedNearThirtyHertzAndResultFollowsTheFinalState() throws Exception {
         List<Message> sent = new ArrayList<>();
         AtomicLong clock = new AtomicLong();
         ManualPulse manual = new ManualPulse();
@@ -388,8 +440,11 @@ class P2pMatchTest {
         }
         long states = sent.stream().filter(m -> m.type() == MessageType.STATE).count();
         assertTrue(states >= 25 && states <= 32, "about 30 STATE per second, was " + states);
+        int before = sent.size();
         battle.send(new PlayerCommand(PlayerId.ONE, GameAction.PAUSE, true, 0));
+        assertEquals(before + 1, sent.size());
         assertEquals(MessageType.STATE, sent.getLast().type(), "a phase change is sent at once");
+        assertEquals(MatchPhase.PAUSED, MatchPayloads.readState(sent.getLast()).phase());
         battle.send(new PlayerCommand(PlayerId.ONE, GameAction.QUIT, true, 1));
         assertEquals(MessageType.RESULT, sent.getLast().type());
         assertEquals(MessageType.STATE, sent.get(sent.size() - 2).type(), "final STATE precedes RESULT");

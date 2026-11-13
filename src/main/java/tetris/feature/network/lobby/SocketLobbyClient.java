@@ -1,6 +1,9 @@
 package tetris.feature.network.lobby;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -10,32 +13,36 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import tetris.feature.network.CloseReason;
+import tetris.feature.network.ConnectionHealth;
+import tetris.feature.network.HeartbeatPolicy;
 import tetris.feature.network.PeerEstablisher;
 import tetris.feature.network.PeerLink;
 import tetris.feature.network.PeerListener;
 import tetris.feature.network.lobby.LobbySnapshot.Role;
+import tetris.feature.network.lobby.LobbySnapshot.State;
 import tetris.feature.network.match.ClientBattleClient;
 import tetris.feature.network.match.DispatcherPulse;
 import tetris.feature.network.match.HostBattleClient;
 import tetris.feature.network.match.MatchPulse;
-import tetris.feature.network.lobby.LobbySnapshot.State;
 import tetris.feature.network.protocol.ControlPayloads;
 import tetris.feature.network.protocol.LobbyPayloads;
 import tetris.feature.network.protocol.MatchPayloads;
 import tetris.feature.network.protocol.Message;
 import tetris.feature.network.protocol.PeerRole;
 import tetris.feature.network.protocol.ProtocolException;
-import tetris.feature.versus.api.BattleClient;
+import tetris.feature.save.RecentPeers;
 import tetris.feature.versus.LocalMatchEngine;
+import tetris.feature.versus.api.BattleClient;
 import tetris.feature.versus.api.MatchClock;
 import tetris.feature.versus.api.MatchConfig;
 import tetris.feature.versus.api.MatchSnapshot;
 
 /**
- * {@link PeerEstablisher}와 {@link PeerLink} 위에서 동작하는 소켓 {@link LobbyClient} 구현 (S8-C2).
+ * {@link PeerEstablisher}와 {@link PeerLink} 위에서 동작하는 소켓 {@link LobbyClient} 구현 (S8-C2, S10-C1).
  *
  * <p>모든 명령 호출·상태 갱신·스냅샷 전달·비동기 stage 완료는 주입한 {@code dispatcher}(앱은 Swing EDT)
  * 한 스레드에서 순서대로 실행된다.
@@ -43,10 +50,19 @@ import tetris.feature.versus.api.MatchSnapshot;
  * <p>S9: START 뒤 경기 핸드오프. 호스트는 {@link #battleClient()}를 처음 부를 때 엔진을 시작하고(STARTING → PLAYING),
  * 클라이언트는 START를 받는 즉시 STATE 수신기를 만든다(TCP 순서상 첫 STATE보다 START가 먼저 온다).
  * 경기가 끝나면 RESULT, {@link #returnToLobby()}로 같은 연결의 LOBBY로 돌아간다. 연결이 끊기면 경기도 함께 닫는다.
+ *
+ * <p>S10-C1: 연결이 LOBBY로 수립되면 heartbeat PING을 주기적으로 보내고, 수신 프레임과 PONG RTT로
+ * {@link ConnectionHealth}를 갱신해 {@link LinkHealth} 구독자에게 상태 변화를 알린다.
  */
 public final class SocketLobbyClient implements LobbyClient {
     private static final LobbySnapshot INITIAL_SNAPSHOT =
             new LobbySnapshot(Role.NONE, State.INITIAL, null, 0, false, false, null);
+    private static final int MAX_PENDING_PINGS = 16;
+    private static final Executor DEFAULT_IO = Executors.newSingleThreadExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "lobby-recent-peers-io");
+        thread.setDaemon(true);
+        return thread;
+    });
 
     private static final class Subscriber {
         final Consumer<LobbySnapshot> listener;
@@ -57,11 +73,22 @@ public final class SocketLobbyClient implements LobbyClient {
         }
     }
 
+    private static final class HealthSubscriber {
+        final Consumer<LinkHealth> listener;
+        boolean active = true;
+
+        HealthSubscriber(Consumer<LinkHealth> listener) {
+            this.listener = listener;
+        }
+    }
+
     private final Executor dispatcher;
     private final PeerEstablisher establisher;
     private final List<Subscriber> subscribers = new ArrayList<>();
+    private final List<HealthSubscriber> healthSubscribers = new ArrayList<>();
 
     private LobbySnapshot snapshot = INITIAL_SNAPSHOT;
+    private LinkHealth currentHealth = LinkHealth.NONE;
     private PeerEstablisher.Attempt activeAttempt;
     private CompletableFuture<Void> pendingStage;
     private PeerLink activeLink;
@@ -72,8 +99,17 @@ public final class SocketLobbyClient implements LobbyClient {
     private final Supplier<LocalMatchEngine> engines;
     private final MatchClock clock;
     private final MatchPulse pulse;
-    private final java.util.ArrayDeque<LobbySnapshot> pendingPublications = new java.util.ArrayDeque<>();
+    private final HeartbeatPolicy policy;
+    private final RecentPeers recentPeers;
+    private final Executor io;
+    private final ArrayDeque<LobbySnapshot> pendingPublications = new ArrayDeque<>();
     private boolean publishing;
+    private final ArrayDeque<LinkHealth> pendingHealthPublications = new ArrayDeque<>();
+    private boolean publishingHealth;
+    private final LinkedHashMap<Long, Long> pendingPings = new LinkedHashMap<>();
+    private ConnectionHealth connectionHealth;
+    private MatchPulse.Handle heartbeatHandle;
+    private long heartbeatNonce;
     private HostBattleClient hostBattle;
     private ClientBattleClient clientBattle;
 
@@ -88,11 +124,45 @@ public final class SocketLobbyClient implements LobbyClient {
     /** 엔진·시계·pulse를 주입해 경기 핸드오프를 결정적으로 검증한다 */
     public SocketLobbyClient(Executor dispatcher, PeerEstablisher establisher, Supplier<LocalMatchEngine> engines,
                              MatchClock clock, MatchPulse pulse) {
+        this(dispatcher, establisher, engines, clock, pulse, HeartbeatPolicy.DEFAULT);
+    }
+
+    /** heartbeat 정책까지 주입해 연결 건강 판정을 결정적으로 검증한다 (S10-C1) */
+    public SocketLobbyClient(Executor dispatcher, PeerEstablisher establisher, Supplier<LocalMatchEngine> engines,
+                             MatchClock clock, MatchPulse pulse, HeartbeatPolicy policy) {
+        this(dispatcher, establisher, engines, clock, pulse, policy, RecentPeers.NONE, DEFAULT_IO);
+    }
+
+    /** 최근 접속 주소 저장소와 디스크 I/O 실행기까지 주입한다 (S10-C2) */
+    public SocketLobbyClient(Executor dispatcher, PeerEstablisher establisher, Supplier<LocalMatchEngine> engines,
+                             MatchClock clock, MatchPulse pulse, HeartbeatPolicy policy,
+                             RecentPeers recentPeers, Executor io) {
         this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
         this.establisher = Objects.requireNonNull(establisher, "establisher");
         this.engines = Objects.requireNonNull(engines, "engines");
         this.clock = Objects.requireNonNull(clock, "clock");
         this.pulse = Objects.requireNonNull(pulse, "pulse");
+        this.policy = Objects.requireNonNull(policy, "policy");
+        this.recentPeers = Objects.requireNonNull(recentPeers, "recentPeers");
+        this.io = Objects.requireNonNull(io, "io");
+    }
+
+    /**
+     * 저장된 최근 접속 성공 주소 목록(최신순, 최대 5개)을 돌려준다 (S10-C2).
+     *
+     * <p>파일 읽기가 포함될 수 있으므로 호출 측은 시작 시 한 번 읽거나 EDT 밖에서 부른다.
+     */
+    public List<String> recentPeers() {
+        try {
+            return recentPeers.load();
+        } catch (RuntimeException e) {
+            return List.of();
+        }
+    }
+
+    /** 현재 연결 건강 상태와 최근 RTT (S10-C1) */
+    public LinkHealth health() {
+        return currentHealth;
     }
 
     /** START 확정 이후 경기 핸드오프(S9)에 넘길 matchId */
@@ -137,8 +207,10 @@ public final class SocketLobbyClient implements LobbyClient {
     public void cancel() {
         ensureOpen();
         if (activeAttempt == null) {
-            return;
+            return; // 연결 수립 중이 아니면 할 일이 없다. 이미 연결된 링크의 heartbeat는 그대로 둔다
         }
+        stopHeartbeat();
+        currentHealth = LinkHealth.NONE;
         PeerEstablisher.Attempt attempt = activeAttempt;
         CompletableFuture<Void> stage = pendingStage;
         activeAttempt = null;
@@ -164,9 +236,10 @@ public final class SocketLobbyClient implements LobbyClient {
         if (snapshot.configRevision() >= Integer.MAX_VALUE) {
             throw new IllegalStateException("config revision exhausted");
         }
+        PeerLink link = activeLink;
         LobbySnapshot next = snapshot.selectConfig(config);
         publish(next);
-        activeLink.send(MatchPayloads.configMessage(config, Math.toIntExact(next.configRevision())));
+        sendOrDisconnect(link, MatchPayloads.configMessage(config, Math.toIntExact(next.configRevision())));
     }
 
     @Override
@@ -176,8 +249,11 @@ public final class SocketLobbyClient implements LobbyClient {
         if (activeLink == null) {
             throw new IllegalStateException("no active peer link");
         }
+        PeerLink link = activeLink;
         publish(next);
-        activeLink.send(LobbyPayloads.readyMessage(Math.toIntExact(next.configRevision()), ready));
+        if (!sendOrDisconnect(link, LobbyPayloads.readyMessage(Math.toIntExact(next.configRevision()), ready))) {
+            return;
+        }
         if (next.role() == Role.HOST) {
             tryStartMatch();
         }
@@ -253,6 +329,21 @@ public final class SocketLobbyClient implements LobbyClient {
     }
 
     @Override
+    public Subscription subscribeHealth(Consumer<LinkHealth> listener) {
+        Objects.requireNonNull(listener, "listener");
+        ensureOpen();
+        HealthSubscriber sub = new HealthSubscriber(listener);
+        healthSubscribers.add(sub);
+        listener.accept(currentHealth);
+        return () -> {
+            if (sub.active) {
+                sub.active = false;
+                healthSubscribers.remove(sub);
+            }
+        };
+    }
+
+    @Override
     public void close() {
         if (closed) {
             return;
@@ -263,6 +354,10 @@ public final class SocketLobbyClient implements LobbyClient {
             sub.active = false;
         }
         subscribers.clear();
+        for (HealthSubscriber sub : healthSubscribers) {
+            sub.active = false;
+        }
+        healthSubscribers.clear();
     }
 
     private void onAttemptCompleted(
@@ -296,13 +391,144 @@ public final class SocketLobbyClient implements LobbyClient {
 
         activeLink = link;
         currentMatchId = null;
+        startHeartbeat(link);
         Role lobbyRole = (link.role() == PeerRole.HOST) ? Role.HOST : Role.CLIENT;
+        if (lobbyRole == Role.CLIENT) {
+            String peerAddress = link.peerAddress();
+            try {
+                io.execute(() -> {
+                    try {
+                        recentPeers.record(peerAddress);
+                    } catch (RuntimeException ignored) {
+                        // 최근 주소 저장 실패가 접속이나 EDT를 막지 않는다
+                    }
+                });
+            } catch (RuntimeException ignored) {
+                // 실행기 거부 시에도 접속은 유지한다
+            }
+        }
         String peerIdentity = link.peerAddress() + "#" + (++connectionSequence);
         publish(new LobbySnapshot(lobbyRole, State.LOBBY, null, 0, false, false, peerIdentity));
         if (!closed && activeLink == link) {
             link.attach(new LinkListener(link));
         }
         stage.complete(null);
+    }
+
+    private void startHeartbeat(PeerLink link) {
+        stopHeartbeat();
+        connectionHealth = new ConnectionHealth(policy, clock.nowMillis());
+        publishHealth(new LinkHealth(LinkHealth.Status.NORMAL, -1));
+        heartbeatHandle = pulse.start((int) policy.intervalMillis(), () -> heartbeat(link));
+    }
+
+    private void stopHeartbeat() {
+        MatchPulse.Handle handle = heartbeatHandle;
+        heartbeatHandle = null;
+        connectionHealth = null;
+        pendingPings.clear();
+        heartbeatNonce = 0;
+        if (handle != null) {
+            handle.close();
+        }
+    }
+
+    private void heartbeat(PeerLink link) {
+        if (closed || activeLink != link || connectionHealth == null) {
+            return;
+        }
+        long now = clock.nowMillis();
+        long nonce = ++heartbeatNonce;
+        if (pendingPings.size() >= MAX_PENDING_PINGS) {
+            Iterator<Long> it = pendingPings.keySet().iterator();
+            if (it.hasNext()) {
+                it.next();
+                it.remove();
+            }
+        }
+        pendingPings.put(nonce, now);
+        if (!sendOrDisconnect(link, new ControlPayloads.Ping(nonce, System.nanoTime()).message())) {
+            return;
+        }
+        ConnectionHealth.Status evaluated = connectionHealth.evaluate(now);
+        if (evaluated == ConnectionHealth.Status.LOST) {
+            terminateConnectionWithHealth(link, LinkHealth.Status.LOST);
+        } else {
+            syncHealthFromConnection();
+        }
+    }
+
+    private boolean sendOrDisconnect(PeerLink link, Message message) {
+        if (activeLink != link) {
+            return false;
+        }
+        if (!link.send(message)) {
+            terminateConnectionWithHealth(link, LinkHealth.Status.LOST);
+            return false;
+        }
+        return true;
+    }
+
+    private void syncHealthFromConnection() {
+        if (connectionHealth == null) {
+            return;
+        }
+        LinkHealth.Status mapped = switch (connectionHealth.status()) {
+            case NORMAL -> LinkHealth.Status.NORMAL;
+            case LAGGING -> LinkHealth.Status.LAGGING;
+            case LOST -> LinkHealth.Status.LOST;
+        };
+        publishHealth(new LinkHealth(mapped, connectionHealth.lastRttMillis()));
+    }
+
+    private void terminateConnectionWithHealth(PeerLink link, LinkHealth.Status terminalStatus) {
+        if (closed || activeLink != link) {
+            return;
+        }
+        long lastRtt = connectionHealth != null ? connectionHealth.lastRttMillis() : -1L;
+        stopHeartbeat();
+        activeLink = null;
+        boundPort = -1;
+        currentMatchId = null;
+        closeBattle();
+        link.close();
+        LinkHealth nextHealth = new LinkHealth(terminalStatus, lastRtt);
+        boolean statusChanged = nextHealth.status() != currentHealth.status();
+        currentHealth = nextHealth;
+        if (snapshot.state() != State.INITIAL) {
+            publish(INITIAL_SNAPSHOT);
+        }
+        if (statusChanged) {
+            notifyHealthSubscribers(nextHealth);
+        }
+    }
+
+    private void publishHealth(LinkHealth next) {
+        boolean statusChanged = next.status() != currentHealth.status();
+        currentHealth = next;
+        if (!statusChanged) {
+            return;
+        }
+        notifyHealthSubscribers(next);
+    }
+
+    private void notifyHealthSubscribers(LinkHealth next) {
+        pendingHealthPublications.addLast(next);
+        if (publishingHealth) return;
+        publishingHealth = true;
+        try {
+            while (!pendingHealthPublications.isEmpty()) {
+                LinkHealth value = pendingHealthPublications.removeFirst();
+                for (HealthSubscriber sub : List.copyOf(healthSubscribers)) {
+                    if (sub.active && !closed) {
+                        sub.listener.accept(value);
+                    }
+                }
+            }
+        } finally {
+            publishingHealth = false;
+            pendingHealthPublications.clear();
+        }
     }
 
     private void tryStartMatch() {
@@ -314,10 +540,13 @@ public final class SocketLobbyClient implements LobbyClient {
                 || activeLink == null) {
             return;
         }
+        PeerLink link = activeLink;
         String generatedMatchId = UUID.randomUUID().toString();
         int rev = Math.toIntExact(snapshot.configRevision());
         currentMatchId = generatedMatchId;
-        activeLink.send(LobbyPayloads.startMessage(generatedMatchId, rev));
+        if (!sendOrDisconnect(link, LobbyPayloads.startMessage(generatedMatchId, rev))) {
+            return;
+        }
         publish(new LobbySnapshot(
                 Role.HOST,
                 State.STARTING,
@@ -332,6 +561,8 @@ public final class SocketLobbyClient implements LobbyClient {
         PeerEstablisher.Attempt attempt = activeAttempt;
         CompletableFuture<Void> stage = pendingStage;
         PeerLink link = activeLink;
+        stopHeartbeat();
+        currentHealth = LinkHealth.NONE;
         activeAttempt = null;
         pendingStage = null;
         activeLink = null;
@@ -345,7 +576,9 @@ public final class SocketLobbyClient implements LobbyClient {
             stage.cancel(false);
         }
         if (link != null) {
-            link.close();
+            // 상대가 끊김(LOST)이 아니라 정상 나가기(PEER_LEFT)로 안내하도록 LEAVE를 보낸 뒤 닫는다
+            if (link.isOpen()) link.closeAfter(new ControlPayloads.Leave("user").message());
+            else link.close();
         }
     }
 
@@ -401,15 +634,20 @@ public final class SocketLobbyClient implements LobbyClient {
             if (closed || activeLink != link) {
                 return;
             }
+            long now = clock.nowMillis();
+            if (connectionHealth != null) {
+                connectionHealth.onFrame(now);
+                syncHealthFromConnection();
+            }
             try {
-                handleMessage(message);
+                handleMessage(message, now);
             } catch (ProtocolException e) {
                 link.send(new ControlPayloads.Failure(e.code(), String.valueOf(e.getMessage())).message());
-                disconnectToInitial();
+                terminateConnectionWithHealth(link, LinkHealth.Status.LOST);
             }
         }
 
-        private void handleMessage(Message message) throws ProtocolException {
+        private void handleMessage(Message message, long now) throws ProtocolException {
             switch (message.type()) {
                 case CONFIG -> {
                     if (snapshot.role() != Role.CLIENT) {
@@ -485,9 +723,24 @@ public final class SocketLobbyClient implements LobbyClient {
                 }
                 case PING -> {
                     ControlPayloads.Ping ping = ControlPayloads.Ping.from(message.payload());
-                    link.send(ping.pong());
+                    sendOrDisconnect(link, ping.pong());
                 }
-                case LEAVE, ERROR -> disconnectToInitial();
+                case PONG -> {
+                    ControlPayloads.Ping pong = ControlPayloads.Ping.from(message.payload());
+                    Long sentAt = pendingPings.remove(pong.nonce());
+                    if (sentAt != null && connectionHealth != null) {
+                        connectionHealth.onRtt(Math.max(0L, now - sentAt), now);
+                        syncHealthFromConnection();
+                    }
+                }
+                case LEAVE -> {
+                    ControlPayloads.Leave.from(message.payload());
+                    terminateConnectionWithHealth(link, LinkHealth.Status.PEER_LEFT);
+                }
+                case ERROR -> {
+                    ControlPayloads.Failure.from(message.payload());
+                    terminateConnectionWithHealth(link, LinkHealth.Status.LOST);
+                }
                 default -> {
                     // 로비 단계 밖의 메시지는 무시한다
                 }
@@ -496,27 +749,7 @@ public final class SocketLobbyClient implements LobbyClient {
 
         @Override
         public void onClosed(CloseReason reason, String detail) {
-            if (closed || activeLink != link) {
-                return;
-            }
-            activeLink = null;
-            boundPort = -1;
-            currentMatchId = null;
-            closeBattle();
-            if (snapshot.state() != State.INITIAL) {
-                publish(INITIAL_SNAPSHOT);
-            }
-        }
-
-        private void disconnectToInitial() {
-            activeLink = null;
-            boundPort = -1;
-            currentMatchId = null;
-            closeBattle();
-            link.close();
-            if (snapshot.state() != State.INITIAL) {
-                publish(INITIAL_SNAPSHOT);
-            }
+            terminateConnectionWithHealth(link, LinkHealth.Status.LOST);
         }
     }
 }
