@@ -191,6 +191,15 @@ class LinkHealthLobbyTest {
         }
     }
 
+    /** 호스트가 RTT가 rtt인 PONG을 처리할 때까지 기다린다 */
+    private void awaitRtt(long rtt) throws Exception {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(WAIT_SECONDS);
+        while (callOn(hostExec, host::health).rttMillis() != rtt) {
+            assertTrue(System.nanoTime() < deadline, "PONG RTT " + rtt + "ms가 반영되지 않았다");
+            Thread.onSpinWait();
+        }
+    }
+
     private RawPeer connectRawPeer(BlockingQueue<LobbySnapshot> hs) throws Exception {
         Socket socket = new Socket();
         socket.setReceiveBufferSize(1024);
@@ -230,23 +239,29 @@ class LinkHealthLobbyTest {
         RawPeer peer = connectRawPeer(hs);
         awaitQueue(hq, h -> h.status() == LinkHealth.Status.NORMAL);
 
+        // PONG마다 RTT를 1ms씩 달리 해서, 다음 PING을 보내기 전에 호스트가 이 PONG을 반영했는지 확인한다.
+        // 확인 없이 다음 tick을 돌리면 늦게 처리된 PONG의 RTT가 다음 시계 증가분만큼 커져 판정이 흔들린다
         for (int i = 0; i < 3; i++) {
+            long rtt = 250L + i;
             runOn(hostExec, () -> pulse.currentTick().run());
             ControlPayloads.Ping ping = ControlPayloads.Ping.from(peer.next(MessageType.PING).payload());
-            now.addAndGet(250L);
+            now.addAndGet(rtt);
             peer.send(ping.pong());
+            awaitRtt(rtt);
         }
         LinkHealth lagging = awaitQueue(hq, h -> h.status() == LinkHealth.Status.LAGGING);
-        assertEquals(250L, lagging.rttMillis());
+        assertEquals(252L, lagging.rttMillis());
 
         for (int i = 0; i < 3; i++) {
+            long rtt = 120L + i;
             runOn(hostExec, () -> pulse.currentTick().run());
             ControlPayloads.Ping ping = ControlPayloads.Ping.from(peer.next(MessageType.PING).payload());
-            now.addAndGet(120L);
+            now.addAndGet(rtt);
             peer.send(ping.pong());
+            awaitRtt(rtt);
         }
         LinkHealth recovered = awaitQueue(hq, h -> h.status() == LinkHealth.Status.NORMAL);
-        assertEquals(120L, recovered.rttMillis());
+        assertEquals(122L, recovered.rttMillis());
     }
 
     @Test

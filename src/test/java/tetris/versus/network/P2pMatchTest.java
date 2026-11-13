@@ -288,7 +288,9 @@ class P2pMatchTest {
                 MatchPayloads.inputMessage(matchId, new PlayerCommand(PlayerId.TWO, GameAction.HARD_DROP, true, 2)),
                 MatchPayloads.inputMessage(matchId, new PlayerCommand(PlayerId.TWO, GameAction.HARD_DROP, false, 3)));
         long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(WAIT);
-        while (call(hostExec, battle::rejectedInputs) < 2 && System.nanoTime() < deadline) Thread.onSpinWait();
+        // 네 INPUT이 모두 처리될 때까지 기다린다. 거부 2건만 보고 판정하면 유효 입력이 아직 수신 전일 수 있다
+        while ((call(hostExec, battle::rejectedInputs) < 2 || call(hostExec, battle::acceptedRemoteInputs) < 2)
+                && System.nanoTime() < deadline) Thread.onSpinWait();
         now.addAndGet(16);
         tick();
         assertEquals(2, call(hostExec, battle::rejectedInputs), "forged player ONE and stale matchId");

@@ -46,6 +46,7 @@ public final class HostBattleClient implements BattleClient {
     private long nextStateAt = Long.MIN_VALUE;
     private MatchPhase lastSentPhase;
     private int rejectedInputs;
+    private int acceptedRemoteInputs;
     private boolean finished;
     private boolean closed;
 
@@ -72,6 +73,11 @@ public final class HostBattleClient implements BattleClient {
         return rejectedInputs;
     }
 
+    /** 엔진에 넘긴 상대 INPUT 수 (검증용). 비동기 수신을 기다리는 테스트가 처리 완료를 확인한다 */
+    public int acceptedRemoteInputs() {
+        return acceptedRemoteInputs;
+    }
+
     @Override
     public void send(PlayerCommand command) {
         Objects.requireNonNull(command, "command");
@@ -92,6 +98,7 @@ public final class HostBattleClient implements BattleClient {
             return;
         }
         lastRemoteSequence = command.sequence();
+        acceptedRemoteInputs++;
         submit(command);
     }
 
