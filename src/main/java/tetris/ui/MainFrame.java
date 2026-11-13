@@ -86,7 +86,25 @@ public class MainFrame extends JFrame {
                      SettingsRepository settingsRepository, ScoreboardRepository scoreboardRepository,
                      Function<MatchConfig, BattleClient> battleFactory) {
         this(settings, scoreboard, settingsRepository, scoreboardRepository, battleFactory,
-                () -> new SocketLobbyClient(javax.swing.SwingUtilities::invokeLater));
+                MainFrame::defaultLobby);
+    }
+
+    /** 최근 접속 IP 기록용 디스크 실행기. EDT를 막지 않도록 데몬 스레드 하나에서 쓴다 (R3-RECENT) */
+    private static final java.util.concurrent.Executor RECENT_PEER_IO =
+            java.util.concurrent.Executors.newSingleThreadExecutor(task -> {
+                Thread thread = new Thread(task, "recent-peers-io");
+                thread.setDaemon(true);
+                return thread;
+            });
+
+    /** 실제 소켓 로비. 접속에 성공한 IP를 %APPDATA% 아래 recent-peers.json에 남긴다 */
+    private static LobbyClient defaultLobby() {
+        java.util.concurrent.Executor edt = javax.swing.SwingUtilities::invokeLater;
+        return new SocketLobbyClient(edt, new tetris.feature.network.PeerEstablisher(edt),
+                tetris.feature.versus.LocalMatchEngine::new, MatchClock.system(),
+                new tetris.feature.network.match.DispatcherPulse(edt), tetris.feature.network.HeartbeatPolicy.DEFAULT,
+                new tetris.feature.save.JsonRecentPeerRepository(tetris.feature.save.JsonRecentPeerRepository.defaultFile()),
+                RECENT_PEER_IO);
     }
 
     /** lobbyFactory: P2P 화면에 들어갈 때마다 새 로비(소켓) 하나를 만든다. 모든 콜백은 EDT에서 실행된다 */
@@ -136,7 +154,8 @@ public class MainFrame extends JFrame {
         addScreen(Screen.BATTLE_MODES, modes);
         battleResultPanel = new BattleResultPanel(this::openBattleModes, () -> showScreen(Screen.MAIN_MENU));
         addScreen(Screen.BATTLE_RESULT, battleResultPanel);
-        onlineResultPanel = new BattleResultPanel("로비로", this::backToP2pLobby, () -> showScreen(Screen.MAIN_MENU));
+        onlineResultPanel = new BattleResultPanel("로비로", this::backToP2pLobby, "다시 대전", this::rematchP2p,
+                () -> showScreen(Screen.MAIN_MENU));
         addScreen(Screen.P2P_RESULT, onlineResultPanel);
         addScreen(Screen.P2P_LOBBY, new JPanel());
         setContentPane(root);
@@ -329,7 +348,7 @@ public class MainFrame extends JFrame {
         java.util.Objects.requireNonNull(mode);
         var keys = new BattleKeyMap();
         String label = BattleModes.label(mode);
-        BattlePanel panel = prepareBattleScreen(keys, label, false);
+        BattlePanel panel = prepareBattleScreen(keys, label, mode, null);
         long generation = battleGeneration;
         battleController = new BattleScreenController(getRootPane(),
                 battleFactory.apply(BattleModes.localConfig(mode, settings.getDifficulty())), keys, panel,
@@ -342,15 +361,16 @@ public class MainFrame extends JFrame {
                 this::openBattleModes);
     }
 
-    private BattlePanel prepareBattleScreen(BattleKeyMap keys, String label, boolean online) {
+    /** viewer: P2P에서 이 PC가 조작하는 참가자. 로컬 대전이면 null */
+    private BattlePanel prepareBattleScreen(BattleKeyMap keys, String label, BattleMode mode, PlayerId viewer) {
         session.end();
         keyBindings.setSuspended(true);
         keyBindings.clearPressedKeys();
         closeBattle();
-        battleOnline = online;
+        battleOnline = viewer != null;
         JComponent previous = screens.remove(Screen.BATTLE);
         if (previous != null) root.remove(previous);
-        var panel = new BattlePanel(settings.isColorBlindMode(), keys.guide(), label);
+        var panel = new BattlePanel(settings.isColorBlindMode(), keys.guide(), label, mode, viewer);
         panel.setPreferredSize(GamePanel.preferredSizeFor(fitCellSize(settings.getScreenSize().cellPixels())));
         addScreen(Screen.BATTLE, panel);
         showScreen(Screen.BATTLE);
@@ -367,15 +387,25 @@ public class MainFrame extends JFrame {
         if (p2p == null) {
             LobbyClient lobby = lobbyFactory.get();
             java.util.function.IntSupplier port = lobby instanceof SocketLobbyClient socket ? socket::localPort : () -> -1;
+            java.util.function.Supplier<List<String>> recent = List::of;
+            if (lobby instanceof SocketLobbyClient saved) recent = saved::recentPeers;
             p2p = new P2pLobbyController(lobby, new P2pLobbyController.Navigation() {
                 @Override public void startMatch(BattleClient client, MatchConfig config, LobbySnapshot.Role role) {
                     startOnlineBattle(client, config, role);
                 }
                 @Override public void connectionLost() {
-                    if (currentScreen == Screen.BATTLE || currentScreen == Screen.P2P_RESULT) showScreen(Screen.P2P_LOBBY);
+                    if (currentScreen == Screen.BATTLE || currentScreen == Screen.P2P_RESULT) {
+                        showScreen(Screen.P2P_LOBBY);
+                        if (p2p != null) p2p.panel().focusTarget().requestFocusInWindow();
+                    }
                 }
                 @Override public void back() { openBattleModes(); }
-            }, port, tetris.feature.network.LanAddresses::current);
+                @Override public void healthChanged(tetris.feature.network.lobby.LinkHealth health) {
+                    if (battleOnline && screens.get(Screen.BATTLE) instanceof BattlePanel battle) {
+                        battle.setConnectionNotice(P2pLobbyController.lagText(health));
+                    }
+                }
+            }, port, tetris.feature.network.LanAddresses::current, recent);
             JComponent previous = screens.remove(Screen.P2P_LOBBY);
             if (previous != null) root.remove(previous);
             var panel = p2p.panel();
@@ -390,12 +420,13 @@ public class MainFrame extends JFrame {
         var keys = BattleKeyMap.online();
         String label = BattleModes.label(config.mode()) + " · P2P "
                 + (role == LobbySnapshot.Role.HOST ? "(나: P1 왼쪽)" : "(나: P2 오른쪽)");
-        BattlePanel panel = prepareBattleScreen(keys, label, true);
+        PlayerId viewer = role == LobbySnapshot.Role.HOST ? PlayerId.ONE : PlayerId.TWO;
+        BattlePanel panel = prepareBattleScreen(keys, label, config.mode(), viewer);
         long generation = battleGeneration;
         battleController = BattleScreenController.online(getRootPane(), client, keys, panel,
                 snapshot -> javax.swing.SwingUtilities.invokeLater(() -> {
                     if (currentScreen != Screen.BATTLE || generation != battleGeneration) return;
-                    onlineResultPanel.setSnapshot(snapshot, label);
+                    onlineResultPanel.setSnapshot(snapshot, label, viewer);
                     showScreen(Screen.P2P_RESULT);
                 }));
     }
@@ -404,6 +435,15 @@ public class MainFrame extends JFrame {
         if (p2p == null) { openBattleModes(); return; }
         p2p.returnToLobby();
         showScreen(Screen.P2P_LOBBY);
+        p2p.panel().focusTarget().requestFocusInWindow();
+    }
+
+    /** 결과 화면 "다시 대전": 같은 연결의 로비로 가서 이 PC의 준비를 켠다 (R3-REMATCH) */
+    private void rematchP2p() {
+        if (p2p == null) { openBattleModes(); return; }
+        p2p.rematch();
+        showScreen(Screen.P2P_LOBBY);
+        p2p.panel().focusTarget().requestFocusInWindow();
     }
 
     private void closeP2p() {

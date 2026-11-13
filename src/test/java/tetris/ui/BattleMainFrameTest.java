@@ -181,9 +181,13 @@ class BattleMainFrameTest {
                 try {
                     var hostResult = (BattleResultPanel) field(frames[0], "onlineResultPanel");
                     var clientResult = (BattleResultPanel) field(frames[1], "onlineResultPanel");
-                    assertTrue(hostResult.getSummaryText().endsWith("P2 승리 · 기권"), hostResult.getSummaryText());
-                    assertTrue(clientResult.getSummaryText().endsWith("P2 승리 · 기권"), clientResult.getSummaryText());
-                    assertEquals(hostResult.getScoresText(), clientResult.getScoresText());
+                    // 같은 결과(P2 승리·기권)를 각자 관점으로 본다 (S10-B1)
+                    assertTrue(hostResult.getSummaryText().endsWith("패배 · 기권"), hostResult.getSummaryText());
+                    assertTrue(clientResult.getSummaryText().endsWith("승리! · 기권"), clientResult.getSummaryText());
+                    assertEquals(hostResult.getScoresText().replace("(나)", "?").replace("(상대)", "?"),
+                        clientResult.getScoresText().replace("(나)", "?").replace("(상대)", "?"), "두 PC의 점수는 같다");
+                    assertTrue(hostResult.getScoresText().startsWith("P1 (나)"), hostResult.getScoresText());
+                    assertTrue(clientResult.getScoresText().contains("P2 (나)"), clientResult.getScoresText());
                     shot(frames[1], "s9-b2-client-result");
                     var back = MainFrame.class.getDeclaredMethod("backToP2pLobby"); back.setAccessible(true);
                     back.invoke(frames[1]);

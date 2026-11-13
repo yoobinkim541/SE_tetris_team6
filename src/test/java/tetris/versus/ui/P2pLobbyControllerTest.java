@@ -20,7 +20,7 @@ import tetris.ui.versus.*;
 
 /** S9-B2: 접속·로비 화면 동작 (R3-MENU, R3-HOST, R3-READY) */
 class P2pLobbyControllerTest {
-    static final class FakeLobby implements LobbyClient {
+    static class FakeLobby implements LobbyClient {
         final List<String> calls = new ArrayList<>();
         final List<Consumer<LobbySnapshot>> listeners = new ArrayList<>();
         LobbySnapshot snapshot = new LobbySnapshot(Role.NONE, State.INITIAL, null, 0, false, false, null);
@@ -77,7 +77,7 @@ class P2pLobbyControllerTest {
         @Override public void close() { closed = true; calls.add("close"); }
     }
 
-    static final class Nav implements P2pLobbyController.Navigation {
+    static class Nav implements P2pLobbyController.Navigation {
         final List<String> events = new ArrayList<>();
         @Override public void startMatch(BattleClient client, MatchConfig config, Role role) {
             events.add("start " + config.mode() + " " + role);

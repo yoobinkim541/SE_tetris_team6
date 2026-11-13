@@ -14,6 +14,9 @@ public final class BattleResultPanel extends JPanel {
     private final JLabel summary = new JLabel("대전 결과", SwingConstants.CENTER);
     private String summaryText = "대전 결과";
     private final JLabel scores = new JLabel("", SwingConstants.CENTER);
+    private String hintText = "";
+    /** 화면 아래 키 안내 */
+    public String getHintText() { return hintText; }
 
     public BattleResultPanel(Runnable onModes, Runnable onMain) {
         this("모드 선택", onModes, onMain);
@@ -21,7 +24,16 @@ public final class BattleResultPanel extends JPanel {
 
     /** primaryLabel: Enter 버튼 이름 (로컬 "모드 선택", P2P "로비로") */
     public BattleResultPanel(String primaryLabel, Runnable onModes, Runnable onMain) {
+        this(primaryLabel, onModes, null, null, onMain);
+    }
+
+    /**
+     * extraLabel/onExtra: 첫 버튼 앞에 둘 버튼 (P2P "다시 대전", S10-B2). 있으면 Enter가 이 버튼이고
+     * primary는 L 키로 누른다. null이면 버튼 두 개만 둔다
+     */
+    public BattleResultPanel(String primaryLabel, Runnable onModes, String extraLabel, Runnable onExtra, Runnable onMain) {
         Objects.requireNonNull(primaryLabel); Objects.requireNonNull(onModes); Objects.requireNonNull(onMain);
+        if ((extraLabel == null) != (onExtra == null)) throw new IllegalArgumentException("extra label and action go together");
         setLayout(new GridBagLayout());
         setBackground(new Color(0x1B1E24));
         setPreferredSize(new Dimension(960, 720));
@@ -30,12 +42,20 @@ public final class BattleResultPanel extends JPanel {
         var content = new JPanel(new GridLayout(0, 1, 0, 24)); content.setOpaque(false);
         content.add(summary); content.add(scores);
         var actions = new JPanel(new FlowLayout(FlowLayout.CENTER, 24, 0)); actions.setOpaque(false);
+        if (extraLabel != null) actions.add(new JButton(navigation(extraLabel, onExtra)));
         actions.add(new JButton(navigation(primaryLabel, onModes)));
         actions.add(new JButton(navigation("메인 메뉴", onMain)));
         content.add(actions);
-        var hint = new JLabel("Enter: " + primaryLabel + "   Esc: 메인 메뉴", SwingConstants.CENTER);
+        var hint = new JLabel(extraLabel == null ? "Enter: " + primaryLabel + "   Esc: 메인 메뉴"
+                : "Enter: " + extraLabel + "   L: " + primaryLabel + "   Esc: 메인 메뉴", SwingConstants.CENTER);
         hint.setForeground(Color.WHITE); content.add(hint); add(content);
-        bind(KeyEvent.VK_ENTER, "modes", onModes);
+        hintText = hint.getText();
+        if (extraLabel != null) {
+            bind(KeyEvent.VK_ENTER, "extra", onExtra);
+            bind(KeyEvent.VK_L, "modes", onModes);
+        } else {
+            bind(KeyEvent.VK_ENTER, "modes", onModes);
+        }
         bind(KeyEvent.VK_ESCAPE, "main", onMain);
     }
 
@@ -45,23 +65,25 @@ public final class BattleResultPanel extends JPanel {
 
     /** modeLabel이 있으면 결과 앞에 모드 이름을 붙인다. 대전 결과는 표시만 하고 저장하지 않는다 (R3-NOSCORE) */
     public void setSnapshot(MatchSnapshot snapshot, String modeLabel) {
+        setSnapshot(snapshot, modeLabel, null);
+    }
+
+    /** viewer가 있으면(P2P) 승패를 이 PC 기준 "승리!/패배"로, 점수에 "(나)"를 붙인다 (S10-B1) */
+    public void setSnapshot(MatchSnapshot snapshot, String modeLabel, PlayerId viewer) {
         Objects.requireNonNull(snapshot);
         Objects.requireNonNull(modeLabel);
         if (snapshot.phase() != MatchPhase.FINISHED || snapshot.result() == null)
             throw new IllegalArgumentException("result screen requires a finished match");
         var result = snapshot.result();
-        String outcome = result.isDraw() ? "무승부" : result.winner() == PlayerId.ONE ? "P1 승리" : "P2 승리";
-        String reason = switch (result.reason()) {
-            case TOPPED_OUT -> "블록 쌓임";
-            case TIME_UP -> "시간 종료";
-            case FORFEIT -> "기권";
-        };
+        String outcome = BattlePanel.outcomeText(result, viewer);
+        String reason = BattlePanel.reasonText(result.reason());
         summaryText = (modeLabel.isEmpty() ? "" : modeLabel + " · ") + outcome + " · " + reason;
         // 긴 모드 이름(P2P 표시 포함)이 잘리지 않도록 모드는 위 줄에 작게, 승패는 아래 줄에 크게 쓴다
         summary.setText(modeLabel.isEmpty() ? outcome + " · " + reason
                 : "<html><div style='text-align:center'><span style='font-size:16pt'>" + escape(modeLabel)
                 + "</span><br>" + outcome + " · " + reason + "</div></html>");
-        scores.setText("P1: " + snapshot.one().score() + "   P2: " + snapshot.two().score());
+        scores.setText(BattlePanel.boardTitle(PlayerId.ONE, viewer) + ": " + snapshot.one().score()
+                + "   " + BattlePanel.boardTitle(PlayerId.TWO, viewer) + ": " + snapshot.two().score());
         getAccessibleContext().setAccessibleDescription(getSummaryText() + ". " + getScoresText());
     }
     public String getSummaryText() { return summaryText; }

@@ -37,6 +37,7 @@ public final class P2pLobbyPanel extends JPanel {
     private static final Color BACKGROUND = new Color(0x1B1E24);
     private final JTextField portField = new JTextField(String.valueOf(NetworkDefaults.DEFAULT_PORT), 6);
     private final JTextField addressField = new JTextField("", 14);
+    private final JComboBox<String> recentBox = new JComboBox<>();
     private final JButton hostButton = new JButton("호스트로 대기");
     private final JButton connectButton = new JButton("접속");
     private final JComboBox<BattleMode> modeBox = new JComboBox<>(BattleMode.values());
@@ -48,6 +49,9 @@ public final class P2pLobbyPanel extends JPanel {
     private final JButton readyButton = new JButton("게임 시작");
     private final JButton backButton = new JButton("뒤로");
     private boolean rendering;
+    private static final Color ERROR = new Color(0xFF8A80);
+    private State renderedState;
+    private boolean error;
 
     public P2pLobbyPanel(Actions actions) {
         Objects.requireNonNull(actions, "actions");
@@ -71,6 +75,7 @@ public final class P2pLobbyPanel extends JPanel {
         addWide(label("P2P 대전 (같은 LAN)", 26, true), y++);
         addRow(label("포트", 16, false), portField, hostButton, y++);
         addRow(label("상대 IP", 16, false), addressField, connectButton, y++);
+        addRow(label("최근 IP", 16, false), recentBox, label("(고르면 입력됨)", 13, false), y++);
         addWide(statusLabel, y++);
         addWide(peerLabel, y++);
         addRow(label("모드", 16, false), modeBox, label("(호스트만 선택)", 13, false), y++);
@@ -80,12 +85,32 @@ public final class P2pLobbyPanel extends JPanel {
 
         hostButton.addActionListener(e -> actions.host(portField.getText()));
         connectButton.addActionListener(e -> actions.connect(addressField.getText(), portField.getText()));
+        recentBox.addActionListener(e -> {
+            if (!rendering && recentBox.getSelectedItem() instanceof String address && !address.isEmpty()) {
+                addressField.setText(address);
+            }
+        });
         modeBox.addActionListener(e -> {
             if (!rendering && modeBox.getSelectedItem() instanceof BattleMode selected) actions.selectMode(selected);
         });
         readyButton.addActionListener(e -> actions.toggleReady());
         backButton.addActionListener(e -> actions.cancelOrBack());
         render(new LobbySnapshot(Role.NONE, State.INITIAL, null, 0, false, false, null), "");
+    }
+
+    /** 최근 접속 IP 목록 (최신순). 비어 있으면 고를 수 없다 (R3-RECENT) */
+    public void setRecentPeers(java.util.List<String> peers) {
+        Objects.requireNonNull(peers);
+        rendering = true;
+        try {
+            recentBox.removeAllItems();
+            for (String peer : peers) recentBox.addItem(peer);
+            recentBox.setSelectedIndex(-1);
+        } finally {
+            rendering = false;
+        }
+        recentBox.setEnabled(!peers.isEmpty() && addressField.isEnabled());
+        recentBox.setToolTipText(peers.isEmpty() ? "접속에 성공한 IP가 여기에 남습니다" : null);
     }
 
     private void addRow(JComponent name, JComponent input, JComponent action, int y) {
@@ -132,7 +157,16 @@ public final class P2pLobbyPanel extends JPanel {
 
     /** 로비 상태와 안내 문구로 화면을 다시 그린다 */
     public void render(LobbySnapshot lobby, String status) {
+        render(lobby, status, false);
+    }
+
+    /** error면 안내를 경고색으로 보인다. 상태가 바뀌면 그 상태에서 누를 곳에 포커스를 둔다 (S10-B2) */
+    public void render(LobbySnapshot lobby, String status, boolean error) {
         Objects.requireNonNull(lobby);
+        State before = renderedState;
+        renderedState = lobby.state();
+        this.error = error;
+        statusLabel.setForeground(error ? ERROR : Color.WHITE);
         Objects.requireNonNull(status);
         rendering = true;
         try {
@@ -142,6 +176,7 @@ public final class P2pLobbyPanel extends JPanel {
             addressField.setEnabled(initial);
             hostButton.setEnabled(initial);
             connectButton.setEnabled(initial);
+            recentBox.setEnabled(initial && recentBox.getItemCount() > 0);
             if (lobby.config() != null) modeBox.setSelectedItem(lobby.config().mode());
             modeBox.setEnabled(inLobby && lobby.role() == Role.HOST);
             readyButton.setEnabled(inLobby && lobby.config() != null);
@@ -164,8 +199,21 @@ public final class P2pLobbyPanel extends JPanel {
         } finally {
             rendering = false;
         }
+        if (before != renderedState) focusTarget().requestFocusInWindow();
         repaint();
     }
+
+    /** 지금 상태에서 키보드로 먼저 누를 곳: 첫 화면은 IP 입력, 로비는 게임 시작, 대기·접속 중은 취소 */
+    public JComponent focusTarget() {
+        return switch (renderedState) {
+            case INITIAL -> addressField;
+            case LOBBY -> readyButton;
+            default -> backButton;
+        };
+    }
+
+    public boolean isError() { return error; }
+    public JComboBox<String> recentBox() { return recentBox; }
 
     /** "주소#연결순번"에서 사람이 읽을 주소만 */
     static String peerName(String identity) {
