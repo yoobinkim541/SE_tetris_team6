@@ -46,6 +46,8 @@ tasks.register('guiAcceptance', Test) {
         includeTestsMatching 'tetris.ui.BattleMainFrameTest'
         // 3차 대전 화면: 실제 창 표시·숨김과 포커스 콜백의 키 해제·리스너 정리 (S7-B2)
         includeTestsMatching 'tetris.versus.ui.BattleLifecycleTest'
+        // 실제 대전 미리보기 창에서 두 플레이어 입력·일시정지·종료를 자동 시연 (S11-C2)
+        includeTestsMatching 'tetris.versus.ui.BattleDemoAcceptanceTest'
     }
     systemProperty 'java.awt.headless', 'false'
     systemProperty 'audit.gui', 'true'

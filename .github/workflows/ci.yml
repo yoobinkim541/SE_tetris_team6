@@ -26,6 +26,10 @@ jobs:
         run: gradle check guiAcceptance resourceAcceptance releaseJar packageApp --no-daemon
       - name: Verify packaged EXE
         run: ./scripts/verify-package.ps1
+      # 테스트 수·실패/생략·라인 커버리지를 JSON 한 파일로 남긴다. XML이 없거나 실패가 있으면 이 단계가 실패한다 (R3-COVERAGE)
+      - name: Test and coverage evidence
+        if: always()
+        run: pwsh -File scripts/coverage-summary.ps1
       - name: Upload Windows acceptance evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -34,6 +38,7 @@ jobs:
           path: |
             build/reports/tests
             build/verification/package-smoke.json
+            build/verification/test-summary.json
             build/distributions/SE-Tetris-windows.zip
             build/libs/SE-Tetris.jar
 
