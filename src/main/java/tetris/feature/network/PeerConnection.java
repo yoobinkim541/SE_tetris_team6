@@ -103,6 +103,28 @@ public final class PeerConnection {
         shutdown(CloseReason.LOCAL, "closed locally");
     }
 
+    /**
+     * 마지막 메시지(예: LEAVE)를 송신 스레드가 쓴 뒤 닫는다. 호출 스레드는 기다리지 않는다.
+     * 상대가 읽지 않아 쓰기가 막히면 {@link #ERROR_FLUSH_MILLIS} 뒤에 그냥 닫는다. 종료 알림은 close()처럼 보내지 않는다
+     */
+    public void closeAfter(Message last) {
+        Objects.requireNonNull(last, "last");
+        closedLocally = true;
+        if (closed.get()) return;
+        if (!outbox.offer(new FailAndClose(last, CloseReason.LOCAL, "closed locally after final message"))) {
+            shutdown(CloseReason.LOCAL, "closed locally");
+            return;
+        }
+        Thread.ofVirtual().name("peer-close-fallback").start(() -> {
+            try {
+                Thread.sleep(ERROR_FLUSH_MILLIS);
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+            }
+            shutdown(CloseReason.LOCAL, "closed locally");
+        });
+    }
+
     public boolean isOpen() {
         return !closed.get();
     }

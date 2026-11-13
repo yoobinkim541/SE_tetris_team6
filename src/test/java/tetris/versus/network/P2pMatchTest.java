@@ -352,7 +352,9 @@ class P2pMatchTest {
         assertEquals(State.LOBBY, await(cs, s -> s.state() == State.LOBBY).state());
         assertTrue(call(clientExec, client::battleClient).isEmpty());
         run(clientExec, client::leave);
-        assertNull(peer.next(), "RESULT 뒤 send는 INPUT 프레임을 보내지 않는다");
+        Message last = peer.next();
+        assertEquals(MessageType.LEAVE, last == null ? null : last.type(), "RESULT 뒤 send는 INPUT 없이 나가기 LEAVE만 보낸다");
+        assertNull(peer.next(), "LEAVE 뒤에는 닫힌다");
     }
 
     /** Review I-2: 호스트가 START를 보낸 직후 클라이언트가 준비를 취소해도 같은 경기에 들어간다 (호스트 권위) */

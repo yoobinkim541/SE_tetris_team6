@@ -426,7 +426,9 @@ class SocketLobbyClientTest {
         assertEquals(callOn(hostExec, hostLobby::matchId).orElseThrow(), startFrame.matchId());
 
         runOn(hostExec, hostLobby::leave);
-        assertNull(readFrame(observer.getInputStream(), decoder), "START 1개 뒤 추가 프레임 없이 닫혀야 한다");
+        Message last = readFrame(observer.getInputStream(), decoder);
+        assertEquals(MessageType.LEAVE, last == null ? null : last.type(), "START 1개 뒤에는 나가기 LEAVE만 온다");
+        assertNull(readFrame(observer.getInputStream(), decoder), "LEAVE 뒤에는 닫힌다");
     }
 
     @Test

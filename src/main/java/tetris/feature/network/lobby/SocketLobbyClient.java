@@ -206,11 +206,11 @@ public final class SocketLobbyClient implements LobbyClient {
     @Override
     public void cancel() {
         ensureOpen();
+        if (activeAttempt == null) {
+            return; // 연결 수립 중이 아니면 할 일이 없다. 이미 연결된 링크의 heartbeat는 그대로 둔다
+        }
         stopHeartbeat();
         currentHealth = LinkHealth.NONE;
-        if (activeAttempt == null) {
-            return;
-        }
         PeerEstablisher.Attempt attempt = activeAttempt;
         CompletableFuture<Void> stage = pendingStage;
         activeAttempt = null;
@@ -576,7 +576,9 @@ public final class SocketLobbyClient implements LobbyClient {
             stage.cancel(false);
         }
         if (link != null) {
-            link.close();
+            // 상대가 끊김(LOST)이 아니라 정상 나가기(PEER_LEFT)로 안내하도록 LEAVE를 보낸 뒤 닫는다
+            if (link.isOpen()) link.closeAfter(new ControlPayloads.Leave("user").message());
+            else link.close();
         }
     }
 

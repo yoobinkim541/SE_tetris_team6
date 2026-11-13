@@ -24,6 +24,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Predicate;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -381,6 +382,30 @@ class LinkHealthLobbyTest {
         assertEquals(LinkHealth.NONE, callOn(hostExec, host::health));
         assertTrue(hq.isEmpty(), "이쪽 leave는 health 이벤트를 발행하지 않는다");
         assertTrue(pulse.isLastClosed());
+    }
+
+    @Test
+    void 이쪽이_leave하면_상대에게_LEAVE를_보내고_닫는다() throws Exception {
+        BlockingQueue<LobbySnapshot> hs = subscribeSnapshots();
+        RawPeer peer = connectRawPeer(hs);
+        runOn(hostExec, host::leave);
+        Message leave = peer.next(MessageType.LEAVE);
+        assertNotNull(leave, "상대가 PEER_LEFT로 안내할 수 있도록 LEAVE가 먼저 와야 한다");
+        assertEquals("user", ControlPayloads.Leave.from(leave.payload()).reason());
+        Assertions.assertNull(peer.next(), "LEAVE 뒤에는 연결이 닫힌다");
+    }
+
+    @Test
+    void 연결된_뒤_cancel은_heartbeat를_멈추지_않는다() throws Exception {
+        BlockingQueue<LobbySnapshot> hs = subscribeSnapshots();
+        BlockingQueue<LinkHealth> hq = subscribeHealth();
+        RawPeer peer = connectRawPeer(hs);
+        awaitQueue(hq, h -> h.status() == LinkHealth.Status.NORMAL);
+        runOn(hostExec, host::cancel);
+        assertEquals(LinkHealth.Status.NORMAL, callOn(hostExec, host::health).status());
+        Assertions.assertFalse(pulse.isLastClosed(), "연결 수립 중이 아니면 cancel은 아무것도 하지 않는다");
+        runOn(hostExec, () -> pulse.currentTick().run());
+        assertEquals(MessageType.PING, peer.next(MessageType.PING).type());
     }
 
     @Test
