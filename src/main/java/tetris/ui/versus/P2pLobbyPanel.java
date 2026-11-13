@@ -36,7 +36,7 @@ public final class P2pLobbyPanel extends JPanel {
 
     private static final Color BACKGROUND = new Color(0x1B1E24);
     private final JTextField portField = new JTextField(String.valueOf(NetworkDefaults.DEFAULT_PORT), 6);
-    private final JTextField addressField = new JTextField("", 14);
+    private final JTextField addressField = new JTextField("", 11);
     private final JComboBox<String> recentBox = new JComboBox<>();
     private final JButton hostButton = new JButton("호스트로 대기");
     private final JButton connectButton = new JButton("접속");
@@ -49,6 +49,9 @@ public final class P2pLobbyPanel extends JPanel {
     private final JButton readyButton = new JButton("게임 시작");
     private final JButton backButton = new JButton("뒤로");
     private boolean rendering;
+    private static final String HINT = "게임 시작: 양쪽이 모두 눌러야 시작합니다. 나가기·취소는 연결을 끊습니다.";
+    private final JLabel hintLabel;
+    private int wrappedWidth = -1;
     private static final Color ERROR = new Color(0xFF8A80);
     private State renderedState;
     private boolean error;
@@ -68,7 +71,8 @@ public final class P2pLobbyPanel extends JPanel {
         var buttons = row();
         buttons.add(readyButton);
         buttons.add(backButton);
-        var hint = label(wrap("게임 시작: 양쪽이 모두 눌러야 시작합니다. 나가기·취소는 연결을 끊습니다."), 13, false);
+        hintLabel = label(wrap(HINT), 13, false);
+        var hint = hintLabel;
 
         // 좁은 창에서도 잘리지 않도록 "이름 | 입력 | 버튼" 격자로 둔다. 긴 안내는 줄바꿈한다
         int y = 0;
@@ -83,6 +87,13 @@ public final class P2pLobbyPanel extends JPanel {
         addWide(buttons, y++);
         addWide(hint, y);
 
+        // 작은 창에서 입력 줄이 넘치지 않도록 버튼 좌우 여백을 줄인다
+        for (JButton button : new JButton[]{hostButton, connectButton, readyButton, backButton}) {
+            button.setMargin(new Insets(2, 8, 2, 8));
+        }
+        addComponentListener(new java.awt.event.ComponentAdapter() {
+            @Override public void componentResized(java.awt.event.ComponentEvent e) { rewrap(); }
+        });
         hostButton.addActionListener(e -> actions.host(portField.getText()));
         connectButton.addActionListener(e -> actions.connect(addressField.getText(), portField.getText()));
         recentBox.addActionListener(e -> {
@@ -119,7 +130,7 @@ public final class P2pLobbyPanel extends JPanel {
             var c = new GridBagConstraints();
             c.gridx = x;
             c.gridy = y;
-            c.insets = new Insets(4, 4, 4, 4);
+            c.insets = new Insets(2, 4, 2, 4);
             c.fill = x == 1 ? GridBagConstraints.HORIZONTAL : GridBagConstraints.NONE;
             c.anchor = x == 0 ? GridBagConstraints.LINE_END : GridBagConstraints.LINE_START;
             add(parts[x], c);
@@ -131,14 +142,33 @@ public final class P2pLobbyPanel extends JPanel {
         c.gridx = 0;
         c.gridy = y;
         c.gridwidth = 3;
-        c.insets = new Insets(6, 4, 6, 4);
+        c.insets = new Insets(3, 4, 3, 4);
         add(part, c);
     }
 
     /** 긴 문구를 정해진 폭 안에서 줄바꿈하는 HTML. 화면 글자는 그대로다 */
-    private static String wrap(String text) {
+    private String wrap(String text) {
         String escaped = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
-        return "<html><div style='text-align:center;width:250px'>" + escaped + "</div></html>";
+        return "<html><div style='text-align:center;width:" + wrapWidth() + "px'>" + escaped + "</div></html>";
+    }
+
+    /**
+     * 줄바꿈 폭(HTML px). 창이 작을수록 좁힌다. HTML px은 화면에서 약 1.25배로 그려져서 패널 폭에서 여백을 빼고 나눈다.
+     * 설정의 SMALL 화면이 모니터에 맞춰 더 줄어도(예: 280 px) 안내가 잘리지 않게 한다 (S11-B1)
+     */
+    int wrapWidth() {
+        int width = getWidth();
+        if (width <= 0) return 250;
+        return Math.max(120, Math.min(360, (int) ((width - 24) / 1.3)));
+    }
+
+    private void rewrap() {
+        int width = wrapWidth();
+        if (width == wrappedWidth) return;
+        wrappedWidth = width;
+        hintLabel.setText(wrap(HINT));
+        statusLabel.setText(wrap(status));
+        revalidate();
     }
 
     private static JPanel row() {
@@ -188,6 +218,7 @@ public final class P2pLobbyPanel extends JPanel {
             });
             this.status = status;
             statusLabel.setText(wrap(status));
+            wrappedWidth = wrapWidth();
             peerLabel.setText(lobby.peerIdentity() == null ? ""
                     : (lobby.role() == Role.HOST ? "접속한 상대: " : "호스트: ") + peerName(lobby.peerIdentity())
                     + (lobby.role() == Role.HOST ? "  (나: P1 왼쪽)" : "  (나: P2 오른쪽)"));

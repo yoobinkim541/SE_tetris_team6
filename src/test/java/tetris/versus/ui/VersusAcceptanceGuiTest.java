@@ -210,6 +210,12 @@ class VersusAcceptanceGuiTest {
                     panel.validate();
                     assertInside(panel, size.name());
                     assertSame(panel.addressField(), panel.focusTarget(), "첫 화면은 IP 입력부터");
+                    // 모니터가 작으면 SMALL 창이 더 줄어든다 (CI 러너에서 280x336). 긴 안내가 이 폭에서도 줄바꿈되어야 한다
+                    lobby.connect("", "50123"); // 잘못된 입력: 긴 안내 문구가 뜬다
+                    panel.setSize(280, 336);
+                    for (var listener : panel.getComponentListeners()) listener.componentResized(null);
+                    panel.validate();
+                    assertInside(panel, size.name() + " shrunk to 280x336");
                     lobby.cancelOrBack();
                     assertEquals(MainFrame.Screen.BATTLE_MODES, field(frame[0], "currentScreen"));
                 });
