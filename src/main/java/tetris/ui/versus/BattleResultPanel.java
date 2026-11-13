@@ -14,6 +14,9 @@ public final class BattleResultPanel extends JPanel {
     private final JLabel summary = new JLabel("대전 결과", SwingConstants.CENTER);
     private String summaryText = "대전 결과";
     private final JLabel scores = new JLabel("", SwingConstants.CENTER);
+    private String hintText = "";
+    /** 화면 아래 키 안내 */
+    public String getHintText() { return hintText; }
 
     public BattleResultPanel(Runnable onModes, Runnable onMain) {
         this("모드 선택", onModes, onMain);
@@ -21,7 +24,16 @@ public final class BattleResultPanel extends JPanel {
 
     /** primaryLabel: Enter 버튼 이름 (로컬 "모드 선택", P2P "로비로") */
     public BattleResultPanel(String primaryLabel, Runnable onModes, Runnable onMain) {
+        this(primaryLabel, onModes, null, null, onMain);
+    }
+
+    /**
+     * extraLabel/onExtra: 첫 버튼 앞에 둘 버튼 (P2P "다시 대전", S10-B2). 있으면 Enter가 이 버튼이고
+     * primary는 L 키로 누른다. null이면 버튼 두 개만 둔다
+     */
+    public BattleResultPanel(String primaryLabel, Runnable onModes, String extraLabel, Runnable onExtra, Runnable onMain) {
         Objects.requireNonNull(primaryLabel); Objects.requireNonNull(onModes); Objects.requireNonNull(onMain);
+        if ((extraLabel == null) != (onExtra == null)) throw new IllegalArgumentException("extra label and action go together");
         setLayout(new GridBagLayout());
         setBackground(new Color(0x1B1E24));
         setPreferredSize(new Dimension(960, 720));
@@ -30,12 +42,20 @@ public final class BattleResultPanel extends JPanel {
         var content = new JPanel(new GridLayout(0, 1, 0, 24)); content.setOpaque(false);
         content.add(summary); content.add(scores);
         var actions = new JPanel(new FlowLayout(FlowLayout.CENTER, 24, 0)); actions.setOpaque(false);
+        if (extraLabel != null) actions.add(new JButton(navigation(extraLabel, onExtra)));
         actions.add(new JButton(navigation(primaryLabel, onModes)));
         actions.add(new JButton(navigation("메인 메뉴", onMain)));
         content.add(actions);
-        var hint = new JLabel("Enter: " + primaryLabel + "   Esc: 메인 메뉴", SwingConstants.CENTER);
+        var hint = new JLabel(extraLabel == null ? "Enter: " + primaryLabel + "   Esc: 메인 메뉴"
+                : "Enter: " + extraLabel + "   L: " + primaryLabel + "   Esc: 메인 메뉴", SwingConstants.CENTER);
         hint.setForeground(Color.WHITE); content.add(hint); add(content);
-        bind(KeyEvent.VK_ENTER, "modes", onModes);
+        hintText = hint.getText();
+        if (extraLabel != null) {
+            bind(KeyEvent.VK_ENTER, "extra", onExtra);
+            bind(KeyEvent.VK_L, "modes", onModes);
+        } else {
+            bind(KeyEvent.VK_ENTER, "modes", onModes);
+        }
         bind(KeyEvent.VK_ESCAPE, "main", onMain);
     }
 

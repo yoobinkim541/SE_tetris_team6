@@ -18,6 +18,7 @@ public final class BattlePanel extends JPanel {
     private final BattleMode mode;
     private final PlayerId viewer;
     private String notice = "";
+    private String connectionNotice = "";
     private MatchSnapshot snapshot;
     public BattlePanel(boolean colorBlind) {
         this(colorBlind, new BattleKeyMap().guide());
@@ -49,6 +50,9 @@ public final class BattlePanel extends JPanel {
     public String notice() { return notice; }
     /** 경기 화면 가운데 위에 잠깐 띄우는 안내 (예: 온라인 기권 확인). 빈 문자열이면 지운다 */
     public void setNotice(String text) { notice = Objects.requireNonNull(text); repaint(); }
+    /** P2P 연결 상태 안내 (예: 네트워크 지연). 빈 문자열이면 지운다 (S10-B2, R3-LAG) */
+    public void setConnectionNotice(String text) { connectionNotice = Objects.requireNonNull(text); repaint(); }
+    public String connectionNotice() { return connectionNotice; }
     /** 시간제한 대전의 남은 시간. 올림해서 0:00이면 끝났다는 뜻. 시간 제한이 없으면 빈 문자열 */
     public static String timeText(long remainingMillis) {
         if (remainingMillis < 0) return "";
@@ -128,6 +132,14 @@ public final class BattlePanel extends JPanel {
             g.drawString(statusText(snapshot, viewer),28,32);
             if (!modeLabel.isEmpty()) g.drawString(modeLabel,
                     480 - g.getFontMetrics().stringWidth(modeLabel) / 2, 32);
+            if (!connectionNotice.isEmpty()) {
+                Font font = g.getFont();
+                g.setFont(new Font(Font.DIALOG, Font.BOLD, 15));
+                g.setColor(new Color(0xFFB74D));
+                g.drawString(connectionNotice, 480 - g.getFontMetrics().stringWidth(connectionNotice) / 2, 50);
+                g.setFont(font);
+                g.setColor(Color.WHITE);
+            }
             String time = timeText(snapshot.remainingMillis());
             g.drawString(time, 932 - g.getFontMetrics().stringWidth(time), 32);
             paintPlayer(g,snapshot.one(),28,PlayerId.ONE); paintPlayer(g,snapshot.two(),500,PlayerId.TWO);
