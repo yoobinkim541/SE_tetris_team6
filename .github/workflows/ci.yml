@@ -44,6 +44,7 @@ jobs:
             build/verification/package-smoke.json
             build/verification/test-summary.json
             build/verification/gui-acceptance-summary.json
+            build/verification/s11-loopback-latency.json
             build/distributions/SE-Tetris-windows.zip
             build/libs/SE-Tetris.jar
 
