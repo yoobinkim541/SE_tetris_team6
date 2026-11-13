@@ -30,6 +30,10 @@ jobs:
       - name: Test and coverage evidence
         if: always()
         run: pwsh -File scripts/coverage-summary.ps1
+      # guiAcceptance가 대전 GUI 인수 클래스를 실제로 선택·실행했는지 검사한다 (S11-B1)
+      - name: GUI acceptance selection evidence
+        if: always()
+        run: pwsh -File scripts/gui-acceptance-summary.ps1
       - name: Upload Windows acceptance evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -39,6 +43,8 @@ jobs:
             build/reports/tests
             build/verification/package-smoke.json
             build/verification/test-summary.json
+            build/verification/gui-acceptance-summary.json
+            build/verification/s11-loopback-latency.json
             build/distributions/SE-Tetris-windows.zip
             build/libs/SE-Tetris.jar
 

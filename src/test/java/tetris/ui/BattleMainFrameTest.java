@@ -101,8 +101,11 @@ class BattleMainFrameTest {
         try {
             SwingUtilities.invokeAndWait(() -> {
                 for (int i = 0; i < 2; i++) {
+                    // 실제 소켓 로비. 최근 IP는 사용자 %APPDATA%가 아니라 임시 파일에 남긴다
+                    var recent = new JsonRecentPeerRepository(directory.resolve("recent" + i + ".json"));
                     frames[i] = new MainFrame(new Settings(), scores,
-                        new JsonSettingsRepository(directory.resolve("settings" + i + ".json")), new JsonScoreboardRepository(scoreFile));
+                        new JsonSettingsRepository(directory.resolve("settings" + i + ".json")), new JsonScoreboardRepository(scoreFile),
+                        LocalBattleClient::new, () -> MainFrame.socketLobby(recent));
                     frames[i].setVisible(true);
                     frames[i].setLocation(40 + i * 520, 40);
                     frames[i].openBattleModes();
@@ -198,6 +201,10 @@ class BattleMainFrameTest {
                 == tetris.feature.network.lobby.LobbySnapshot.State.LOBBY);
             assertTrue(scores.entries().isEmpty());
             assertFalse(java.nio.file.Files.exists(scoreFile), "P2P results are never saved");
+            // 접속에 성공한 클라이언트만 상대 주소를 남긴다 (R3-RECENT, 디스크 쓰기는 별도 스레드)
+            until("client recorded the host address", () ->
+                new JsonRecentPeerRepository(directory.resolve("recent1.json")).load().equals(java.util.List.of("127.0.0.1")));
+            assertTrue(new JsonRecentPeerRepository(directory.resolve("recent0.json")).load().isEmpty(), "the host records nothing");
         } finally {
             SwingUtilities.invokeAndWait(() -> { for (var f : frames) if (f != null) f.dispose(); });
         }

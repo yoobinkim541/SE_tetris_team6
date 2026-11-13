@@ -48,6 +48,10 @@ tasks.register('guiAcceptance', Test) {
         includeTestsMatching 'tetris.versus.ui.BattleLifecycleTest'
         // 실제 대전 미리보기 창에서 두 플레이어 입력·일시정지·종료를 자동 시연 (S11-C2)
         includeTestsMatching 'tetris.versus.ui.BattleDemoAcceptanceTest'
+        // 3차 메뉴·키·저장·화면 크기 전체 인수: 세 화면 크기·색맹·동시 입력·포커스·싱글 기록 보존 (S11-B1)
+        includeTestsMatching 'tetris.versus.ui.VersusAcceptanceGuiTest'
+        // 3모드×호스트/클라이언트 입력 → 두 화면 그리기 지연 loopback 실측, 결과 JSON 기록 (S11-B2)
+        includeTestsMatching 'tetris.versus.ui.LoopbackLatencyAcceptanceTest'
     }
     systemProperty 'java.awt.headless', 'false'
     systemProperty 'audit.gui', 'true'

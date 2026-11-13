@@ -20,6 +20,7 @@ public final class BattlePanel extends JPanel {
     private String notice = "";
     private String connectionNotice = "";
     private MatchSnapshot snapshot;
+    private final PaintLog paintLog = new PaintLog();
     public BattlePanel(boolean colorBlind) {
         this(colorBlind, new BattleKeyMap().guide());
     }
@@ -59,7 +60,13 @@ public final class BattlePanel extends JPanel {
         long seconds = (remainingMillis + 999) / 1000;
         return String.format("남은 시간 %d:%02d", seconds / 60, seconds % 60);
     }
-    public void setSnapshot(MatchSnapshot snapshot) { this.snapshot = Objects.requireNonNull(snapshot); repaint(); }
+    public void setSnapshot(MatchSnapshot snapshot) {
+        this.snapshot = Objects.requireNonNull(snapshot);
+        paintLog.received(System.nanoTime());
+        repaint();
+    }
+    /** 이 화면의 그리기 기록 (상태 수신→그리기 지연 측정, S11-B2) */
+    public PaintLog paintLog() { return paintLog; }
     /** 경기 상태 한 줄 요약. 로컬 대전처럼 보는 사람이 정해지지 않은 화면용 */
     public static String statusText(MatchSnapshot snapshot) {
         return statusText(snapshot, null);
@@ -162,6 +169,7 @@ public final class BattlePanel extends JPanel {
                 g.drawString(line, 28, 670 + i * lineHeight);
                 g.setFont(font);
             }
+            paintLog.painted(snapshot, System.nanoTime());
         } finally { g.dispose(); }
     }
     /** 일시정지·카운트다운 동안 두 보드를 어둡게 덮고 상태를 크게 쓴다. 누가 눌러도 함께 풀린다 (D-03) */
@@ -173,6 +181,13 @@ public final class BattlePanel extends JPanel {
         g.setColor(Color.WHITE);
         g.setFont(new Font(Font.DIALOG, Font.BOLD, 44));
         g.drawString(text, 480 - g.getFontMetrics().stringWidth(text) / 2, 340);
+        if (snapshot.phase() == MatchPhase.COUNTDOWN) {
+            // 처음 보는 사람이 설명 없이 자기 보드와 키를 찾게 한다 (S11-B2, R3-DEMO)
+            String hint = viewer == null ? "왼쪽 P1 · 오른쪽 P2 · 조작 키는 화면 아래"
+                    : "파란 테두리가 내 보드 (" + boardTitle(viewer, viewer) + ") · 조작 키는 화면 아래";
+            g.setFont(new Font(Font.DIALOG, Font.PLAIN, 18));
+            g.drawString(hint, 480 - g.getFontMetrics().stringWidth(hint) / 2, 380);
+        }
         if (snapshot.phase() == MatchPhase.PAUSED) {
             String hint = "일시정지 키를 누르면 두 보드가 함께 다시 시작합니다";
             g.setFont(new Font(Font.DIALOG, Font.PLAIN, 18));

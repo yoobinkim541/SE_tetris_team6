@@ -99,12 +99,17 @@ public class MainFrame extends JFrame {
 
     /** 실제 소켓 로비. 접속에 성공한 IP를 %APPDATA% 아래 recent-peers.json에 남긴다 */
     private static LobbyClient defaultLobby() {
+        return socketLobby(new tetris.feature.save.JsonRecentPeerRepository(
+                tetris.feature.save.JsonRecentPeerRepository.defaultFile()));
+    }
+
+    /** 실제 소켓 로비. 최근 접속 IP 저장소만 바꿔 끼운다 (테스트는 임시 파일을 쓴다) */
+    public static LobbyClient socketLobby(tetris.feature.save.RecentPeers recentPeers) {
         java.util.concurrent.Executor edt = javax.swing.SwingUtilities::invokeLater;
         return new SocketLobbyClient(edt, new tetris.feature.network.PeerEstablisher(edt),
                 tetris.feature.versus.LocalMatchEngine::new, MatchClock.system(),
                 new tetris.feature.network.match.DispatcherPulse(edt), tetris.feature.network.HeartbeatPolicy.DEFAULT,
-                new tetris.feature.save.JsonRecentPeerRepository(tetris.feature.save.JsonRecentPeerRepository.defaultFile()),
-                RECENT_PEER_IO);
+                java.util.Objects.requireNonNull(recentPeers, "recentPeers"), RECENT_PEER_IO);
     }
 
     /** lobbyFactory: P2P 화면에 들어갈 때마다 새 로비(소켓) 하나를 만든다. 모든 콜백은 EDT에서 실행된다 */
