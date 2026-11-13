@@ -329,7 +329,7 @@ public class MainFrame extends JFrame {
         java.util.Objects.requireNonNull(mode);
         var keys = new BattleKeyMap();
         String label = BattleModes.label(mode);
-        BattlePanel panel = prepareBattleScreen(keys, label, false);
+        BattlePanel panel = prepareBattleScreen(keys, label, mode, null);
         long generation = battleGeneration;
         battleController = new BattleScreenController(getRootPane(),
                 battleFactory.apply(BattleModes.localConfig(mode, settings.getDifficulty())), keys, panel,
@@ -342,15 +342,16 @@ public class MainFrame extends JFrame {
                 this::openBattleModes);
     }
 
-    private BattlePanel prepareBattleScreen(BattleKeyMap keys, String label, boolean online) {
+    /** viewer: P2P에서 이 PC가 조작하는 참가자. 로컬 대전이면 null */
+    private BattlePanel prepareBattleScreen(BattleKeyMap keys, String label, BattleMode mode, PlayerId viewer) {
         session.end();
         keyBindings.setSuspended(true);
         keyBindings.clearPressedKeys();
         closeBattle();
-        battleOnline = online;
+        battleOnline = viewer != null;
         JComponent previous = screens.remove(Screen.BATTLE);
         if (previous != null) root.remove(previous);
-        var panel = new BattlePanel(settings.isColorBlindMode(), keys.guide(), label);
+        var panel = new BattlePanel(settings.isColorBlindMode(), keys.guide(), label, mode, viewer);
         panel.setPreferredSize(GamePanel.preferredSizeFor(fitCellSize(settings.getScreenSize().cellPixels())));
         addScreen(Screen.BATTLE, panel);
         showScreen(Screen.BATTLE);
@@ -390,12 +391,13 @@ public class MainFrame extends JFrame {
         var keys = BattleKeyMap.online();
         String label = BattleModes.label(config.mode()) + " · P2P "
                 + (role == LobbySnapshot.Role.HOST ? "(나: P1 왼쪽)" : "(나: P2 오른쪽)");
-        BattlePanel panel = prepareBattleScreen(keys, label, true);
+        PlayerId viewer = role == LobbySnapshot.Role.HOST ? PlayerId.ONE : PlayerId.TWO;
+        BattlePanel panel = prepareBattleScreen(keys, label, config.mode(), viewer);
         long generation = battleGeneration;
         battleController = BattleScreenController.online(getRootPane(), client, keys, panel,
                 snapshot -> javax.swing.SwingUtilities.invokeLater(() -> {
                     if (currentScreen != Screen.BATTLE || generation != battleGeneration) return;
-                    onlineResultPanel.setSnapshot(snapshot, label);
+                    onlineResultPanel.setSnapshot(snapshot, label, viewer);
                     showScreen(Screen.P2P_RESULT);
                 }));
     }

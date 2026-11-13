@@ -37,7 +37,7 @@ class BattleCommonApiTest {
                     fake.publish(new MatchSnapshot("finished", 1, initial.one(), initial.two(), 0,
                         MatchPhase.FINISHED, MatchResult.win(PlayerId.TWO, MatchResult.EndReason.TIME_UP)));
                     assertEquals(PlayerId.TWO, received.getLast().result().winner());
-                    assertEquals("P2 wins / Time up", BattlePanel.statusText(received.getLast()));
+                    assertEquals("P2 승리 · 시간 종료", BattlePanel.statusText(received.getLast()));
                     assertEquals(2, received.size());
                 }
             }
@@ -46,14 +46,14 @@ class BattleCommonApiTest {
 
     @Test void statusCoversEveryPhaseAndResultReason() {
         var sample = FakeBattleClient.sample();
-        assertEquals("Countdown", BattlePanel.statusText(snapshot(sample, MatchPhase.COUNTDOWN, null)));
-        assertEquals("Playing", BattlePanel.statusText(sample));
-        assertEquals("Paused", BattlePanel.statusText(snapshot(sample, MatchPhase.PAUSED, null)));
-        assertEquals("Draw / Top out", BattlePanel.statusText(snapshot(sample, MatchPhase.FINISHED,
+        assertEquals("곧 시작합니다", BattlePanel.statusText(snapshot(sample, MatchPhase.COUNTDOWN, null)));
+        assertEquals("경기 중", BattlePanel.statusText(sample));
+        assertEquals("일시정지", BattlePanel.statusText(snapshot(sample, MatchPhase.PAUSED, null)));
+        assertEquals("무승부 · 블록 쌓임", BattlePanel.statusText(snapshot(sample, MatchPhase.FINISHED,
             MatchResult.draw(MatchResult.EndReason.TOPPED_OUT))));
-        assertEquals("Draw / Time up", BattlePanel.statusText(snapshot(sample, MatchPhase.FINISHED,
+        assertEquals("무승부 · 시간 종료", BattlePanel.statusText(snapshot(sample, MatchPhase.FINISHED,
             MatchResult.draw(MatchResult.EndReason.TIME_UP))));
-        assertEquals("P1 wins / Forfeit", BattlePanel.statusText(snapshot(sample, MatchPhase.FINISHED,
+        assertEquals("P1 승리 · 기권", BattlePanel.statusText(snapshot(sample, MatchPhase.FINISHED,
             MatchResult.win(PlayerId.ONE, MatchResult.EndReason.FORFEIT))));
     }
 

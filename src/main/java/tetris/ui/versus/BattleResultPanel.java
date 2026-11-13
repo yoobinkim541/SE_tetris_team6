@@ -45,23 +45,25 @@ public final class BattleResultPanel extends JPanel {
 
     /** modeLabel이 있으면 결과 앞에 모드 이름을 붙인다. 대전 결과는 표시만 하고 저장하지 않는다 (R3-NOSCORE) */
     public void setSnapshot(MatchSnapshot snapshot, String modeLabel) {
+        setSnapshot(snapshot, modeLabel, null);
+    }
+
+    /** viewer가 있으면(P2P) 승패를 이 PC 기준 "승리!/패배"로, 점수에 "(나)"를 붙인다 (S10-B1) */
+    public void setSnapshot(MatchSnapshot snapshot, String modeLabel, PlayerId viewer) {
         Objects.requireNonNull(snapshot);
         Objects.requireNonNull(modeLabel);
         if (snapshot.phase() != MatchPhase.FINISHED || snapshot.result() == null)
             throw new IllegalArgumentException("result screen requires a finished match");
         var result = snapshot.result();
-        String outcome = result.isDraw() ? "무승부" : result.winner() == PlayerId.ONE ? "P1 승리" : "P2 승리";
-        String reason = switch (result.reason()) {
-            case TOPPED_OUT -> "블록 쌓임";
-            case TIME_UP -> "시간 종료";
-            case FORFEIT -> "기권";
-        };
+        String outcome = BattlePanel.outcomeText(result, viewer);
+        String reason = BattlePanel.reasonText(result.reason());
         summaryText = (modeLabel.isEmpty() ? "" : modeLabel + " · ") + outcome + " · " + reason;
         // 긴 모드 이름(P2P 표시 포함)이 잘리지 않도록 모드는 위 줄에 작게, 승패는 아래 줄에 크게 쓴다
         summary.setText(modeLabel.isEmpty() ? outcome + " · " + reason
                 : "<html><div style='text-align:center'><span style='font-size:16pt'>" + escape(modeLabel)
                 + "</span><br>" + outcome + " · " + reason + "</div></html>");
-        scores.setText("P1: " + snapshot.one().score() + "   P2: " + snapshot.two().score());
+        scores.setText(BattlePanel.boardTitle(PlayerId.ONE, viewer) + ": " + snapshot.one().score()
+                + "   " + BattlePanel.boardTitle(PlayerId.TWO, viewer) + ": " + snapshot.two().score());
         getAccessibleContext().setAccessibleDescription(getSummaryText() + ". " + getScoresText());
     }
     public String getSummaryText() { return summaryText; }
