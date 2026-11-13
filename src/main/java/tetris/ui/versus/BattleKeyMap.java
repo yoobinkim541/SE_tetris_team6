@@ -59,6 +59,33 @@ public final class BattleKeyMap {
             + " / 즉시 내리기 " + keyName(player, GameAction.HARD_DROP);
     }
     private String keyName(PlayerId player, GameAction action) {
-        return KeyEvent.getKeyText(keyOf(player, action));
+        return keyLabel(keyOf(player, action));
+    }
+
+    /** 화면에 쓸 키 이름. 방향키는 화살표로, 나머지는 OS 키 이름 (S12-B1: 영어 Left/Right 대신) */
+    public static String keyLabel(int code) {
+        return switch (code) {
+            case KeyEvent.VK_LEFT -> "←";
+            case KeyEvent.VK_RIGHT -> "→";
+            case KeyEvent.VK_UP -> "↑";
+            case KeyEvent.VK_DOWN -> "↓";
+            default -> KeyEvent.getKeyText(code);
+        };
+    }
+
+    /** 보드 옆에 크게 쓰는 한 사람의 키 안내 (S12-B1). 한 줄이 짧아 작은 창에서도 읽힌다 */
+    public List<String> playerLines(PlayerId player) {
+        return List.of(
+            keyName(player, GameAction.MOVE_LEFT) + " " + keyName(player, GameAction.MOVE_RIGHT) + "  이동",
+            keyName(player, GameAction.ROTATE) + "  회전",
+            keyName(player, GameAction.SOFT_DROP) + "  내리기",
+            keyName(player, GameAction.HARD_DROP) + "  즉시 낙하");
+    }
+
+    /** 두 사람 공통 키 한 줄 */
+    public String sharedLine() {
+        return "일시정지 " + keyName(PlayerId.ONE, GameAction.PAUSE)
+            + (isOnline() ? " · 기권 " + keyName(PlayerId.ONE, GameAction.QUIT) + " 두 번"
+                          : " · 나가기 " + keyName(PlayerId.ONE, GameAction.QUIT));
     }
 }

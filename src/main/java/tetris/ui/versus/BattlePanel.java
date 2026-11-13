@@ -14,6 +14,7 @@ import tetris.feature.versus.api.VersusRules;
 public final class BattlePanel extends JPanel {
     private final BoardRenderer renderer;
     private final String guide;
+    private BattleKeyMap keys;
     private final String modeLabel;
     private final BattleMode mode;
     private final PlayerId viewer;
@@ -46,6 +47,9 @@ public final class BattlePanel extends JPanel {
         setBackground(new Color(0x1B1E24)); setPreferredSize(new Dimension(960,720));
     }
     public String modeLabel() { return modeLabel; }
+    /** 보드 옆에 각자의 키를 크게 그린다 (S12-B1). 없으면 화면 아래 한 줄 안내만 쓴다 */
+    public void setKeys(BattleKeyMap keys) { this.keys = Objects.requireNonNull(keys); repaint(); }
+    public BattleKeyMap keys() { return keys; }
     /** P2P에서 이 PC가 조작하는 참가자. 로컬 대전이면 null */
     public PlayerId viewer() { return viewer; }
     public String notice() { return notice; }
@@ -157,6 +161,15 @@ public final class BattlePanel extends JPanel {
             }
             g.setFont(new Font(Font.DIALOG,Font.PLAIN,15)); g.setColor(Color.WHITE);
             String[] legend = legendText(mode).split("\\R");
+            if (keys != null) {
+                // 키는 보드 옆에 있으므로 아래에는 공통 키와 범례만 크게 쓴다 (S12-B1)
+                g.setFont(new Font(Font.DIALOG,Font.BOLD,20));
+                g.drawString(keys.sharedLine(), 28, 660);
+                g.setFont(new Font(Font.DIALOG,Font.PLAIN,15));
+                for (int i = 0; i < legend.length; i++) g.drawString(legend[i], 28, 684 + i * 18);
+                paintLog.painted(snapshot, System.nanoTime());
+                return;
+            }
             for (int i = 0; i < legend.length; i++) g.drawString(legend[i], 28, (legend.length > 1 ? 640 : 652) + i * 17);
             g.setFont(new Font(Font.DIALOG,Font.PLAIN,14));
             String[] lines = guide.split("\\R", -1);
@@ -183,8 +196,8 @@ public final class BattlePanel extends JPanel {
         g.drawString(text, 480 - g.getFontMetrics().stringWidth(text) / 2, 340);
         if (snapshot.phase() == MatchPhase.COUNTDOWN) {
             // 처음 보는 사람이 설명 없이 자기 보드와 키를 찾게 한다 (S11-B2, R3-DEMO)
-            String hint = viewer == null ? "왼쪽 P1 · 오른쪽 P2 · 조작 키는 화면 아래"
-                    : "파란 테두리가 내 보드 (" + boardTitle(viewer, viewer) + ") · 조작 키는 화면 아래";
+            String hint = viewer == null ? "왼쪽 P1 · 오른쪽 P2 · 조작 키는 보드 옆"
+                    : "파란 테두리가 내 보드 (" + boardTitle(viewer, viewer) + ") · 조작 키는 보드 옆";
             g.setFont(new Font(Font.DIALOG, Font.PLAIN, 18));
             g.drawString(hint, 480 - g.getFontMetrics().stringWidth(hint) / 2, 380);
         }
@@ -206,6 +219,16 @@ public final class BattlePanel extends JPanel {
         for(int r=0;r<VersusRules.MAX_PENDING_ROWS;r++) {
             int[] row = r < queue.size() ? queue.get(r) : new int[VersusRules.BOARD_COLS];
             renderer.paint(g,new int[][]{row},x+288,280+r*16,14);
+        }
+        // 이 보드를 조작하는 사람의 키. P2P에서는 내 보드에만 쓴다 (상대 키는 이 PC에서 누를 수 없다)
+        if (keys != null && (viewer == null || mine)) {
+            g.setColor(mine ? new Color(0x8BD3FF) : Color.WHITE);
+            g.setFont(new Font(Font.DIALOG,Font.BOLD,18));
+            g.drawString(viewer == null ? boardTitle(id, null) + " 키" : "내 키", x+288, 470);
+            g.setFont(new Font(Font.DIALOG,Font.PLAIN,18));
+            g.setColor(Color.WHITE);
+            var lines = keys.playerLines(viewer == null ? id : PlayerId.ONE);
+            for (int i = 0; i < lines.size(); i++) g.drawString(lines.get(i), x+288, 498 + i * 26);
         }
     }
 }

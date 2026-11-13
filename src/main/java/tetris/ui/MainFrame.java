@@ -376,6 +376,7 @@ public class MainFrame extends JFrame {
         JComponent previous = screens.remove(Screen.BATTLE);
         if (previous != null) root.remove(previous);
         var panel = new BattlePanel(settings.isColorBlindMode(), keys.guide(), label, mode, viewer);
+        panel.setKeys(keys);
         panel.setPreferredSize(GamePanel.preferredSizeFor(fitCellSize(settings.getScreenSize().cellPixels())));
         addScreen(Screen.BATTLE, panel);
         showScreen(Screen.BATTLE);
