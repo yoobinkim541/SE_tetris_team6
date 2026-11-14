@@ -7,17 +7,22 @@ import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.locks.LockSupport;
 
 /**
  * 두 PC 사이에 끼워 지연을 주입하는 TCP 중계기 (S11-C1, R3-LATENCY).
  *
  * <ul>
- *   <li>첫 접속 하나만 상대한다. 접속이 오면 대상 주소로 연결하고 방향마다 중계 스레드 1개를 띄운다.</li>
+ *   <li>첫 접속 하나만 상대한다. 접속이 오면 대상 주소로 연결하고 방향마다 읽기·전달 스레드를 하나씩 띄운다.</li>
  *   <li>각 청크는 <b>받은 시각 + {@code delayMillis}</b> 이후에 전달한다. 보낸 시각부터 세지 않으므로
  *       왕복 지연은 양방향 지연의 합이 된다.</li>
+ *   <li>읽기 스레드가 도착 즉시 시각을 찍어 대기열에 넣고 전달 스레드가 그 시각 + 지연에 보낸다.
+ *       지연을 기다리는 동안 도착한 데이터가 한 번 더 지연되지 않아 연속 송신에서도 실효 지연이 일정하다.</li>
  *   <li>{@code stallAfterMillis ≥ 0}이면 중계를 시작한 시각부터 그 시간이 지난 뒤 받은 데이터는 전달하지 않는다.
  *       소켓은 그대로 두어 "연결은 살아 있지만 화면이 멈춘" 상태를 재현한다.</li>
  *   <li>한쪽이 EOF·오류로 끝나면 양쪽 소켓을 닫아 반대쪽 스레드도 끝낸다.</li>
@@ -120,8 +125,8 @@ public final class LagProxy implements AutoCloseable {
             }
             this.inbound = client;
             this.outbound = remote;
-            Thread upstream = newDaemonThread("lag-proxy-upstream", () -> pump(client, remote));
-            Thread downstream = newDaemonThread("lag-proxy-downstream", () -> pump(remote, client));
+            Thread upstream = newDaemonThread("lag-proxy-upstream", () -> pump(client, remote, "lag-proxy-upstream"));
+            Thread downstream = newDaemonThread("lag-proxy-downstream", () -> pump(remote, client, "lag-proxy-downstream"));
             threads.add(upstream);
             threads.add(downstream);
             upstream.start();
@@ -130,30 +135,56 @@ public final class LagProxy implements AutoCloseable {
         closeQuietly(server);
     }
 
-    private void pump(Socket source, Socket sink) {
+    /** 도착 시각을 찍은 청크. END는 읽기 쪽이 끝났다는 표시 */
+    private record Chunk(long arrivedNanos, byte[] bytes) { }
+
+    private static final Chunk END = new Chunk(0, new byte[0]);
+
+    /** 읽기: 도착 즉시 시각을 찍어 대기열에 넣는다. 정지 시각 뒤 도착분은 버리고 연결은 유지한다 */
+    private void pump(Socket source, Socket sink, String name) {
+        BlockingQueue<Chunk> queue = new LinkedBlockingQueue<>();
+        Thread writer = newDaemonThread(name + "-writer", () -> deliver(queue, sink));
+        synchronized (lock) {
+            if (closed) return;
+            threads.add(writer);
+        }
+        writer.start();
         byte[] buffer = new byte[BUFFER_BYTES];
-        try (InputStream in = source.getInputStream(); OutputStream out = sink.getOutputStream()) {
+        try {
+            InputStream in = source.getInputStream();
             int read;
             while ((read = in.read(buffer)) != -1) {
                 if (closed) return;
+                long now = System.nanoTime();
                 long stallAt = stallAfterNanos();
-                if (stallAt >= 0) {
-                    long now = System.nanoTime();
-                    if (now - startedAtNanos >= stallAt) {
-                        // 전달을 멈춘다: 읽은 바이트를 버리고 연결은 유지한다
-                        continue;
-                    }
-                    // 정지 시각 전에 보낸 청크가 정지 뒤에 도착하지 않도록 정지 시각까지만 기다린다
-                    awaitUntil(Math.min(now + delayNanos(), startedAtNanos + stallAt));
-                } else {
-                    awaitUntil(System.nanoTime() + delayNanos());
-                }
-                if (closed) return;
-                out.write(buffer, 0, read);
-                out.flush();
+                if (stallAt >= 0 && now - startedAtNanos >= stallAt) continue;
+                queue.add(new Chunk(now, Arrays.copyOf(buffer, read)));
             }
         } catch (IOException ignored) {
-            // 상대가 닫히면 아래에서 양쪽을 닫는다
+            // 상대가 닫히면 전달 스레드가 양쪽을 닫는다
+        } finally {
+            queue.add(END);
+        }
+    }
+
+    /** 전달: 도착 시각 + 지연(정지가 있으면 정지 시각까지만 기다림)에 보낸다. 읽기가 끝나면 남은 것을 보내고 양쪽을 닫는다 */
+    private void deliver(BlockingQueue<Chunk> queue, Socket sink) {
+        try {
+            OutputStream out = sink.getOutputStream();
+            while (true) {
+                Chunk chunk = queue.take();
+                if (chunk == END || closed) return;
+                long due = chunk.arrivedNanos() + delayNanos();
+                long stallAt = stallAfterNanos();
+                // 정지 시각 전에 보낸 청크가 정지 뒤에 도착하지 않도록 정지 시각까지만 기다린다
+                if (stallAt >= 0) due = Math.min(due, startedAtNanos + stallAt);
+                awaitUntil(due);
+                if (closed) return;
+                out.write(chunk.bytes());
+                out.flush();
+            }
+        } catch (IOException | InterruptedException ignored) {
+            // 닫힘·중단: 아래에서 양쪽을 닫는다
         } finally {
             closeBoth();
         }

@@ -136,3 +136,69 @@ java -cp "SE-Tetris.jar" tetris.feature.network.tools.NetTool client 127.0.0.1 4
 - 실제 두 PC 측정: **미측정**. 위 1~5절의 표는 양식만 제공한다.
 - 최소 사양 장비(6-4·6-5) 검증: **미검증**. 해당 장비 확보 후 별도 기록한다.
 - loopback에서 확인한 사실: `NetTool info/host/client/lag` 동작, CSV 형식, 종료 코드 0/1/2, 오류 한 줄 출력. 이는 도구 자체 검증이며 200ms 판정과 무관하다.
+
+## 7. 단일 PC 2프로세스 실측 (2026-11-14, 보조 근거)
+
+> **두 PC 판정이 아니다.** 0절 규칙대로 이 결과로 #159 합격을 선언하지 않는다. 두 PC·영상 측정 전까지 200ms 판정은 **미검증**이다.
+
+### 7.1 방법
+
+- 도구: `src/test/java/tetris/versus/ui/TwoProcessLatencyHarness.java` (CI에서 돌지 않는 측정 도구)
+- 같은 PC에서 **JVM 프로세스 두 개**가 각자 실제 게임 창(`MainFrame`)을 띄운다. 클라이언트는 호스트의 **LAN 주소**(172.30.1.64)로 접속한다. Windows는 같은 PC 주소로 가는 TCP를 내부 경로로 처리하므로 랜선·공유기 지연은 들어가지 않는다.
+- 입력: 입력한 쪽 프로세스의 경기 화면에 ←/→ 키 이벤트를 보낸다(OS 키보드 지연 제외). 측정값은 **키 이벤트 → 각 화면이 그 블록 이동을 그린 시각**(`PaintLog`)이다.
+- 시계: 두 프로세스의 `System.nanoTime` 기준점 차이를 드라이버가 50번 왕복으로 재서 보정한다. 보정 불확도 ±0.27 ms(가장 짧은 왕복의 절반 합). 영상 측정 오차(±8.3 ms)보다 작다.
+- 표본: 3모드 × 2방향 × 100입력 = **600입력**, 입력 간격 30 ms. 모드·방향마다 새 판(재대전)으로 시작한다. 2초 안에 두 화면 중 하나라도 그리지 못하면 유실로 센다.
+- 환경: Windows 11, JDK 25.0.2 실행(컴파일 `--release 21`), `build/libs/SE-Tetris.jar`(releaseJar), 커밋 `cc484f3` 기준 + 이 측정 도구. 지연 주입 실행(7.3)은 7.4의 LagProxy 수정을 넣은 빌드로 다시 쟀다.
+- 실행:
+  ```text
+  gradlew releaseJar testClasses
+  java -cp "build/libs/SE-Tetris.jar;build/classes/java/test" tetris.versus.ui.TwoProcessLatencyHarness 100 build/verification/s11-two-process
+  java -cp "build/libs/SE-Tetris.jar;build/classes/java/test" tetris.versus.ui.TwoProcessLatencyHarness 40 build/verification/s11-two-process-lag60 60
+  ```
+- 원자료: `docs/req3/measurements/s11-two-process/*.csv`(`LatencyCsv` 형식), `s11-two-process-summary.txt`
+
+### 7.2 결과 (지연 주입 없음, 600입력, 유실 0)
+
+| 모드 | 방향 | 화면 | 표본 | p50 (ms) | p95 (ms) | 최대 (ms) | 200ms 초과 |
+|---|---|---|---|---|---|---|---|
+| CLASSIC | host->client | 입력한 화면 | 100 | 14.70 | 25.10 | 37.53 | 0 |
+| CLASSIC | host->client | 상대 화면 | 100 | 19.98 | 39.73 | 66.30 | 0 |
+| CLASSIC | client->host | 입력한 화면 | 100 | 20.31 | 36.22 | 52.49 | 0 |
+| CLASSIC | client->host | 상대 화면 | 100 | 18.55 | 32.57 | 34.74 | 0 |
+| ITEM | host->client | 입력한 화면 | 100 | 14.23 | 18.43 | 29.70 | 0 |
+| ITEM | host->client | 상대 화면 | 100 | 15.93 | 34.55 | 45.48 | 0 |
+| ITEM | client->host | 입력한 화면 | 100 | 19.58 | 35.41 | 51.58 | 0 |
+| ITEM | client->host | 상대 화면 | 100 | 18.54 | 21.04 | 34.74 | 0 |
+| TIMED | host->client | 입력한 화면 | 100 | 14.22 | 19.24 | 29.68 | 0 |
+| TIMED | host->client | 상대 화면 | 100 | 15.77 | 31.88 | 35.30 | 0 |
+| TIMED | client->host | 입력한 화면 | 100 | 19.63 | 35.20 | 50.23 | 0 |
+| TIMED | client->host | 상대 화면 | 100 | 18.50 | 33.43 | 37.34 | 0 |
+| **전체** | 양방향 | 입력한 화면 | 600 | 18.58 | 35.07 | **52.49** | 0 |
+| **전체** | 양방향 | 상대 화면 | 600 | 18.50 | 34.49 | **66.30** | 0 |
+
+최대 + 보정 불확도 = 66.57 ms. 같은 PC 조건에서는 600입력 모두 200 ms 안이다. 실제 두 PC에서는 여기에 LAN 전송 지연(방향마다)과 OS 키 입력 지연이 더해진다.
+
+### 7.3 지연 주입 (LagProxy 방향당 60 ms, 240입력, 유실 0) — 정상 LAN 결과 아님
+
+| 모드 | 방향 | 입력한 화면 p50 / 최대 | 상대 화면 p50 / 최대 | 200ms 초과 |
+|---|---|---|---|---|
+| CLASSIC | host->client | 18.00 / 27.09 | 91.35 / 126.91 | 0 |
+| CLASSIC | client->host | 158.15 / 188.20 | 81.57 / 103.76 | 0 |
+| ITEM | host->client | 13.95 / 34.27 | 83.05 / 112.53 | 0 |
+| ITEM | client->host | 158.61 / 188.58 | 81.44 / 105.59 | 0 |
+| TIMED | host->client | 14.01 / 34.10 | 81.64 / 98.08 | 0 |
+| TIMED | client->host | 158.92 / 174.27 | 80.62 / 95.47 | 0 |
+
+기대와 맞는다. 호스트 입력은 호스트 화면에 바로, 클라이언트 화면에는 한 방향 지연(60 ms)만큼 늦게 그려진다. 클라이언트 입력은 호스트까지 60 ms, 상태가 돌아오는 데 60 ms가 걸려 입력한 화면이 약 120 ms + 처리 시간 뒤에 그려진다. 원자료: `docs/req3/measurements/s11-two-process-lag60/`.
+
+### 7.4 측정 중 찾아 고친 결함: LagProxy 지연 누적
+
+- 증상: 처음 지연 주입 실행에서 방향당 60 ms인데 상대 화면 지연이 약 140 ms(두 배)로 나왔다.
+- 원인: `LagProxy`가 청크를 읽고 → 지연만큼 기다리고 → 쓴 뒤에야 다음 청크를 읽었다. 경기 상태처럼 16 ms마다 계속 오는 데이터는 기다리는 동안 쌓였다가 한 번 더 지연돼 실효 지연이 최대 두 배로 부풀고, 전달도 지연 주기마다 한 번으로 묶였다. 문서의 "받은 시각 + 지연" 약속과 달랐다.
+- 수정: 읽기 스레드가 도착 즉시 시각을 찍어 대기열에 넣고, 전달 스레드가 그 시각 + 지연에 보낸다. 정지(`stallAfterMillis`)·양쪽 종료 동작은 그대로다.
+- 회귀 테스트: `LagProxyTest.연속_송신에서도_지연이_누적되지_않는다` (10 ms마다 60개, 방향당 60 ms → 최대 왕복이 120~170 ms 안). 수정 전 187 ms로 실패, 수정 후 통과. 5절의 `NetTool lag` 지연 재현도 같은 중계기를 쓰므로 함께 바로잡혔다.
+
+### 7.5 남은 일
+
+- 실제 두 PC × 영상(120 fps) 600입력 측정과 판정표(4절) 작성 → 이것이 #159 합격 근거다.
+- 두 PC에서 5절 지연 안내·끊김·회복 화면 재현. 끊김·회복 판정 자체는 `ConnectionHealthTest`, `LinkHealthLobbyTest`, `LagProxyTest`가 실제 소켓으로 자동 검증한다.
