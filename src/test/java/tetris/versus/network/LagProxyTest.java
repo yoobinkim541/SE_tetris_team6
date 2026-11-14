@@ -96,6 +96,51 @@ class LagProxyTest {
         throw new AssertionError("close() 뒤에도 중계 스레드가 살아 있다");
     }
 
+    /**
+     * 경기 상태처럼 16ms마다 끊임없이 보내도 각 메시지는 "도착 시각 + 지연"에 전달돼야 한다.
+     * 지연을 기다리는 동안 도착한 데이터가 다시 한 번 지연되면 실효 지연이 최대 두 배로 부풀어 측정을 왜곡한다.
+     */
+    @Test
+    void 연속_송신에서도_지연이_누적되지_않는다() throws Exception {
+        int delay = 60, messages = 60, intervalMillis = 10;
+        try (ServerSocket echoServer = new ServerSocket(0, 1, loopback())) {
+            startEchoServer(echoServer, new AtomicInteger(Integer.MIN_VALUE));
+            try (LagProxy proxy = new LagProxy(
+                    0, new InetSocketAddress(loopback(), echoServer.getLocalPort()), delay, -1)) {
+                proxy.start();
+                try (Socket client = new Socket(loopback(), proxy.localPort())) {
+                    client.setTcpNoDelay(true);
+                    client.setSoTimeout((int) TimeUnit.SECONDS.toMillis(WAIT_SECONDS));
+                    long[] sent = new long[messages];
+                    Thread sender = new Thread(() -> {
+                        try {
+                            OutputStream out = client.getOutputStream();
+                            for (int i = 0; i < messages; i++) {
+                                sent[i] = System.nanoTime();
+                                out.write(i);
+                                out.flush();
+                                awaitNanos(TimeUnit.MILLISECONDS.toNanos(intervalMillis));
+                            }
+                        } catch (IOException ignored) {
+                            // 수신 쪽 단정이 실패를 알린다
+                        }
+                    }, "lag-proxy-test-sender");
+                    sender.start();
+                    InputStream in = client.getInputStream();
+                    long worst = 0;
+                    for (int i = 0; i < messages; i++) {
+                        assertEquals(i, in.read());
+                        worst = Math.max(worst, TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - sent[i]));
+                    }
+                    sender.join();
+                    // 왕복 = 방향마다 지연 1번씩. 스케줄링 여유 50ms 안이어야 한다 (누적되면 수백 ms가 된다)
+                    assertTrue(worst >= 2L * delay, "왕복이 주입 지연보다 짧다: " + worst + "ms");
+                    assertTrue(worst < 2L * delay + 50, "연속 송신에서 지연이 누적됐다: 최대 왕복 " + worst + "ms");
+                }
+            }
+        }
+    }
+
     @Test
     void 지연_주입이_왕복을_두_방향_모두_늦춘다() throws Exception {
         try (ServerSocket echoServer = new ServerSocket(0, 1, loopback())) {
