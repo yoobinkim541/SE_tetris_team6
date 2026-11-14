@@ -16,7 +16,7 @@
 | R3-LOSS | p5 | 쌓을 수 없으면 상대 승리. 양쪽 같은 결과 | A·B / S8-A2, S8-B2 | `MatchResult`(TOPPED_OUT) | ✅ MatchContractTest, MatchResultTest, RematchLifecycleTest |
 | R3-NOSCORE | p5 | 대전 기록은 스코어보드에 저장하지 않음 | B / S9-B1 | `MatchResult`는 onGameOver 경로를 쓰지 않음 | VersusNoScorePersistenceTest |
 | R3-TIME | p3 | 마감 시 점수 높은 쪽 승리. 그 전 쌓기 불가도 종료 | A·B / S9-A1, S9-B1 | `MatchConfig.timeLimitMillis`, `MatchClock`, `DueTimeClock`, TIME_UP | ✅ DueTimeClockTest, TimedMatchTest |
-| R3-ITEM | p3,5 | 아이템 대전에서 기존 아이템 등장·효과 유지 | A / S9-A2 | `BattleMode.itemsEnabled()` | ItemBattleTest |
+| R3-ITEM | p3,5 | 아이템 대전에서 기존 아이템 등장·효과 유지 | A / S9-A2 | `BattleMode.itemsEnabled()` | ✅ BattleModesEngineTest, AttackPublicationTest, VersusStressTest |
 | R3-HOST | p8 | 호스트/클라이언트, IP 표시·입력 | C·B / S8-C1, S9-B2 | C 로비 계약 | ConnectionFlowTest |
 | R3-READY | p8 | 연결 안내, 호스트 모드 선택, 양쪽 시작 후 시작 | C·A / S8-C2, S9-C1 | C 로비 계약 + `MatchConfig` | ReadyHandshakeTest |
 | R3-LIVE | p9 | 두 PC 모두 양쪽 보드·블록·점수 실시간 표시 | C·B / S9-C2, S9-B2, S10-B1 | `MatchSnapshot`, `BattleClient` | PeerSnapshotTest |
@@ -28,7 +28,7 @@
 | R3-NETTEST | p10 | 접속 절차 자동 테스트 | C / S7-C2~S11-C2 | — | loopback 통합 테스트 |
 | R3-REGRESSION | p13~14 | 1·2차 전체 회귀 | A·B / S11-A1, S11-B1 | `SpawnBoundary.IMMEDIATE`로 싱글 무변경 | ✅ 기존 test·guiAcceptance, RandomInputStressTest(싱글 0..8), VersusStressTest(대전 0..9) |
 | R3-COVERAGE | p13 | 전체 LINE ≥ 70% | C / S11-C2 | — | `gradlew check` 게이트 |
-| R3-ITEMSPEC | p13 | 팀 아이템 명세, 대전 차이 명시 | A / S11-A2 | — | #75 / PR #111 문서 대조 |
+| R3-ITEMSPEC | p13 | 팀 아이템 명세, 대전 차이 명시 | A / S11-A2 | — | ✅ `docs/item-specification.md` 7장 (S11-A2) |
 | R3-DEMO | p14 | 느린 네트워크, 다른 팀 조작 시연 준비 | 전원 / S12 | — | 두 PC 리허설 |
 
 도전 과제(컴퓨터 대전, 채팅, 다인 대전)는 필수 완료 후 별도 challenge 브랜치에서만 하고 main에 병합하지 않는다 (p12).
