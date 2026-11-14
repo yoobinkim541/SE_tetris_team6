@@ -19,7 +19,7 @@
 |---|---|
 | 기준 커밋 | `68fde30` (develop, S11-A2 #179 병합 직후) |
 | 명령 | `gradlew check` (로컬 저메모리 init 스크립트: 힙 128 MB, 직렬 실행) |
-| 결과 | BUILD SUCCESSFUL (test, jacocoTestCoverageVerification 포함), 2026-11-14 로컬 Windows 11 · JDK 21 |
+| 결과 | BUILD SUCCESSFUL (test, jacocoTestCoverageVerification 포함), 2026-11-14 로컬 Windows 11 · JDK 25.0.2 실행 (컴파일 대상 `--release 21`) |
 | 테스트 | 1,236개, 실패 0, 건너뜀 20 (guiAcceptance 전용 실제 창 테스트) |
 | 라인 커버리지 | 88.27% (5,013 / 5,679줄), 게이트 70% 통과 |
 | 소요 | 1분 7초 (컴파일 캐시 사용, test 태스크는 전체 실행) |
