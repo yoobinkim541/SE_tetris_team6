@@ -26,7 +26,7 @@
 | R3-DISCONNECT | p10 | 끊기면 오류 후 P2P 첫 화면 | C·B / S10-C1, S10-B2 | — | DisconnectFlowTest |
 | R3-RECENT | p10 | 최근 성공 IP 저장 | C·B / S10-C2, S10-B2 | — | RecentPeerRepositoryTest |
 | R3-NETTEST | p10 | 접속 절차 자동 테스트 | C / S7-C2~S11-C2 | — | loopback 통합 테스트 |
-| R3-REGRESSION | p13~14 | 1·2차 전체 회귀 | A·B / S11-A1, S11-B1 | `SpawnBoundary.IMMEDIATE`로 싱글 무변경 | 기존 test·guiAcceptance |
+| R3-REGRESSION | p13~14 | 1·2차 전체 회귀 | A·B / S11-A1, S11-B1 | `SpawnBoundary.IMMEDIATE`로 싱글 무변경 | ✅ 기존 test·guiAcceptance, RandomInputStressTest(싱글 0..8), VersusStressTest(대전 0..9) |
 | R3-COVERAGE | p13 | 전체 LINE ≥ 70% | C / S11-C2 | — | `gradlew check` 게이트 |
 | R3-ITEMSPEC | p13 | 팀 아이템 명세, 대전 차이 명시 | A / S11-A2 | — | #75 / PR #111 문서 대조 |
 | R3-DEMO | p14 | 느린 네트워크, 다른 팀 조작 시연 준비 | 전원 / S12 | — | 두 PC 리허설 |
