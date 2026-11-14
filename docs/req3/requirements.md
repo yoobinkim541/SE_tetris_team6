@@ -13,7 +13,7 @@
 | R3-ORDER | p4~6 | 먼저 대기열 표시. Lock·삭제 뒤 다음 Spawn 전에 아래쪽 삽입 | A / S8-A1 | `SpawnBoundary`, `MatchEngine` pulse 순서 | GarbageInsertionTest |
 | R3-CAP | p6 | 최대 10줄. 기존 아래에 추가, 넘치면 최하단 버림, 10줄이면 무시 | A / S7-A2 | `PendingAttackQueue`, `PlayerView.pendingRows` | ✅ MatchContractTest, PendingAttackQueueTest, AttackPublicationTest |
 | R3-GARBAGE | p5 | 형태 유지, 기존 칸 위로 이동, 회색으로 구분 | A·B / S8-A1, S8-B2 | `VersusRules.ATTACK_CELL`=9 | GarbageInsertionTest, VersusRenderingTest |
-| R3-LOSS | p5 | 쌓을 수 없으면 상대 승리. 양쪽 같은 결과 | A·B / S8-A2, S8-B2 | `MatchResult`(TOPPED_OUT) | ✅ MatchContractTest, MatchResultTest |
+| R3-LOSS | p5 | 쌓을 수 없으면 상대 승리. 양쪽 같은 결과 | A·B / S8-A2, S8-B2 | `MatchResult`(TOPPED_OUT) | ✅ MatchContractTest, MatchResultTest, RematchLifecycleTest |
 | R3-NOSCORE | p5 | 대전 기록은 스코어보드에 저장하지 않음 | B / S9-B1 | `MatchResult`는 onGameOver 경로를 쓰지 않음 | VersusNoScorePersistenceTest |
 | R3-TIME | p3 | 마감 시 점수 높은 쪽 승리. 그 전 쌓기 불가도 종료 | A·B / S9-A1, S9-B1 | `MatchConfig.timeLimitMillis`, `MatchClock`, `DueTimeClock`, TIME_UP | ✅ DueTimeClockTest, TimedMatchTest |
 | R3-ITEM | p3,5 | 아이템 대전에서 기존 아이템 등장·효과 유지 | A / S9-A2 | `BattleMode.itemsEnabled()` | ItemBattleTest |
@@ -21,7 +21,7 @@
 | R3-READY | p8 | 연결 안내, 호스트 모드 선택, 양쪽 시작 후 시작 | C·A / S8-C2, S9-C1 | C 로비 계약 + `MatchConfig` | ReadyHandshakeTest |
 | R3-LIVE | p9 | 두 PC 모두 양쪽 보드·블록·점수 실시간 표시 | C·B / S9-C2, S9-B2, S10-B1 | `MatchSnapshot`, `BattleClient` | PeerSnapshotTest |
 | R3-LATENCY | p9 | 동일 LAN 입력→표시 200 ms 이하 | C·B / S11-C1, S11-B2 | — | LanLatencyAcceptance |
-| R3-REMATCH | p9 | 끝나면 연결 유지한 로비로, 양쪽 시작 후 새 판 | A·C / S10-A1, S10-C2 | `MatchEngine.start` 새 matchId | RematchLifecycleTest |
+| R3-REMATCH | p9 | 끝나면 연결 유지한 로비로, 양쪽 시작 후 새 판 | A·C / S10-A1, S10-C2 | `MatchEngine.start` 새 matchId | ✅ RematchLifecycleTest, RematchLobbyTest |
 | R3-LAG | p10 | 지연 표시, 팀이 기준 정의 | C·B / S10-C1, S10-B2 | — | NetworkHealthTest |
 | R3-DISCONNECT | p10 | 끊기면 오류 후 P2P 첫 화면 | C·B / S10-C1, S10-B2 | — | DisconnectFlowTest |
 | R3-RECENT | p10 | 최근 성공 IP 저장 | C·B / S10-C2, S10-B2 | — | RecentPeerRepositoryTest |
