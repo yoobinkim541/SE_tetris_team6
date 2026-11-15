@@ -1,7 +1,7 @@
 # S12 B 트랙: 평가 화면 점검·사용성 결함 수정(S12-B1)과 시연 동선·회고 자료(S12-B2)
 
 - 소유: B 화면·입력. 규칙: R3-DEMO, R3-MENU, R3-LIVE, R3-REGRESSION
-- 관련: [s11-b-acceptance.md](s11-b-acceptance.md), [evaluation-network-guide.md](evaluation-network-guide.md)(C: 평가장 접속·방화벽), [../release-checklist.md](../release-checklist.md)
+- 관련: [s11-b-acceptance.md](s11-b-acceptance.md), [evaluation-network-guide.md](evaluation-network-guide.md)(C: 평가장 접속·방화벽), [../release-checklist.md](../release-checklist.md), [s12-rehearsal-runsheet.md](s12-rehearsal-runsheet.md)(남은 사람 확인을 한 번에 하는 진행표)
 
 ## 1. S12-B1 평가 화면 점검 (2026-11-14)
 
@@ -44,7 +44,7 @@
 
 ## 3. 개발자 외 플레이어 피드백 (실제 진행 후 기록)
 
-아직 개발자 외 사용자 플레이를 하지 않았다. 아래 표는 시연 리허설 때 채운다. 결과를 지어내서 채우지 않는다.
+아직 개발자 외 사용자 플레이를 하지 않았다. 아래 표는 시연 리허설 때 채운다 (진행 순서·관찰 메모 양식: [s12-rehearsal-runsheet.md](s12-rehearsal-runsheet.md) 1·2장). 결과를 지어내서 채우지 않는다.
 
 | 날짜 | 플레이어 (팀원 아님) | 막힌 곳·의견 | 개선 / 이슈 |
 |---|---|---|---|
