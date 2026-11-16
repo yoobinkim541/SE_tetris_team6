@@ -75,6 +75,8 @@ public class MainFrame extends JFrame {
     private final java.util.function.Supplier<LobbyClient> lobbyFactory;
     private final BattleResultPanel onlineResultPanel;
     private P2pLobbyController p2p;
+    /** 개발자 모드에서만 P2P 로비 아래에 붙는 측정 패널. 일반 실행에서는 항상 null */
+    private tetris.ui.versus.DevRttPanel devRtt;
     private boolean battleOnline;
 
     public MainFrame(Settings settings, Scoreboard scoreboard,
@@ -416,7 +418,15 @@ public class MainFrame extends JFrame {
             if (previous != null) root.remove(previous);
             var panel = p2p.panel();
             panel.setPreferredSize(GamePanel.preferredSizeFor(fitCellSize(settings.getScreenSize().cellPixels())));
-            addScreen(Screen.P2P_LOBBY, panel);
+            JComponent screen = panel;
+            if (tetris.DevMode.enabled()) {
+                devRtt = new tetris.ui.versus.DevRttPanel(lobby, tetris.feature.save.DataDirectory.resolve().resolve("dev"));
+                var wrapper = new JPanel(new java.awt.BorderLayout());
+                wrapper.add(panel, java.awt.BorderLayout.CENTER);
+                wrapper.add(devRtt, java.awt.BorderLayout.SOUTH);
+                screen = wrapper;
+            }
+            addScreen(Screen.P2P_LOBBY, screen);
         }
         showScreen(Screen.P2P_LOBBY);
     }
@@ -456,6 +466,10 @@ public class MainFrame extends JFrame {
         if (p2p == null) return;
         var closing = p2p;
         p2p = null;
+        if (devRtt != null) {
+            devRtt.close();
+            devRtt = null;
+        }
         closing.close();
     }
 
