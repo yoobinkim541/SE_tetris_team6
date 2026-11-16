@@ -19,6 +19,7 @@ import java.util.function.Supplier;
 import tetris.feature.network.CloseReason;
 import tetris.feature.network.ConnectionHealth;
 import tetris.feature.network.HeartbeatPolicy;
+import tetris.feature.network.tools.LatencySample;
 import tetris.feature.network.PeerEstablisher;
 import tetris.feature.network.PeerLink;
 import tetris.feature.network.PeerListener;
@@ -110,6 +111,10 @@ public final class SocketLobbyClient implements LobbyClient {
     private ConnectionHealth connectionHealth;
     private MatchPulse.Handle heartbeatHandle;
     private long heartbeatNonce;
+    /** 개발자 모드 왕복 표본 구독자와 진행 중인 probeRtt (heartbeat와 같은 nonce·pendingPings를 쓴다) */
+    private final List<Consumer<LatencySample>> rttSubscribers = new ArrayList<>();
+    private MatchPulse.Handle probeHandle;
+    private int probeRemaining;
     private HostBattleClient hostBattle;
     private ClientBattleClient clientBattle;
 
@@ -358,6 +363,7 @@ public final class SocketLobbyClient implements LobbyClient {
             sub.active = false;
         }
         healthSubscribers.clear();
+        rttSubscribers.clear();
     }
 
     private void onAttemptCompleted(
@@ -422,7 +428,67 @@ public final class SocketLobbyClient implements LobbyClient {
         heartbeatHandle = pulse.start((int) policy.intervalMillis(), () -> heartbeat(link));
     }
 
+    @Override
+    public Subscription subscribeRtt(Consumer<LatencySample> listener) {
+        Objects.requireNonNull(listener, "listener");
+        ensureOpen();
+        rttSubscribers.add(listener);
+        return () -> rttSubscribers.remove(listener);
+    }
+
+    @Override
+    public void probeRtt(int count, int intervalMillis) {
+        ensureOpen();
+        if (count <= 0 || intervalMillis <= 0) throw new IllegalArgumentException("count and interval must be positive");
+        PeerLink link = activeLink;
+        if (link == null || connectionHealth == null) return;
+        stopProbe();
+        probeRemaining = count;
+        probeHandle = pulse.start(intervalMillis, () -> probeTick(link));
+    }
+
+    private void probeTick(PeerLink link) {
+        if (closed || activeLink != link || probeRemaining <= 0) {
+            stopProbe();
+            return;
+        }
+        probeRemaining--;
+        sendPing(link);
+        if (probeRemaining == 0) stopProbe();
+    }
+
+    private void stopProbe() {
+        MatchPulse.Handle handle = probeHandle;
+        probeHandle = null;
+        probeRemaining = 0;
+        if (handle != null) handle.close();
+    }
+
+    /** nonce를 하나 늘려 PING을 보낸다. 보내지 못하면 연결을 끊고 false */
+    private boolean sendPing(PeerLink link) {
+        long nonce = ++heartbeatNonce;
+        if (pendingPings.size() >= MAX_PENDING_PINGS) {
+            Iterator<Long> it = pendingPings.keySet().iterator();
+            if (it.hasNext()) {
+                it.next();
+                it.remove();
+            }
+        }
+        pendingPings.put(nonce, clock.nowMillis());
+        return sendOrDisconnect(link, new ControlPayloads.Ping(nonce, System.nanoTime()).message());
+    }
+
+    /** 이 PC의 nanoTime으로 보낸 PING이 돌아온 시각까지. 두 PC 시계를 맞출 필요가 없다 */
+    private void publishRtt(ControlPayloads.Ping pong) {
+        if (rttSubscribers.isEmpty()) return;
+        long received = Math.max(pong.sentAtNanos(), System.nanoTime());
+        String direction = snapshot.role() == Role.HOST ? "host->client" : "client->host";
+        var sample = new LatencySample("NET", direction, pong.nonce(), pong.sentAtNanos(), received, received);
+        for (Consumer<LatencySample> listener : List.copyOf(rttSubscribers)) listener.accept(sample);
+    }
+
     private void stopHeartbeat() {
+        stopProbe();
         MatchPulse.Handle handle = heartbeatHandle;
         heartbeatHandle = null;
         connectionHealth = null;
@@ -438,16 +504,7 @@ public final class SocketLobbyClient implements LobbyClient {
             return;
         }
         long now = clock.nowMillis();
-        long nonce = ++heartbeatNonce;
-        if (pendingPings.size() >= MAX_PENDING_PINGS) {
-            Iterator<Long> it = pendingPings.keySet().iterator();
-            if (it.hasNext()) {
-                it.next();
-                it.remove();
-            }
-        }
-        pendingPings.put(nonce, now);
-        if (!sendOrDisconnect(link, new ControlPayloads.Ping(nonce, System.nanoTime()).message())) {
+        if (!sendPing(link)) {
             return;
         }
         ConnectionHealth.Status evaluated = connectionHealth.evaluate(now);
@@ -731,6 +788,7 @@ public final class SocketLobbyClient implements LobbyClient {
                     if (sentAt != null && connectionHealth != null) {
                         connectionHealth.onRtt(Math.max(0L, now - sentAt), now);
                         syncHealthFromConnection();
+                        publishRtt(pong);
                     }
                 }
                 case LEAVE -> {

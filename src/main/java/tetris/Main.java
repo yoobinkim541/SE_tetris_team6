@@ -16,6 +16,7 @@ import tetris.ui.Messages;
 
 public class Main {
     public static void main(String[] args) {
+        DevMode.enableFrom(args); // --dev: 개발자 모드 (P2P 로비 측정 패널)
         SwingUtilities.invokeLater(Main::launch); // Swing과 GameSession은 EDT 단일 스레드에서만 (TMR-1)
     }
 
@@ -30,6 +31,7 @@ public class Main {
 
         // 2) MainFrame 생성 (화면 크기는 생성자에서 적용)
         MainFrame frame = new MainFrame(settings, scoreboard, settingsRepository, scoreboardRepository);
+        if (DevMode.enabled()) frame.setTitle(frame.getTitle() + " [개발자 모드]");
         frame.setVisible(true);
 
         // 3) Main Menu 표시
