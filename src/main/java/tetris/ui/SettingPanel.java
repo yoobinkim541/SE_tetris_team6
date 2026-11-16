@@ -17,11 +17,14 @@ import tetris.feature.setting.ScreenSize;
 import tetris.feature.setting.Settings;
 
 /**
- * 설정 화면 (SET-2, SET-8): Screen Size / Difficulty / Control Keys / Color Blind / Reset Scoreboard / Reset Settings. 기존 SettingScreen 대체.
+ * 설정 화면 (SET-2, SET-8): Screen Size / Difficulty / Control Keys / Color Blind / 개발자 연결 상태 표시 /
+ * Reset Scoreboard / Reset Settings. 기존 SettingScreen 대체.
  * 유효한 변경은 즉시 적용·저장한다 (SET-3). 저장 실패 시 이번 실행에는 적용하고 안내만 한다 (SET-4).
  */
 public class SettingPanel extends JPanel {
-    private enum Item { SCREEN_SIZE, DIFFICULTY, CONTROL_KEYS, COLOR_BLIND, RESET_SCOREBOARD, RESET_SETTINGS }
+    private enum Item {
+        SCREEN_SIZE, DIFFICULTY, CONTROL_KEYS, COLOR_BLIND, DEV_NET_OVERLAY, RESET_SCOREBOARD, RESET_SETTINGS
+    }
 
     private static final Item[] ITEMS = Item.values();
     private static final GameAction[] ACTIONS = GameAction.values();
@@ -94,6 +97,10 @@ public class SettingPanel extends JPanel {
             case CONTROL_KEYS -> openControlKeys();
             case COLOR_BLIND -> {
                 settings.setColorBlindMode(!settings.isColorBlindMode());
+                applyChange("");
+            }
+            case DEV_NET_OVERLAY -> {
+                settings.setDevNetworkOverlay(!settings.isDevNetworkOverlay());
                 applyChange("");
             }
             case RESET_SCOREBOARD -> confirm(Messages.get("confirm.resetScoreboard"), () -> {
@@ -292,6 +299,8 @@ public class SettingPanel extends JPanel {
         rows.add(new String[] {Messages.get("settings.controlKeys"), "›"});
         rows.add(new String[] {Messages.get("settings.colorBlind"),
                 Messages.get(settings.isColorBlindMode() ? "settings.on" : "settings.off")});
+        rows.add(new String[] {Messages.get("settings.devNetOverlay"),
+                Messages.get(settings.isDevNetworkOverlay() ? "settings.on" : "settings.off")});
         rows.add(new String[] {Messages.get("settings.resetScoreboard"), ""});
         rows.add(new String[] {Messages.get("settings.resetSettings"), ""});
         return rows;

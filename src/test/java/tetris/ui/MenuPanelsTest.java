@@ -154,6 +154,25 @@ public class MenuPanelsTest {
     }
 
     @Test
+    void devNetworkOverlayTogglesRightAfterColorBlind() { // dev-net-overlay
+        settingPanel.moveSelection(4); // Color Blind 바로 아래
+        int before = saves;
+        settingPanel.activateSelected();
+        assertTrue(settings.isDevNetworkOverlay());
+        assertEquals(before + 1, saves, "바뀐 설정은 바로 저장한다");
+
+        settingPanel.activateSelected();
+        assertFalse(settings.isDevNetworkOverlay());
+    }
+
+    @Test
+    void devNetworkOverlayLabelComesFromMessages() {
+        assertEquals("개발자: 연결 상태 표시", Messages.get("settings.devNetOverlay"));
+        assertEquals("ON", Messages.get("settings.on"));
+        assertEquals("OFF", Messages.get("settings.off"));
+    }
+
+    @Test
     void keyCaptureAppliesValidKey() {
         settingPanel.openControlKeys();
         settingPanel.moveSelection(4); // HARD_DROP
