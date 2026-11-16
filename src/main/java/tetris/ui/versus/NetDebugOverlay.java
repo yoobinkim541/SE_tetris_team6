@@ -71,8 +71,6 @@ public final class NetDebugOverlay implements AutoCloseable {
         } catch (RuntimeException ignored) {
             return; // 통계 조회가 실패해도 경기·로비 화면을 막지 않는다
         }
-        P2pLobbyPanel lobbyView = lobbyPanel.get();
-        if (lobbyView != null) lobbyView.setDebugLines(lines);
         BattlePanel battleView = battlePanel.get();
         if (battleView != null) battleView.setDebugLines(lines);
     }
@@ -85,8 +83,6 @@ public final class NetDebugOverlay implements AutoCloseable {
     /** 타이머를 멈추고 P2P 두 화면의 줄을 비운다 */
     public void stopAndClear() {
         if (timer != null) timer.stop();
-        P2pLobbyPanel lobbyView = lobbyPanel.get();
-        if (lobbyView != null && !lobbyView.debugLines().isEmpty()) lobbyView.setDebugLines(List.of());
         BattlePanel battleView = battlePanel.get();
         if (battleView != null && !battleView.debugLines().isEmpty()) battleView.setDebugLines(List.of());
     }

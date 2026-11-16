@@ -177,6 +177,13 @@ public class MainFrame extends JFrame {
             @Override public void windowClosing(WindowEvent e) { closeBattle(); closeP2p(); }
         });
         applyScreenSize(settings.getScreenSize());
+        updateTitle();
+    }
+
+    /** 창 제목에 현재 개발자 모드 상태를 반영한다 (--dev 또는 설정 토글). 설정 변경 시에도 다시 부른다 */
+    private void updateTitle() {
+        String base = Messages.get("app.title");
+        setTitle(tetris.DevMode.enabled() ? base + " [개발자 모드]" : base);
     }
 
     /** 화면 전환. 기존 ReturnToMain 역할 = showScreen(MAIN_MENU) */
@@ -494,6 +501,9 @@ public class MainFrame extends JFrame {
 
     // ── 설정·저장 ────────────────────────────
     private boolean onSettingsChanged() {
+        // 설정의 개발자 토글을 개발자 모드 스위치에 반영한다 (dev-net-overlay). --dev로 켠 상태는 그대로 유지된다
+        tetris.DevMode.setSettingEnabled(settings.isDevNetworkOverlay());
+        updateTitle();
         if (settings.getScreenSize() != appliedScreenSize) applyScreenSize(settings.getScreenSize());
         gamePanel.applySettings(settings);
         keyBindings.rebind(settings.getKeyMap());
