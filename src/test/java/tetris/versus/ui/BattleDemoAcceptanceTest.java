@@ -19,16 +19,16 @@ class BattleDemoAcceptanceTest {
                 JLabel commands=null;
                 for(var component:frame.getContentPane().getComponents()) if(component instanceof JLabel label) commands=label;
                 assertNotNull(commands); assertTrue(frame.isShowing());
-                key(root,KeyEvent.VK_LEFT,false); assertTrue(commands.getText().contains("ONE / MOVE_LEFT / press"));
-                key(root,KeyEvent.VK_LEFT,true);
-                key(root,KeyEvent.VK_A,false); assertTrue(commands.getText().contains("TWO / MOVE_LEFT / press"));
+                key(root,KeyEvent.VK_A,false); assertTrue(commands.getText().contains("ONE / MOVE_LEFT / press"));
                 key(root,KeyEvent.VK_A,true);
+                key(root,KeyEvent.VK_LEFT,false); assertTrue(commands.getText().contains("TWO / MOVE_LEFT / press"));
+                key(root,KeyEvent.VK_LEFT,true);
                 key(root,KeyEvent.VK_P,false); assertTrue(commands.getText().contains("PAUSE / press"));
                 String paused=commands.getText();
                 key(root,KeyEvent.VK_LEFT,false); assertEquals(paused,commands.getText());
                 key(root,KeyEvent.VK_P,true); key(root,KeyEvent.VK_P,false); key(root,KeyEvent.VK_P,true);
-                key(root,KeyEvent.VK_F,false); assertTrue(commands.getText().contains("TWO / HARD_DROP / press"));
-                key(root,KeyEvent.VK_F,true);
+                key(root,KeyEvent.VK_SPACE,false); assertTrue(commands.getText().contains("TWO / HARD_DROP / press"));
+                key(root,KeyEvent.VK_SPACE,true);
                 var image=new BufferedImage(frame.getContentPane().getWidth(),frame.getContentPane().getHeight(),BufferedImage.TYPE_INT_RGB);
                 var graphics=image.createGraphics(); frame.getContentPane().paintAll(graphics); graphics.dispose();
                 try {

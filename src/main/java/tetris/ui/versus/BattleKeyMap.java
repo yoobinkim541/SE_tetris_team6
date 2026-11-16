@@ -13,15 +13,17 @@ public final class BattleKeyMap {
     }
     private final Map<Target,Integer> keys = new LinkedHashMap<>();
     public BattleKeyMap() { this(true); }
-    /** P2P: 이 PC의 참가자 한 명만 조작한다. P1 키(방향키/Space)와 공통 P/Q만 둔다 (S9-B2) */
+    /** P2P: 이 PC의 참가자 한 명만 조작한다. 방향키/Space와 공통 P/Q만 둔다 (S9-B2) */
     public static BattleKeyMap online() { return new BattleKeyMap(false); }
     private BattleKeyMap(boolean twoPlayers) {
         GameAction[] actions={GameAction.MOVE_LEFT,GameAction.MOVE_RIGHT,GameAction.SOFT_DROP,GameAction.ROTATE,GameAction.HARD_DROP};
-        int[] one={KeyEvent.VK_LEFT,KeyEvent.VK_RIGHT,KeyEvent.VK_DOWN,KeyEvent.VK_UP,KeyEvent.VK_SPACE};
-        int[] two={KeyEvent.VK_A,KeyEvent.VK_D,KeyEvent.VK_S,KeyEvent.VK_W,KeyEvent.VK_F};
+        int[] arrows={KeyEvent.VK_LEFT,KeyEvent.VK_RIGHT,KeyEvent.VK_DOWN,KeyEvent.VK_UP,KeyEvent.VK_SPACE};
+        int[] wasd={KeyEvent.VK_A,KeyEvent.VK_D,KeyEvent.VK_S,KeyEvent.VK_W,KeyEvent.VK_F};
+        // 로컬: 왼쪽 보드(P1)는 키보드 왼쪽 WASD, 오른쪽 보드(P2)는 방향키 (D-14 개정)
+        int[] one=twoPlayers ? wasd : arrows;
         for(int i=0;i<actions.length;i++) {
             keys.put(new Target(PlayerId.ONE,actions[i]),one[i]);
-            if(twoPlayers) keys.put(new Target(PlayerId.TWO,actions[i]),two[i]);
+            if(twoPlayers) keys.put(new Target(PlayerId.TWO,actions[i]),arrows[i]);
         }
         keys.put(new Target(PlayerId.ONE,GameAction.PAUSE),KeyEvent.VK_P);
         keys.put(new Target(PlayerId.ONE,GameAction.QUIT),KeyEvent.VK_Q);

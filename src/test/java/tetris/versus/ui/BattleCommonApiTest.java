@@ -29,7 +29,7 @@ class BattleCommonApiTest {
                     var root = new JRootPane();
                     try (var router = new BattleInputRouter(root, new BattleKeyMap(), port::send, a -> true)) {
                         Object binding = root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW)
-                            .get(KeyStroke.getKeyStroke(KeyEvent.VK_A, 0, false));
+                            .get(KeyStroke.getKeyStroke(KeyEvent.VK_LEFT, 0, false));
                         root.getActionMap().get(binding).actionPerformed(new ActionEvent(root, 0, "press"));
                         assertEquals(new PlayerCommand(PlayerId.TWO, GameAction.MOVE_LEFT, true, 0), fake.commands().getFirst());
                     }

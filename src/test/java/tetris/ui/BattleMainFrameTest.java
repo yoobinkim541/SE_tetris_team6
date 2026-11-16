@@ -49,10 +49,10 @@ class BattleMainFrameTest {
             // Always exercise the real factory. OS injection is explicitly opt-in;
             // the default GUI run dispatches KeyEvents through the same focused panel.
             boolean nativeInput=Boolean.getBoolean("audit.native");
-            key(robot,java.awt.event.KeyEvent.VK_LEFT,true,nativeInput);
-            key(robot,java.awt.event.KeyEvent.VK_D,true,nativeInput);
-            key(robot,java.awt.event.KeyEvent.VK_D,false,nativeInput);
-            key(robot,java.awt.event.KeyEvent.VK_LEFT,false,nativeInput);
+            key(robot,java.awt.event.KeyEvent.VK_A,true,nativeInput);
+            key(robot,java.awt.event.KeyEvent.VK_RIGHT,true,nativeInput);
+            key(robot,java.awt.event.KeyEvent.VK_RIGHT,false,nativeInput);
+            key(robot,java.awt.event.KeyEvent.VK_A,false,nativeInput);
             assertTrue(moved.await(3, java.util.concurrent.TimeUnit.SECONDS), "input must move both real sessions horizontally");
             SwingUtilities.invokeAndWait(() -> client.get().send(new PlayerCommand(PlayerId.TWO,
                 tetris.feature.setting.GameAction.QUIT,true,10000)));
@@ -65,7 +65,7 @@ class BattleMainFrameTest {
             });
         } finally {
             if(Boolean.getBoolean("audit.native")) {
-                robot.keyRelease(java.awt.event.KeyEvent.VK_LEFT); robot.keyRelease(java.awt.event.KeyEvent.VK_D);
+                robot.keyRelease(java.awt.event.KeyEvent.VK_A); robot.keyRelease(java.awt.event.KeyEvent.VK_RIGHT);
             }
             SwingUtilities.invokeAndWait(() -> { if(frame[0]!=null)frame[0].dispose(); });
         }
