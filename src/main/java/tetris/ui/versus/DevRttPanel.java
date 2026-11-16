@@ -26,6 +26,8 @@ import tetris.feature.network.tools.LatencyStats;
  */
 public final class DevRttPanel extends JPanel implements AutoCloseable {
     public static final int PROBE_COUNT = 200;
+    /** 자동 기록(측정 중이 아닐 때)이 유지하는 표본 수. 이보다 오래된 것은 버린다 (#188 후속) */
+    public static final int AUTO_SAMPLE_LIMIT = 200;
     public static final int PROBE_INTERVAL_MILLIS = 50;
     private static final double THRESHOLD_MILLIS = 200.0;
     private static final DateTimeFormatter FILE_TIME = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
@@ -34,6 +36,10 @@ public final class DevRttPanel extends JPanel implements AutoCloseable {
     private final Path outputDirectory;
     private final Supplier<LocalDateTime> now;
     private final List<LatencySample> samples = new ArrayList<>();
+    /** 측정 표본 개수. 이 앞쪽 표본은 자동 기록 제한으로 지우지 않는다 */
+    private int protectedSamples;
+    /** "200회 측정"으로 아직 받지 않은 PONG 수. 0이면 자동 기록 모드다 */
+    private int measuringLeft;
     private final JLabel statsLabel = new JLabel();
     private final JLabel fileLabel = new JLabel(" ");
     private final JButton measureButton = new JButton("RTT " + PROBE_COUNT + "회 측정");
@@ -68,6 +74,8 @@ public final class DevRttPanel extends JPanel implements AutoCloseable {
     /** 새 측정: 이전 표본을 비우고 PROBE_INTERVAL_MILLIS 간격으로 PROBE_COUNT번 PING을 보낸다 */
     public void measure() {
         samples.clear();
+        protectedSamples = 0;
+        measuringLeft = PROBE_COUNT;
         fileLabel.setText(" ");
         lobby.probeRtt(PROBE_COUNT, PROBE_INTERVAL_MILLIS);
         render();
@@ -92,6 +100,14 @@ public final class DevRttPanel extends JPanel implements AutoCloseable {
 
     void accept(LatencySample sample) {
         samples.add(Objects.requireNonNull(sample, "sample"));
+        if (measuringLeft > 0) {
+            // 측정 중 표본은 200개 제한으로 자르지 않는다. PROBE_COUNT개가 모이면 자동 기록으로 돌아간다
+            measuringLeft--;
+            protectedSamples = samples.size();
+        } else {
+            // 자동 기록은 최근 AUTO_SAMPLE_LIMIT개만 유지한다. 측정 표본은 보존하고 자동 표본부터 버린다
+            while (samples.size() - protectedSamples > AUTO_SAMPLE_LIMIT) samples.remove(protectedSamples);
+        }
         render();
     }
 

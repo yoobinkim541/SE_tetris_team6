@@ -66,8 +66,13 @@ public final class SocketLobbyClient implements LobbyClient {
         return thread;
     });
 
+    /** PING을 보낸 시각. 상태 판정은 millis, 표본은 nanos로 계산한다 (#188 후속) */
+    private record SentPing(long millis, long nanos) {
+    }
+
     private static final class Subscriber {
         final Consumer<LobbySnapshot> listener;
+
         boolean active = true;
 
         Subscriber(Consumer<LobbySnapshot> listener) {
@@ -108,7 +113,7 @@ public final class SocketLobbyClient implements LobbyClient {
     private boolean publishing;
     private final ArrayDeque<LinkHealth> pendingHealthPublications = new ArrayDeque<>();
     private boolean publishingHealth;
-    private final LinkedHashMap<Long, Long> pendingPings = new LinkedHashMap<>();
+    private final LinkedHashMap<Long, SentPing> pendingPings = new LinkedHashMap<>();
     /** 개발자 모드 연결 통계 (dev-net-overlay). 연결마다 새로 만들고 끊기면 비운다 */
     private StatsCollector stats;
     private ConnectionHealth connectionHealth;
@@ -490,16 +495,18 @@ public final class SocketLobbyClient implements LobbyClient {
                 it.remove();
             }
         }
-        pendingPings.put(nonce, clock.nowMillis());
-        return sendOrDisconnect(link, new ControlPayloads.Ping(nonce, System.nanoTime()).message());
+        long sentNanos = System.nanoTime();
+        // 보낸 시각을 이쪽 메모리에 남긴다. PONG의 sentAtNanos는 상대가 만든 값이라 쓰지 않는다 (#188 후속)
+        pendingPings.put(nonce, new SentPing(clock.nowMillis(), sentNanos));
+        return sendOrDisconnect(link, new ControlPayloads.Ping(nonce, sentNanos).message());
     }
 
-    /** 이 PC의 nanoTime으로 보낸 PING이 돌아온 시각까지. 두 PC 시계를 맞출 필요가 없다 */
-    private void publishRtt(ControlPayloads.Ping pong) {
+    /** 이 PC가 저장한 송신 시각부터 PONG이 돌아온 시각까지. 두 PC 시계를 맞출 필요가 없다 (#188 후속) */
+    private void publishRtt(long nonce, SentPing sent) {
         if (rttSubscribers.isEmpty()) return;
-        long received = Math.max(pong.sentAtNanos(), System.nanoTime());
+        long received = Math.max(sent.nanos(), System.nanoTime()); // nanoTime 단조 증가. 뒤로 간 값은 송신 시각으로 올린다
         String direction = snapshot.role() == Role.HOST ? "host->client" : "client->host";
-        var sample = new LatencySample("NET", direction, pong.nonce(), pong.sentAtNanos(), received, received);
+        var sample = new LatencySample("NET", direction, nonce, sent.nanos(), received, received);
         for (Consumer<LatencySample> listener : List.copyOf(rttSubscribers)) listener.accept(sample);
     }
 
@@ -882,13 +889,14 @@ public final class SocketLobbyClient implements LobbyClient {
                 }
                 case PONG -> {
                     ControlPayloads.Ping pong = ControlPayloads.Ping.from(message.payload());
-                    Long sentAt = pendingPings.remove(pong.nonce());
-                    if (sentAt != null && connectionHealth != null) {
-                        long rtt = Math.max(0L, now - sentAt);
+                    SentPing sent = pendingPings.remove(pong.nonce());
+                    if (sent != null && connectionHealth != null) {
+                        // 상태 판정은 millis, 표본은 nanos — 둘 다 이쪽이 저장한 송신 시각 기준이다
+                        long rtt = Math.max(0L, now - sent.millis());
                         if (stats != null) stats.onPong(rtt);
                         connectionHealth.onRtt(rtt, now);
                         syncHealthFromConnection();
-                        publishRtt(pong);
+                        publishRtt(pong.nonce(), sent);
                     }
                 }
                 case LEAVE -> {

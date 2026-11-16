@@ -459,4 +459,42 @@ class LinkHealthLobbyTest {
         assertEquals(LinkHealth.Status.NORMAL, callOn(hostExec, host::health).status());
         assertTrue(hq.isEmpty(), "이전 연결의 heartbeat는 새 연결을 바꾸지 않는다");
     }
+
+    /** 상대가 PONG의 sentAtNanos를 위조해도 표본 RTT는 이쪽이 저장한 송신 시각으로 계산한다 */
+    @Test
+    void PONG의_sentAtNanos를_바꿔도_표본_RTT는_이쪽_저장_시각_기준이다() throws Exception {
+        BlockingQueue<LobbySnapshot> hs = subscribeSnapshots();
+        BlockingQueue<LinkHealth> hq = subscribeHealth();
+        BlockingQueue<tetris.feature.network.tools.LatencySample> samples = new LinkedBlockingQueue<>();
+        callOn(hostExec, () -> host.subscribeRtt(samples::add));
+        RawPeer peer = connectRawPeer(hs);
+        awaitQueue(hq, h -> h.status() == LinkHealth.Status.NORMAL);
+
+        runOn(hostExec, () -> pulse.currentTick().run());
+        ControlPayloads.Ping ping = ControlPayloads.Ping.from(peer.next(MessageType.PING).payload());
+        peer.send(new ControlPayloads.Ping(ping.nonce(), 0L).pong());
+
+        var sample = samples.poll(WAIT_SECONDS, TimeUnit.SECONDS);
+        assertNotNull(sample, "저장된 nonce의 PONG이면 표본이 온다");
+        assertTrue(sample.inputNanos() != 0L, "PONG의 sentAtNanos(0)를 쓰지 않는다");
+        assertTrue(sample.localMillis() >= 0.0 && sample.localMillis() < 5_000.0,
+                "이쪽 송신 시각 기준이라 수 초를 넘지 않는다: " + sample.localMillis());
+    }
+
+    /** 저장하지 않은 nonce의 PONG은 표본도 상태 판정도 만들지 않는다 */
+    @Test
+    void 저장되지_않은_nonce의_PONG은_표본을_만들지_않는다() throws Exception {
+        BlockingQueue<LobbySnapshot> hs = subscribeSnapshots();
+        BlockingQueue<LinkHealth> hq = subscribeHealth();
+        BlockingQueue<tetris.feature.network.tools.LatencySample> samples = new LinkedBlockingQueue<>();
+        callOn(hostExec, () -> host.subscribeRtt(samples::add));
+        RawPeer peer = connectRawPeer(hs);
+        awaitQueue(hq, h -> h.status() == LinkHealth.Status.NORMAL);
+
+        peer.send(new ControlPayloads.Ping(424242L, 12345L).pong());
+        runOn(hostExec, () -> {});
+
+        Assertions.assertNull(samples.poll(200, TimeUnit.MILLISECONDS), "모르는 nonce의 PONG은 표본을 만들지 않는다");
+        assertEquals(-1L, callOn(hostExec, host::health).rttMillis());
+    }
 }

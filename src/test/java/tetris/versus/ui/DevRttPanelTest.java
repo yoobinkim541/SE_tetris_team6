@@ -62,4 +62,20 @@ class DevRttPanelTest {
         panel.close();
         assertTrue(lobby.rttListeners.isEmpty(), "닫으면 구독을 해제한다");
     }
+
+    /** 자동 기록은 최근 200개만 남기고, "200회 측정" 표본은 200개 제한으로 자르지 않는다 */
+    @Test
+    void 자동_기록은_최근_200개만_남기고_측정_표본은_자르지_않는다() {
+        var lobby = new RttLobby();
+        var panel = new DevRttPanel(lobby, directory);
+
+        for (int i = 1; i <= 250; i++) lobby.pong(i, 10.0);
+        assertEquals(200, panel.samples().size(), "자동 기록은 최근 200개만 유지한다");
+        assertEquals(51L, panel.samples().getFirst().sequence(), "가장 오래된 50개를 버린다");
+
+        panel.measureButton().doClick();
+        for (int i = 1; i <= 250; i++) lobby.pong(i, 10.0);
+        assertEquals(250, panel.samples().size(), "측정 중 표본은 200개 제한으로 자르지 않는다");
+        panel.close();
+    }
 }
