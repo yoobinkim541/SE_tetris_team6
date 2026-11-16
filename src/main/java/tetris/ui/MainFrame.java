@@ -444,12 +444,17 @@ public class MainFrame extends JFrame {
         p2p.panel().focusTarget().requestFocusInWindow();
     }
 
-    /** 결과 화면 "다시 대전": 같은 연결의 로비로 가서 이 PC의 준비를 켠다 (R3-REMATCH) */
+    /**
+     * 결과 화면 "다시 대전": 같은 연결의 로비로 가서 이 PC의 준비를 켠다 (R3-REMATCH).
+     * 상대가 이미 준비했으면 rematch() 안에서 경기가 바로 시작되므로, 로비 화면을 먼저 띄운 뒤 준비를 켠다.
+     * 순서가 반대면 방금 띄운 경기 화면을 로비가 덮으면서 경기를 닫는다
+     */
     private void rematchP2p() {
         if (p2p == null) { openBattleModes(); return; }
-        p2p.rematch();
         showScreen(Screen.P2P_LOBBY);
-        p2p.panel().focusTarget().requestFocusInWindow();
+        var lobby = p2p;
+        lobby.rematch();
+        if (currentScreen == Screen.P2P_LOBBY) lobby.panel().focusTarget().requestFocusInWindow();
     }
 
     private void closeP2p() {
