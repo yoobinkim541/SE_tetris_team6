@@ -93,6 +93,7 @@ class LobbyContractTest {
         }
         public void leave() { cancel(); }
         public Optional<BattleClient> battleClient() { return Optional.empty(); }
+        @Override public void returnToLobby() { }
         public Subscription subscribe(Consumer<LobbySnapshot> listener) {
             if (closed) throw new IllegalStateException("closed");
             listeners.add(listener);

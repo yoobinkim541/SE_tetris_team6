@@ -103,9 +103,10 @@ class LocalMatchEngineTest {
         assertEquals(MatchPhase.FINISHED,e.snapshot().phase(),"previous Quit latch must not survive restart");
         e.close();e.close();assertThrows(IllegalStateException.class,()->e.start(MatchConfig.of(BattleMode.CLASSIC)));
     }
-    @Test void unsupportedSprintNineModesAreExplicitlyRejected() {
-        var e=new LocalMatchEngine(()->0,id->OBlock::new);
-        assertThrows(IllegalArgumentException.class,()->e.start(MatchConfig.of(BattleMode.ITEM)));
-        assertThrows(IllegalArgumentException.class,()->e.start(MatchConfig.of(BattleMode.TIMED)));
+    @Test void allThreeBattleModesStart() {
+        for(BattleMode mode:BattleMode.values()) {
+            var e=new LocalMatchEngine(()->0,id->OBlock::new);e.start(MatchConfig.of(mode));
+            assertEquals(MatchPhase.PLAYING,e.snapshot().phase());e.close();
+        }
     }
 }

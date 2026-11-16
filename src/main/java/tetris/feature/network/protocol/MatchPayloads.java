@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import tetris.feature.game.Difficulty;
@@ -16,6 +17,7 @@ import tetris.feature.versus.api.MatchSnapshot;
 import tetris.feature.versus.api.MatchSnapshot.PlayerView;
 import tetris.feature.versus.api.PlayerCommand;
 import tetris.feature.versus.api.PlayerId;
+import tetris.feature.versus.api.VersusRules;
 
 /**
  * 경기 메시지(CONFIG·INPUT·STATE·RESULT) payload와 계약 v1({@code tetris.feature.versus.api}) 사이 변환.
@@ -100,6 +102,9 @@ public final class MatchPayloads {
         node.set("next", gridJson(view.next()));
         node.put("score", view.score());
         node.set("pendingRows", gridJson(view.pendingRows().toArray(int[][]::new)));
+        int[][] items = view.items();
+        // 아이템 대전에서만 싣는다. 없으면 받는 쪽이 빈 표시로 만든다 (일반·시간제한 STATE 크기 유지)
+        if (Arrays.stream(items).flatMapToInt(Arrays::stream).anyMatch(v -> v != 0)) node.set("items", gridJson(items));
         return node;
     }
 
@@ -108,7 +113,9 @@ public final class MatchPayloads {
         int[][] next = gridField(node, "next");
         long score = longField(node, "score");
         List<int[]> pending = List.of(gridField(node, "pendingRows"));
-        return construct(() -> new PlayerView(cells, next, score, pending));
+        int[][] items = node.has("items") ? gridField(node, "items")
+                : new int[VersusRules.BOARD_ROWS][VersusRules.BOARD_COLS];
+        return construct(() -> new PlayerView(cells, next, score, pending, items));
     }
     //#endregion
 

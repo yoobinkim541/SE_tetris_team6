@@ -179,3 +179,45 @@ Windows / JDK 21 이상에서 실행한다.
 | 표시 | `GameSnapshot`, `GamePanel`, `BlockPalette` |
 
 아이템이 고정된 뒤 자동으로 다른 아이템을 연쇄 발동시키는 기능은 없다. B·W가 기존 아이템 표시 칸을 지워도 그 칸의 효과를 다시 발동시키지 않는다. 아이템 모드의 추가 난이도와 V 아이템은 현재 구현 범위에 포함하지 않는다.
+
+## 7. 아이템 대전 추가 규칙 (3차)
+
+추가: 2026-11-14 (S11-A2). 위 1~6장의 아이템 규칙은 아이템 대전에서도 **플레이어별로 그대로** 적용한다. 이 장은 대전에서 새로 생기는 상호작용만 적고, 공격 규칙 전체는 [3차 결정 기록](req3/decisions.md)과 [요구사항 추적표](req3/requirements.md)를 따른다.
+
+### 7.1 원문과 팀 결정 구분
+
+| 구분 | 내용 | 근거 |
+|---|---|---|
+| 요구사항 원문 | 아이템 대전에서 기존 아이템이 등장하고 효과가 유지된다 | R3-ITEM (원문 p3, p5) |
+| 요구사항 원문 | 2줄 이상 삭제 시 공격, 공격 대기열 최대 10줄 | R3-ATTACK, R3-CAP |
+| 팀 결정 | L이 지운 불완전 행도 공격 행에 넣고 기존 빈칸을 유지해 보냄, B·W의 칸 삭제는 행 수에서 제외 | D-09, 문의 후보 Q-02 |
+| 팀 결정 | 시간제한 대전은 아이템 없이 일반 블록·NORMAL | D-05, 문의 후보 Q-01 |
+| 팀 결정 | 대전 난이도는 NORMAL 기본 | 문의 후보 Q-03 |
+
+Q-01~Q-03은 저장소에 발송·답변 기록이 없다(2026-11-14 기준). 답변 전까지 위 팀 기본안으로 구현하며, 교수자 확인으로 간주하지 않는다. 답변을 받으면 [교수자 확인 기록](professor-confirmation.md)에 원문과 적용 결정을 남긴다.
+
+### 7.2 아이템별 대전 상호작용
+
+| 아이템 | 공격 행 수 계산 | 상대에게 미치는 영향 | 자동 검증 |
+|---|---|---|---|
+| L 행 삭제 | 자연 완성 행과 L 행을 합쳐 중복 제거 후, 보이는 행이 2줄 이상이면 공격. L이 지운 불완전 행은 원래 빈칸을 유지해 보냄 | 공격 행만 | `AttackPublicationTest.lItemAddsIncompleteRowAndDeduplicatesNaturalRow`, `BattleModesEngineTest.naturalRowPlusSeparateLineItemRowSendsTwoRows`, `lineItemOnTheNaturalRowCountsOnce` |
+| B 폭탄 | 개별 칸 삭제는 행 수에 넣지 않음 | 없음 | `AttackPublicationTest.singleLineAndBombCellDeletionDoNotCreateAttackRows`, `BattleModesEngineTest.bombAndWeightCellDeletionsNeverAttack` |
+| D 점수 2배 | 영향 없음 (점수만 2배) | 없음. 획득한 쪽 세션에만 적용 | `BattleModesEngineTest.doubleScoreAndSlowEffectsStayInTheirOwnSession` |
+| S 슬로우 | 영향 없음 | 없음. 획득한 쪽 낙하 간격만 1.5배 | 위와 같음 |
+| W 무게추 | 분쇄한 칸은 행 수에 넣지 않음. 고정 뒤 완성 행은 일반 규칙 | 없음 | `AttackPublicationTest.weightCrushDoesNotCountClearedCellsAsDeletedRows`, `BattleModesEngineTest.bombAndWeightCellDeletionsNeverAttack` |
+
+### 7.3 공통 규칙
+
+- **아이템 예약은 플레이어별**이다. 한쪽이 10줄 경계를 넘어도 상대의 NEXT는 바뀌지 않는다 (`BattleModesEngineTest.tenLineItemReservationIsPerPlayer`).
+- **공격 행에는 아이템이 붙지 않는다.** 회색 공격칸(값 9)으로만 들어간다 (D-04, `BattleModesEngineTest.attackRowsNeverCarryItemMetadataIntoTheReceiver`, `VersusStressTest`).
+- **공격이 들어오면 고정된 D/S 문자도 함께 위로 밀린다.** 보드 밖으로 밀려난 칸의 문자는 사라진다 (`GarbageInsertionTest.insertingGarbageRemovesBottomItemMarks`, `shiftsCellsAndItemsPreservesRowOrderAndWalls`).
+- **삽입 시점**: 받는 쪽의 삭제·점수·D/S 수명 정산이 끝난 뒤, 다음 Spawn 전에 넣는다. CLEARING 150ms 도중에는 넣지 않는다 (D-11, `AttackBoundaryEngineTest`).
+- **연쇄 없음**: 6장과 같이 고정된 아이템 칸은 다시 발동하지 않는다. 공격 삽입으로 밀려 올라가도 마찬가지다.
+- **화면**: 대전 보드도 아이템 칸을 같은 문자로 표시한다 (`BattleModesEngineTest.snapshotMarksItemCellsWithTheirSymbols`).
+- **기록**: 대전 결과는 스코어보드에 저장하지 않는다 (R3-NOSCORE).
+- **시간제한 대전**은 아이템을 쓰지 않는다 (`BattleModesEngineTest.timedSessionsUseNormalBlocksOnly`).
+
+### 7.4 남은 확인
+
+- 교수자 답변(Q-01~Q-03): 미발송·미답변.
+- 아이템 대전의 실제 두 PC 플레이 확인은 S11-C1(#159) 두 PC 측정과 S12 리허설에서 진행한다. 위 표는 자동 테스트 근거이며 실제 플레이 평가와 구분한다.

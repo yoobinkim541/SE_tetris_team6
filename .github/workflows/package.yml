@@ -32,12 +32,19 @@ jobs:
       - name: Smoke test packaged EXE
         run: ./scripts/verify-package.ps1
 
+      # 태그 릴리스 자산에는 넣지 않고, 워크플로 증거로만 남긴다 (S11-C2)
+      - name: Test and coverage evidence
+        if: always()
+        run: pwsh -File scripts/coverage-summary.ps1
+
       - name: Upload package verification
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: package-verification
-          path: build/verification/package-smoke.json
+          path: |
+            build/verification/package-smoke.json
+            build/verification/test-summary.json
 
       - name: Upload package
         uses: actions/upload-artifact@v4

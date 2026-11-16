@@ -19,6 +19,24 @@ public final class BoardRenderer {
                 paintCell(board,cells[r][c],x+c*size,y+r*size,size);
         } finally { board.dispose(); }
     }
+    /** items: cells와 같은 크기. 0이 아닌 칸은 아이템 문자(L·B·D·S)를 흰 바탕에 그린다 (R3-ITEM) */
+    public void paint(Graphics2D g, int[][] cells, int[][] items, int x, int y, int size) {
+        paint(g, cells, x, y, size);
+        Graphics2D board=(Graphics2D) g.create();
+        try {
+            for (int r=0;r<items.length;r++) for (int c=0;c<items[r].length;c++)
+                if (items[r][c] != 0) paintItem(board,(char) items[r][c],x+c*size,y+r*size,size);
+        } finally { board.dispose(); }
+    }
+    private void paintItem(Graphics2D g, char symbol, int x, int y, int size) {
+        int inset = Math.max(1, size/8);
+        g.setColor(Color.WHITE); g.fillRect(x+inset,y+inset,size-2*inset,size-2*inset);
+        g.setColor(Color.BLACK); g.drawRect(x+inset,y+inset,size-2*inset-1,size-2*inset-1);
+        if (size < 9) return;
+        g.setFont(new Font(Font.MONOSPACED,Font.BOLD,Math.max(8,size*2/3)));
+        String text = String.valueOf(symbol);
+        g.drawString(text,x+(size-g.getFontMetrics().stringWidth(text))/2,y+(size+g.getFontMetrics().getAscent())/2-2);
+    }
     public void paintCell(Graphics2D g, int value, int x, int y, int size) {
         if (size <= 0) return;
         if (value < 0 || value > VersusRules.ATTACK_CELL) throw new IllegalArgumentException("unknown cell");
