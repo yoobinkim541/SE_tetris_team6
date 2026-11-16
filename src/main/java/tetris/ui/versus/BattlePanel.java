@@ -20,6 +20,8 @@ public final class BattlePanel extends JPanel {
     private final PlayerId viewer;
     private String notice = "";
     private String connectionNotice = "";
+    /** 개발자 모드 연결 상태 줄 (dev-net-overlay). 비어 있으면 그리지 않는다 */
+    private java.util.List<String> debugLines = java.util.List.of();
     private MatchSnapshot snapshot;
     private final PaintLog paintLog = new PaintLog();
     public BattlePanel(boolean colorBlind) {
@@ -58,6 +60,12 @@ public final class BattlePanel extends JPanel {
     /** P2P 연결 상태 안내 (예: 네트워크 지연). 빈 문자열이면 지운다 (S10-B2, R3-LAG) */
     public void setConnectionNotice(String text) { connectionNotice = Objects.requireNonNull(text); repaint(); }
     public String connectionNotice() { return connectionNotice; }
+    /** 개발자 모드 연결 상태 줄 (dev-net-overlay). 빈 목록이면 보드 아래에 아무것도 그리지 않는다 */
+    public void setDebugLines(java.util.List<String> lines) {
+        debugLines = java.util.List.copyOf(Objects.requireNonNull(lines, "lines"));
+        repaint();
+    }
+    public java.util.List<String> debugLines() { return debugLines; }
     /** 시간제한 대전의 남은 시간. 올림해서 0:00이면 끝났다는 뜻. 시간 제한이 없으면 빈 문자열 */
     public static String timeText(long remainingMillis) {
         if (remainingMillis < 0) return "";
@@ -167,6 +175,7 @@ public final class BattlePanel extends JPanel {
                 g.drawString(keys.sharedLine(), 28, 660);
                 g.setFont(new Font(Font.DIALOG,Font.PLAIN,15));
                 for (int i = 0; i < legend.length; i++) g.drawString(legend[i], 28, 684 + i * 18);
+                paintDebugLines(g);
                 paintLog.painted(snapshot, System.nanoTime());
                 return;
             }
@@ -182,9 +191,32 @@ public final class BattlePanel extends JPanel {
                 g.drawString(line, 28, 670 + i * lineHeight);
                 g.setFont(font);
             }
+            paintDebugLines(g);
             paintLog.painted(snapshot, System.nanoTime());
         } finally { g.dispose(); }
     }
+    /** 개발자 모드 연결 상태 줄을 그린다 (dev-net-overlay). 기존 화면 요소를 가리지 않도록 마지막에 그린다 */
+    private void paintDebugLines(Graphics2D g) {
+        if (debugLines.isEmpty()) return;
+        Font font = new Font(Font.MONOSPACED, Font.PLAIN, 12); // 기존 15px 글꼴의 80%
+        g.setFont(font);
+        FontMetrics metrics = g.getFontMetrics();
+        int lineHeight = metrics.getHeight();
+        int width = 0;
+        for (String line : debugLines) width = Math.max(width, metrics.stringWidth(line));
+        // 보드 아래 영역의 왼쪽은 범례·조작키 안내가 쓰므로 오른쪽 아래에 붙인다 (connectionNotice는 위쪽)
+        int right = 932;
+        int bottom = 712;
+        int left = right - width - 8;
+        int top = bottom - debugLines.size() * lineHeight - 2;
+        g.setColor(new Color(0, 0, 0, 170));
+        g.fillRect(left, top, width + 16, debugLines.size() * lineHeight + 6);
+        g.setColor(new Color(0xB9F6CA));
+        for (int i = 0; i < debugLines.size(); i++) {
+            g.drawString(debugLines.get(i), left + 8, top + metrics.getAscent() + 3 + i * lineHeight);
+        }
+    }
+
     /** 일시정지·카운트다운 동안 두 보드를 어둡게 덮고 상태를 크게 쓴다. 누가 눌러도 함께 풀린다 (D-03) */
     private void paintOverlay(Graphics2D g) {
         String text = overlayText(snapshot);
