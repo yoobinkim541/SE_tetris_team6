@@ -42,6 +42,9 @@ public final class DevRttPanel extends JPanel implements AutoCloseable {
     private int measuringLeft;
     private final JLabel statsLabel = new JLabel();
     private final JLabel fileLabel = new JLabel(" ");
+    /** 개발자 연결 상태 4줄. RTT 통계 아래에 붙고 비어 있으면 숨긴다 (dev-net-overlay) */
+    private final JLabel debugLabel = new JLabel();
+    private List<String> debugLines = List.of();
     private final JButton measureButton = new JButton("RTT " + PROBE_COUNT + "회 측정");
     private final JButton saveButton = new JButton("CSV 저장");
     private final LobbyClient.Subscription subscription;
@@ -67,6 +70,10 @@ public final class DevRttPanel extends JPanel implements AutoCloseable {
         add(measureButton);
         add(saveButton);
         add(fileLabel);
+        debugLabel.setForeground(new Color(0xB9F6CA));
+        debugLabel.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        debugLabel.setVisible(false);
+        add(debugLabel);
         render();
         subscription = lobby.subscribeRtt(this::accept);
     }
@@ -110,6 +117,26 @@ public final class DevRttPanel extends JPanel implements AutoCloseable {
         }
         render();
     }
+
+    /** 연결 상태 줄을 RTT 통계 아래에 보여 준다. 빈 목록이면 라벨을 숨긴다 */
+    public void setDebugLines(List<String> lines) {
+        debugLines = List.copyOf(Objects.requireNonNull(lines, "lines"));
+        if (debugLines.isEmpty()) {
+            debugLabel.setText("");
+            debugLabel.setVisible(false);
+        } else {
+            // 여러 줄을 한 라벨에 넣는다. 줄 사이는 HTML <br>로 바꾼다
+            debugLabel.setText("<html>" + String.join("<br>", debugLines.stream()
+                    .map(line -> line.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"))
+                    .toList()) + "</html>");
+            debugLabel.setVisible(true);
+        }
+        revalidate();
+        repaint();
+    }
+
+    public List<String> debugLines() { return debugLines; }
+    public JLabel debugLabel() { return debugLabel; }
 
     private void render() {
         if (samples.isEmpty()) {
