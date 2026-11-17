@@ -77,6 +77,10 @@ public class MainFrame extends JFrame {
     private P2pLobbyController p2p;
     /** 개발자 모드에서만 P2P 로비 아래에 붙는 측정 패널. 일반 실행에서는 항상 null */
     private tetris.ui.versus.DevRttPanel devRtt;
+    /** 지금 P2P 연결. 로비 화면을 닫으면 null (개발자 연결 상태 오버레이가 읽는다) */
+    private LobbyClient p2pLobby;
+    /** 개발자 연결 상태 오버레이. 창 생성 시 한 번 만들고 화면에 따라 켜고 끈다 */
+    private final tetris.ui.versus.NetDebugOverlay debugOverlay;
     private boolean battleOnline;
 
     public MainFrame(Settings settings, Scoreboard scoreboard,
@@ -165,6 +169,11 @@ public class MainFrame extends JFrame {
                 () -> showScreen(Screen.MAIN_MENU));
         addScreen(Screen.P2P_RESULT, onlineResultPanel);
         addScreen(Screen.P2P_LOBBY, new JPanel());
+        // 개발자 연결 상태 오버레이: 화면·연결은 늦게 생기므로 공급자로 넘긴다.
+        // 대전 화면은 온라인 대전 중일 때만 넘긴다 (로컬 대전·싱글은 대상이 아니다)
+        debugOverlay = new tetris.ui.versus.NetDebugOverlay(tetris.DevMode::enabled,
+                () -> p2pLobby, () -> devRtt,
+                () -> battleOnline && screens.get(Screen.BATTLE) instanceof BattlePanel battle ? battle : null);
         setContentPane(root);
 
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE); // EXT-1: 확인 없이 종료, 진행 중 게임은 폐기
@@ -177,6 +186,13 @@ public class MainFrame extends JFrame {
             @Override public void windowClosing(WindowEvent e) { closeBattle(); closeP2p(); }
         });
         applyScreenSize(settings.getScreenSize());
+        updateTitle();
+    }
+
+    /** 창 제목에 현재 개발자 모드 상태를 반영한다 (--dev 또는 설정 토글). 설정 변경 시에도 다시 부른다 */
+    private void updateTitle() {
+        String base = Messages.get("app.title");
+        setTitle(tetris.DevMode.enabled() ? base + " [개발자 모드]" : base);
     }
 
     /** 화면 전환. 기존 ReturnToMain 역할 = showScreen(MAIN_MENU) */
@@ -414,6 +430,7 @@ public class MainFrame extends JFrame {
                     }
                 }
             }, port, tetris.feature.network.LanAddresses::current, recent);
+            p2pLobby = lobby;
             JComponent previous = screens.remove(Screen.P2P_LOBBY);
             if (previous != null) root.remove(previous);
             var panel = p2p.panel();
@@ -429,6 +446,7 @@ public class MainFrame extends JFrame {
             addScreen(Screen.P2P_LOBBY, screen);
         }
         showScreen(Screen.P2P_LOBBY);
+        debugOverlay.refresh(); // 개발자 모드면 로비 줄 표시를 시작한다
     }
 
     /** 이 화면은 자기 참가자 한 명만 조작한다. 결과는 호스트가 정한 것을 양쪽이 같이 본다 (R3-LIVE, R3-LOSS) */
@@ -445,6 +463,7 @@ public class MainFrame extends JFrame {
                     onlineResultPanel.setSnapshot(snapshot, label, viewer);
                     showScreen(Screen.P2P_RESULT);
                 }));
+        debugOverlay.refresh(); // 이제 대전 화면도 같은 줄을 받는다
     }
 
     private void backToP2pLobby() {
@@ -471,10 +490,12 @@ public class MainFrame extends JFrame {
         if (p2p == null) return;
         var closing = p2p;
         p2p = null;
+        debugOverlay.stopAndClear(); // P2P 화면을 떠나면 타이머를 멈추고 줄을 지운다
         if (devRtt != null) {
             devRtt.close();
             devRtt = null;
         }
+        p2pLobby = null;
         closing.close();
     }
 
@@ -494,6 +515,10 @@ public class MainFrame extends JFrame {
 
     // ── 설정·저장 ────────────────────────────
     private boolean onSettingsChanged() {
+        // 설정의 개발자 토글을 개발자 모드 스위치에 반영한다 (dev-net-overlay). --dev로 켠 상태는 그대로 유지된다
+        tetris.DevMode.setSettingEnabled(settings.isDevNetworkOverlay());
+        updateTitle();
+        debugOverlay.refresh(); // 설정에서 끄면 열려 있는 화면의 줄이 바로 사라지고 타이머가 멈춘다
         if (settings.getScreenSize() != appliedScreenSize) applyScreenSize(settings.getScreenSize());
         gamePanel.applySettings(settings);
         keyBindings.rebind(settings.getKeyMap());

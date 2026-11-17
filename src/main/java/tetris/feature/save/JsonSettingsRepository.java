@@ -41,6 +41,7 @@ public class JsonSettingsRepository implements SettingsRepository {
         ObjectNode root = JsonFile.newRoot();
         root.put("screenSize", settings.getScreenSize().name());
         root.put("colorBlindMode", settings.isColorBlindMode());
+        root.put("devNetworkOverlay", settings.isDevNetworkOverlay());
         root.put("difficulty", settings.getDifficulty().name());
         ObjectNode keys = root.putObject("keys");
         settings.getKeyMap().codes().forEach((action, keyCode) -> keys.put(action.name(), keyCode));
@@ -53,6 +54,7 @@ public class JsonSettingsRepository implements SettingsRepository {
 
         applyScreenSize(root.get("screenSize"), settings, warnings);
         applyColorBlindMode(root.get("colorBlindMode"), settings, warnings);
+        applyDevNetworkOverlay(root.get("devNetworkOverlay"), settings, warnings);
         applyDifficulty(root.get("difficulty"), settings, warnings);
         applyKeys(root.get("keys"), settings, warnings);
         return new LoadResult<>(settings, warnings);
@@ -77,6 +79,14 @@ public class JsonSettingsRepository implements SettingsRepository {
 
         if (node.isBoolean()) settings.setColorBlindMode(node.asBoolean());
         else warnings.add("색맹 모드 설정이 올바르지 않아 기본값(꺼짐)을 사용합니다.");
+    }
+
+    /** 이전 버전 파일에는 없으므로 없으면 경고 없이 꺼짐 (dev-net-overlay, colorBlindMode와 같은 방식) */
+    private static void applyDevNetworkOverlay(JsonNode node, Settings settings, List<String> warnings) {
+        if (isAbsent(node)) return;
+
+        if (node.isBoolean()) settings.setDevNetworkOverlay(node.asBoolean());
+        else warnings.add("개발자 연결 상태 표시 설정이 올바르지 않아 기본값(꺼짐)을 사용합니다.");
     }
 
     /** 이전 버전 파일에는 difficulty가 없으므로 없으면 경고 없이 NORMAL (PER-7~9) */

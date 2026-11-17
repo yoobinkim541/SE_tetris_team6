@@ -69,6 +69,7 @@ public class Messages {
         TEXT.put("settings.difficulty", "난이도");
         TEXT.put("settings.controlKeys", "조작키");
         TEXT.put("settings.colorBlind", "색맹 모드");
+        TEXT.put("settings.devNetOverlay", "개발자: 연결 상태 표시");
         TEXT.put("settings.resetScoreboard", "스코어보드 초기화");
         TEXT.put("settings.resetSettings", "설정 초기화");
         TEXT.put("settings.on", "ON");

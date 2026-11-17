@@ -33,6 +33,7 @@ import tetris.feature.network.protocol.ControlPayloads;
 import tetris.feature.network.protocol.LobbyPayloads;
 import tetris.feature.network.protocol.MatchPayloads;
 import tetris.feature.network.protocol.Message;
+import tetris.feature.network.protocol.MessageType;
 import tetris.feature.network.protocol.PeerRole;
 import tetris.feature.network.protocol.ProtocolException;
 import tetris.feature.save.RecentPeers;
@@ -65,8 +66,13 @@ public final class SocketLobbyClient implements LobbyClient {
         return thread;
     });
 
+    /** PING을 보낸 시각. 상태 판정은 millis, 표본은 nanos로 계산한다 (#188 후속) */
+    private record SentPing(long millis, long nanos) {
+    }
+
     private static final class Subscriber {
         final Consumer<LobbySnapshot> listener;
+
         boolean active = true;
 
         Subscriber(Consumer<LobbySnapshot> listener) {
@@ -107,7 +113,9 @@ public final class SocketLobbyClient implements LobbyClient {
     private boolean publishing;
     private final ArrayDeque<LinkHealth> pendingHealthPublications = new ArrayDeque<>();
     private boolean publishingHealth;
-    private final LinkedHashMap<Long, Long> pendingPings = new LinkedHashMap<>();
+    private final LinkedHashMap<Long, SentPing> pendingPings = new LinkedHashMap<>();
+    /** 개발자 모드 연결 통계 (dev-net-overlay). 연결마다 새로 만들고 끊기면 비운다 */
+    private StatsCollector stats;
     private ConnectionHealth connectionHealth;
     private MatchPulse.Handle heartbeatHandle;
     private long heartbeatNonce;
@@ -168,6 +176,16 @@ public final class SocketLobbyClient implements LobbyClient {
     /** 현재 연결 건강 상태와 최근 RTT (S10-C1) */
     public LinkHealth health() {
         return currentHealth;
+    }
+
+    /** 개발자 모드 연결 상태 표시용 통계. 활성 연결이 없으면 비어 있다 (dev-net-overlay) */
+    @Override
+    public Optional<LinkStats> linkStats() {
+        StatsCollector current = stats;
+        if (current == null || activeLink == null) {
+            return Optional.empty();
+        }
+        return Optional.of(current.snapshot(clock.nowMillis(), currentHealth.status()));
     }
 
     /** START 확정 이후 경기 핸드오프(S9)에 넘길 matchId */
@@ -423,7 +441,10 @@ public final class SocketLobbyClient implements LobbyClient {
 
     private void startHeartbeat(PeerLink link) {
         stopHeartbeat();
-        connectionHealth = new ConnectionHealth(policy, clock.nowMillis());
+        long now = clock.nowMillis();
+        Role lobbyRole = (link.role() == PeerRole.HOST) ? Role.HOST : Role.CLIENT;
+        stats = new StatsCollector(lobbyRole, link.peerAddress(), now);
+        connectionHealth = new ConnectionHealth(policy, now);
         publishHealth(new LinkHealth(LinkHealth.Status.NORMAL, -1));
         heartbeatHandle = pulse.start((int) policy.intervalMillis(), () -> heartbeat(link));
     }
@@ -474,16 +495,18 @@ public final class SocketLobbyClient implements LobbyClient {
                 it.remove();
             }
         }
-        pendingPings.put(nonce, clock.nowMillis());
-        return sendOrDisconnect(link, new ControlPayloads.Ping(nonce, System.nanoTime()).message());
+        long sentNanos = System.nanoTime();
+        // 보낸 시각을 이쪽 메모리에 남긴다. PONG의 sentAtNanos는 상대가 만든 값이라 쓰지 않는다 (#188 후속)
+        pendingPings.put(nonce, new SentPing(clock.nowMillis(), sentNanos));
+        return sendOrDisconnect(link, new ControlPayloads.Ping(nonce, sentNanos).message());
     }
 
-    /** 이 PC의 nanoTime으로 보낸 PING이 돌아온 시각까지. 두 PC 시계를 맞출 필요가 없다 */
-    private void publishRtt(ControlPayloads.Ping pong) {
+    /** 이 PC가 저장한 송신 시각부터 PONG이 돌아온 시각까지. 두 PC 시계를 맞출 필요가 없다 (#188 후속) */
+    private void publishRtt(long nonce, SentPing sent) {
         if (rttSubscribers.isEmpty()) return;
-        long received = Math.max(pong.sentAtNanos(), System.nanoTime());
+        long received = Math.max(sent.nanos(), System.nanoTime()); // nanoTime 단조 증가. 뒤로 간 값은 송신 시각으로 올린다
         String direction = snapshot.role() == Role.HOST ? "host->client" : "client->host";
-        var sample = new LatencySample("NET", direction, pong.nonce(), pong.sentAtNanos(), received, received);
+        var sample = new LatencySample("NET", direction, nonce, sent.nanos(), received, received);
         for (Consumer<LatencySample> listener : List.copyOf(rttSubscribers)) listener.accept(sample);
     }
 
@@ -492,6 +515,7 @@ public final class SocketLobbyClient implements LobbyClient {
         MatchPulse.Handle handle = heartbeatHandle;
         heartbeatHandle = null;
         connectionHealth = null;
+        stats = null; // 연결이 끝나면 통계도 버린다. 새 연결은 0부터 센다
         pendingPings.clear();
         heartbeatNonce = 0;
         if (handle != null) {
@@ -507,6 +531,7 @@ public final class SocketLobbyClient implements LobbyClient {
         if (!sendPing(link)) {
             return;
         }
+        if (stats != null) stats.onPingSent();
         ConnectionHealth.Status evaluated = connectionHealth.evaluate(now);
         if (evaluated == ConnectionHealth.Status.LOST) {
             terminateConnectionWithHealth(link, LinkHealth.Status.LOST);
@@ -679,6 +704,85 @@ public final class SocketLobbyClient implements LobbyClient {
         return error;
     }
 
+    /**
+     * 연결 하나의 통계를 모은다 (dev-net-overlay). 고정 크기만 쓴다: RTT 최근 {@link LinkStats#MAX_RTT_SAMPLES}개,
+     * 수신 시각 최근 {@code FREQUENCY_WINDOW_MILLIS}. 모두 dispatcher 스레드에서만 읽고 쓴다.
+     */
+    private static final class StatsCollector {
+        private final LobbySnapshot.Role role;
+        private final String peerAddress;
+        private final long connectedAt;
+        private final ArrayDeque<Long> rtts = new ArrayDeque<>();
+        private final ArrayDeque<Long> frameTimes = new ArrayDeque<>();
+        private final ArrayDeque<Long> stateTimes = new ArrayDeque<>();
+        private long lastFrameAt;
+        private long lastRttMillis = -1;
+        private long pingsSent;
+        private long pongsReceived;
+
+        StatsCollector(LobbySnapshot.Role role, String peerAddress, long connectedAt) {
+            this.role = role;
+            this.peerAddress = peerAddress;
+            this.connectedAt = connectedAt;
+            this.lastFrameAt = connectedAt;
+        }
+
+        void onPingSent() {
+            pingsSent++;
+        }
+
+        /** 알려진 nonce의 PONG. 표본은 최근 {@link LinkStats#MAX_RTT_SAMPLES}개만 남긴다. 프레임 수는 호출자가 센다 */
+        void onPong(long rttMillis) {
+            long rtt = Math.max(0L, rttMillis);
+            pongsReceived++;
+            lastRttMillis = rtt;
+            rtts.addLast(rtt);
+            while (rtts.size() > LinkStats.MAX_RTT_SAMPLES) rtts.removeFirst();
+        }
+
+        void onFrame(long now, boolean state) {
+            lastFrameAt = now;
+            frameTimes.addLast(now);
+            if (state) stateTimes.addLast(now);
+            prune(frameTimes, now);
+            prune(stateTimes, now);
+        }
+
+        LinkStats snapshot(long now, LinkHealth.Status status) {
+            prune(frameTimes, now);
+            prune(stateTimes, now);
+            return new LinkStats(role, peerAddress, status,
+                    lastRttMillis, minRtt(), avgRtt(), maxRtt(), rtts.size(),
+                    Math.max(0L, now - lastFrameAt), frameTimes.size(), stateTimes.size(),
+                    pingsSent, pongsReceived);
+        }
+
+        private long minRtt() {
+            long min = -1;
+            for (long rtt : rtts) min = min < 0 ? rtt : Math.min(min, rtt);
+            return min;
+        }
+
+        private long avgRtt() {
+            if (rtts.isEmpty()) return -1;
+            long sum = 0;
+            for (long rtt : rtts) sum += rtt;
+            return sum / rtts.size(); // 정수 나눗셈 평균
+        }
+
+        private long maxRtt() {
+            long max = -1;
+            for (long rtt : rtts) max = Math.max(max, rtt);
+            return max;
+        }
+
+        private static void prune(ArrayDeque<Long> times, long now) {
+            while (!times.isEmpty() && now - times.peekFirst() > LinkStats.FREQUENCY_WINDOW_MILLIS) {
+                times.removeFirst();
+            }
+        }
+    }
+
     private final class LinkListener implements PeerListener {
         private final PeerLink link;
 
@@ -696,6 +800,7 @@ public final class SocketLobbyClient implements LobbyClient {
                 connectionHealth.onFrame(now);
                 syncHealthFromConnection();
             }
+            if (stats != null) stats.onFrame(now, message.type() == MessageType.STATE);
             try {
                 handleMessage(message, now);
             } catch (ProtocolException e) {
@@ -784,11 +889,14 @@ public final class SocketLobbyClient implements LobbyClient {
                 }
                 case PONG -> {
                     ControlPayloads.Ping pong = ControlPayloads.Ping.from(message.payload());
-                    Long sentAt = pendingPings.remove(pong.nonce());
-                    if (sentAt != null && connectionHealth != null) {
-                        connectionHealth.onRtt(Math.max(0L, now - sentAt), now);
+                    SentPing sent = pendingPings.remove(pong.nonce());
+                    if (sent != null && connectionHealth != null) {
+                        // 상태 판정은 millis, 표본은 nanos — 둘 다 이쪽이 저장한 송신 시각 기준이다
+                        long rtt = Math.max(0L, now - sent.millis());
+                        if (stats != null) stats.onPong(rtt);
+                        connectionHealth.onRtt(rtt, now);
                         syncHealthFromConnection();
-                        publishRtt(pong);
+                        publishRtt(pong.nonce(), sent);
                     }
                 }
                 case LEAVE -> {
