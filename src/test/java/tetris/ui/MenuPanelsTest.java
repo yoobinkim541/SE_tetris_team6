@@ -69,8 +69,8 @@ public class MenuPanelsTest {
     // ── SettingPanel ─────────────────────────
     private final Settings settings = new Settings();
     private int saves;
-    private final SettingPanel settingPanel =
-            new SettingPanel(settings, () -> { saves++; return true; }, () -> true, () -> calls.add("back"));
+    private final SettingPanel settingPanel = // --dev 없이 실행한 일반 화면
+            new SettingPanel(settings, () -> { saves++; return true; }, () -> true, () -> calls.add("back"), () -> false);
 
     @Test
     void screenSizeCyclesAndSaves() {
@@ -154,15 +154,36 @@ public class MenuPanelsTest {
     }
 
     @Test
-    void devNetworkOverlayTogglesRightAfterColorBlind() { // dev-net-overlay
-        settingPanel.moveSelection(4); // Color Blind 바로 아래
-        int before = saves;
-        settingPanel.activateSelected();
-        assertTrue(settings.isDevNetworkOverlay());
-        assertEquals(before + 1, saves, "바뀐 설정은 바로 저장한다");
-
+    void devNetworkOverlayIsHiddenWithoutDevFlag() { // 일반 실행의 설정 화면은 2차와 같다
+        settingPanel.moveSelection(4); // Color Blind 바로 아래는 Reset Scoreboard
         settingPanel.activateSelected();
         assertFalse(settings.isDevNetworkOverlay());
+        assertEquals(0, saves, "Reset Scoreboard 확인창만 열리고 설정은 바뀌지 않는다");
+    }
+
+    @Test
+    void devNetworkOverlayTogglesRightAfterColorBlindUnderDevFlag() { // dev-net-overlay
+        SettingPanel dev = new SettingPanel(settings, () -> { saves++; return true; }, () -> true, () -> { }, () -> true);
+        dev.moveSelection(4); // Color Blind 바로 아래
+        dev.activateSelected();
+        assertTrue(settings.isDevNetworkOverlay());
+        assertEquals(1, saves, "바뀐 설정은 바로 저장한다");
+
+        dev.activateSelected();
+        assertFalse(settings.isDevNetworkOverlay());
+    }
+
+    @Test
+    void savedDevNetworkOverlayStaysVisibleUntilTurnedOff() { // --dev 없이도 켜진 값은 끌 수 있어야 한다
+        settings.setDevNetworkOverlay(true);
+        settingPanel.moveSelection(4);
+        settingPanel.activateSelected();
+        assertFalse(settings.isDevNetworkOverlay());
+
+        settingPanel.moveSelection(1); // 항목이 사라져 선택은 Reset Scoreboard에 있다 → 다음은 Reset Settings
+        settingPanel.moveSelection(1); // 맨 아래에서 맨 위로 순환
+        settingPanel.activateSelected();
+        assertEquals(ScreenSize.LARGE, settings.getScreenSize(), "6개 항목 목록으로 돌아왔다");
     }
 
     @Test

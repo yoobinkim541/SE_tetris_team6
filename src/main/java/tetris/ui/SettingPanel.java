@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.BooleanSupplier;
 import javax.swing.JPanel;
+import tetris.DevMode;
 import tetris.feature.game.Difficulty;
 import tetris.feature.setting.GameAction;
 import tetris.feature.setting.KeyMap;
@@ -17,8 +18,9 @@ import tetris.feature.setting.ScreenSize;
 import tetris.feature.setting.Settings;
 
 /**
- * 설정 화면 (SET-2, SET-8): Screen Size / Difficulty / Control Keys / Color Blind / 개발자 연결 상태 표시 /
- * Reset Scoreboard / Reset Settings. 기존 SettingScreen 대체.
+ * 설정 화면 (SET-2, SET-8): Screen Size / Difficulty / Control Keys / Color Blind / Reset Scoreboard / Reset Settings.
+ * 기존 SettingScreen 대체. "개발자: 연결 상태 표시"는 {@code --dev}로 실행했거나 이미 켜져 있을 때만 Color Blind 아래에
+ * 보인다(일반 실행 화면은 2차 설정 화면과 같다. 켜져 있으면 끌 수 있어야 하므로 보인다).
  * 유효한 변경은 즉시 적용·저장한다 (SET-3). 저장 실패 시 이번 실행에는 적용하고 안내만 한다 (SET-4).
  */
 public class SettingPanel extends JPanel {
@@ -26,13 +28,14 @@ public class SettingPanel extends JPanel {
         SCREEN_SIZE, DIFFICULTY, CONTROL_KEYS, COLOR_BLIND, DEV_NET_OVERLAY, RESET_SCOREBOARD, RESET_SETTINGS
     }
 
-    private static final Item[] ITEMS = Item.values();
+    private static final Item[] ALL_ITEMS = Item.values();
     private static final GameAction[] ACTIONS = GameAction.values();
 
     private final Settings settings;
     private final BooleanSupplier onChanged;
     private final BooleanSupplier onResetScoreboard;
     private final Runnable onBack;
+    private final BooleanSupplier devFlag;
 
     private boolean inControlKeys;   // Control Keys 하위 화면을 보고 있는지
     private int selected;            // 지금 보이는 목록에서의 선택
@@ -48,12 +51,19 @@ public class SettingPanel extends JPanel {
      * onResetScoreboard: 스코어보드를 비우고 저장 성공 여부를 돌려준다. onBack: Main Menu로 (Esc)
      */
     public SettingPanel(Settings settings, BooleanSupplier onChanged, BooleanSupplier onResetScoreboard, Runnable onBack) {
-        if (settings == null || onChanged == null || onResetScoreboard == null || onBack == null)
+        this(settings, onChanged, onResetScoreboard, onBack, DevMode::flagEnabled);
+    }
+
+    /** devFlag: {@code --dev}로 실행했는지. 켜져 있으면 개발자 항목을 보인다 (테스트는 값을 직접 넘긴다) */
+    public SettingPanel(Settings settings, BooleanSupplier onChanged, BooleanSupplier onResetScoreboard, Runnable onBack,
+                        BooleanSupplier devFlag) {
+        if (settings == null || onChanged == null || onResetScoreboard == null || onBack == null || devFlag == null)
             throw new IllegalArgumentException("arguments cannot be null");
         this.settings = settings;
         this.onChanged = onChanged;
         this.onResetScoreboard = onResetScoreboard;
         this.onBack = onBack;
+        this.devFlag = devFlag;
 
         setLayout(null);
         setBackground(Theme.BACKGROUND);
@@ -79,7 +89,7 @@ public class SettingPanel extends JPanel {
     }
 
     public void moveSelection(int delta) {
-        selected = Theme.cycle(selected, delta, inControlKeys ? ACTIONS.length : ITEMS.length);
+        selected = Theme.cycle(selected, delta, inControlKeys ? ACTIONS.length : items().size());
         notice = "";
         repaint();
     }
@@ -91,7 +101,7 @@ public class SettingPanel extends JPanel {
             return;
         }
         notice = "";
-        switch (ITEMS[selected]) {
+        switch (items().get(selected)) {
             case SCREEN_SIZE -> changeScreenSize(1);
             case DIFFICULTY -> changeDifficulty(1);
             case CONTROL_KEYS -> openControlKeys();
@@ -112,6 +122,7 @@ public class SettingPanel extends JPanel {
                 applyChange(Messages.get("settings.settingsReset"));
             });
         }
+        clampSelection(); // 개발자 항목을 끄거나 설정을 초기화하면 목록이 한 줄 줄어든다
         repaint();
     }
 
@@ -194,7 +205,7 @@ public class SettingPanel extends JPanel {
     public void changeValue(int delta) {
         if (inControlKeys) return;
         notice = "";
-        switch (ITEMS[selected]) {
+        switch (items().get(selected)) {
             case SCREEN_SIZE -> changeScreenSize(delta);
             case DIFFICULTY -> changeDifficulty(delta);
             default -> { }
@@ -218,7 +229,22 @@ public class SettingPanel extends JPanel {
     private void applyChange(String successNotice) {
         boolean saved = onChanged.getAsBoolean();
         setNotice(saved ? successNotice : Messages.get("settings.saveFailed"), !saved);
+        clampSelection();
         repaint();
+    }
+
+    /** 지금 보이는 설정 항목. 개발자 항목은 --dev 실행이거나 이미 켜져 있을 때만 들어간다 */
+    private List<Item> items() {
+        boolean showDev = devFlag.getAsBoolean() || settings.isDevNetworkOverlay();
+        List<Item> visible = new ArrayList<>(ALL_ITEMS.length);
+        for (Item item : ALL_ITEMS) {
+            if (item != Item.DEV_NET_OVERLAY || showDev) visible.add(item);
+        }
+        return visible;
+    }
+
+    private void clampSelection() {
+        if (!inControlKeys) selected = Math.min(selected, items().size() - 1);
     }
 
     private void setNotice(String text, boolean isError) {
@@ -294,15 +320,21 @@ public class SettingPanel extends JPanel {
 
     private List<String[]> settingRows() {
         List<String[]> rows = new ArrayList<>();
-        rows.add(new String[] {Messages.get("settings.screenSize"), "◀ " + Messages.get("size." + settings.getScreenSize().name()) + " ▶"});
-        rows.add(new String[] {Messages.get("settings.difficulty"), "◀ " + Messages.difficultyName(settings.getDifficulty()) + " ▶"});
-        rows.add(new String[] {Messages.get("settings.controlKeys"), "›"});
-        rows.add(new String[] {Messages.get("settings.colorBlind"),
-                Messages.get(settings.isColorBlindMode() ? "settings.on" : "settings.off")});
-        rows.add(new String[] {Messages.get("settings.devNetOverlay"),
-                Messages.get(settings.isDevNetworkOverlay() ? "settings.on" : "settings.off")});
-        rows.add(new String[] {Messages.get("settings.resetScoreboard"), ""});
-        rows.add(new String[] {Messages.get("settings.resetSettings"), ""});
+        for (Item item : items()) {
+            rows.add(switch (item) {
+                case SCREEN_SIZE -> new String[] {Messages.get("settings.screenSize"),
+                        "◀ " + Messages.get("size." + settings.getScreenSize().name()) + " ▶"};
+                case DIFFICULTY -> new String[] {Messages.get("settings.difficulty"),
+                        "◀ " + Messages.difficultyName(settings.getDifficulty()) + " ▶"};
+                case CONTROL_KEYS -> new String[] {Messages.get("settings.controlKeys"), "›"};
+                case COLOR_BLIND -> new String[] {Messages.get("settings.colorBlind"),
+                        Messages.get(settings.isColorBlindMode() ? "settings.on" : "settings.off")};
+                case DEV_NET_OVERLAY -> new String[] {Messages.get("settings.devNetOverlay"),
+                        Messages.get(settings.isDevNetworkOverlay() ? "settings.on" : "settings.off")};
+                case RESET_SCOREBOARD -> new String[] {Messages.get("settings.resetScoreboard"), ""};
+                case RESET_SETTINGS -> new String[] {Messages.get("settings.resetSettings"), ""};
+            });
+        }
         return rows;
     }
 
