@@ -1,5 +1,6 @@
 package tetris.ui;
 
+import java.awt.BorderLayout;
 import java.awt.CardLayout;
 import java.awt.Dimension;
 import java.awt.GraphicsEnvironment;
@@ -11,31 +12,47 @@ import java.time.Instant;
 import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Random;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
+import java.util.function.Function;
+import java.util.function.IntSupplier;
+import java.util.function.Supplier;
 import javax.swing.JComponent;
 import javax.swing.JFrame;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.SwingUtilities;
+import tetris.DevMode;
+import tetris.feature.game.Difficulty;
 import tetris.feature.game.GameClock;
 import tetris.feature.game.GameListener;
+import tetris.feature.game.GameMode;
 import tetris.feature.game.GameSession;
 import tetris.feature.game.GameSnapshot;
 import tetris.feature.game.GameState;
+import tetris.feature.network.HeartbeatPolicy;
+import tetris.feature.network.LanAddresses;
+import tetris.feature.network.PeerEstablisher;
+import tetris.feature.network.lobby.LinkHealth;
+import tetris.feature.network.lobby.LobbyClient;
+import tetris.feature.network.lobby.LobbySnapshot;
+import tetris.feature.network.lobby.SocketLobbyClient;
+import tetris.feature.network.match.DispatcherPulse;
 import tetris.feature.rule.WeightedBlockGenerator;
-import tetris.feature.game.GameMode;
-import tetris.feature.game.Difficulty;
-import java.util.Random;
+import tetris.feature.save.DataDirectory;
+import tetris.feature.save.JsonRecentPeerRepository;
+import tetris.feature.save.RecentPeers;
 import tetris.feature.save.ScoreboardRepository;
 import tetris.feature.save.SettingsRepository;
 import tetris.feature.score.ScoreEntry;
 import tetris.feature.score.Scoreboard;
 import tetris.feature.setting.ScreenSize;
 import tetris.feature.setting.Settings;
-import tetris.feature.network.lobby.LobbyClient;
-import tetris.feature.network.lobby.LobbySnapshot;
-import tetris.feature.network.lobby.SocketLobbyClient;
+import tetris.feature.versus.LocalMatchEngine;
 import tetris.feature.versus.api.*;
 import tetris.ui.versus.*;
-import java.util.function.Function;
-import javax.swing.JOptionPane;
 
 /**
  * 메인 윈도우. CardLayout으로 화면을 전환한다 (명세 9, 13장). 크기 조절 불가.
@@ -72,15 +89,15 @@ public class MainFrame extends JFrame {
     private BattleScreenController battleController;
     private long battleGeneration;
     private final BattleResultPanel battleResultPanel;
-    private final java.util.function.Supplier<LobbyClient> lobbyFactory;
+    private final Supplier<LobbyClient> lobbyFactory;
     private final BattleResultPanel onlineResultPanel;
     private P2pLobbyController p2p;
     /** 개발자 모드에서만 P2P 로비 아래에 붙는 측정 패널. 일반 실행에서는 항상 null */
-    private tetris.ui.versus.DevRttPanel devRtt;
+    private DevRttPanel devRtt;
     /** 지금 P2P 연결. 로비 화면을 닫으면 null (개발자 연결 상태 오버레이가 읽는다) */
     private LobbyClient p2pLobby;
     /** 개발자 연결 상태 오버레이. 창 생성 시 한 번 만들고 화면에 따라 켜고 끈다 */
-    private final tetris.ui.versus.NetDebugOverlay debugOverlay;
+    private final NetDebugOverlay debugOverlay;
     private boolean battleOnline;
 
     public MainFrame(Settings settings, Scoreboard scoreboard,
@@ -96,8 +113,8 @@ public class MainFrame extends JFrame {
     }
 
     /** 최근 접속 IP 기록용 디스크 실행기. EDT를 막지 않도록 데몬 스레드 하나에서 쓴다 (R3-RECENT) */
-    private static final java.util.concurrent.Executor RECENT_PEER_IO =
-            java.util.concurrent.Executors.newSingleThreadExecutor(task -> {
+    private static final Executor RECENT_PEER_IO =
+            Executors.newSingleThreadExecutor(task -> {
                 Thread thread = new Thread(task, "recent-peers-io");
                 thread.setDaemon(true);
                 return thread;
@@ -105,27 +122,26 @@ public class MainFrame extends JFrame {
 
     /** 실제 소켓 로비. 접속에 성공한 IP를 %APPDATA% 아래 recent-peers.json에 남긴다 */
     private static LobbyClient defaultLobby() {
-        return socketLobby(new tetris.feature.save.JsonRecentPeerRepository(
-                tetris.feature.save.JsonRecentPeerRepository.defaultFile()));
+        return socketLobby(new JsonRecentPeerRepository(JsonRecentPeerRepository.defaultFile()));
     }
 
     /** 실제 소켓 로비. 최근 접속 IP 저장소만 바꿔 끼운다 (테스트는 임시 파일을 쓴다) */
-    public static LobbyClient socketLobby(tetris.feature.save.RecentPeers recentPeers) {
-        java.util.concurrent.Executor edt = javax.swing.SwingUtilities::invokeLater;
-        return new SocketLobbyClient(edt, new tetris.feature.network.PeerEstablisher(edt),
-                tetris.feature.versus.LocalMatchEngine::new, MatchClock.system(),
-                new tetris.feature.network.match.DispatcherPulse(edt), tetris.feature.network.HeartbeatPolicy.DEFAULT,
-                java.util.Objects.requireNonNull(recentPeers, "recentPeers"), RECENT_PEER_IO);
+    public static LobbyClient socketLobby(RecentPeers recentPeers) {
+        Executor edt = SwingUtilities::invokeLater;
+        return new SocketLobbyClient(edt, new PeerEstablisher(edt),
+                LocalMatchEngine::new, MatchClock.system(),
+                new DispatcherPulse(edt), HeartbeatPolicy.DEFAULT,
+                Objects.requireNonNull(recentPeers, "recentPeers"), RECENT_PEER_IO);
     }
 
     /** lobbyFactory: P2P 화면에 들어갈 때마다 새 로비(소켓) 하나를 만든다. 모든 콜백은 EDT에서 실행된다 */
     public MainFrame(Settings settings, Scoreboard scoreboard,
                      SettingsRepository settingsRepository, ScoreboardRepository scoreboardRepository,
                      Function<MatchConfig, BattleClient> battleFactory,
-                     java.util.function.Supplier<LobbyClient> lobbyFactory) {
+                     Supplier<LobbyClient> lobbyFactory) {
         super(Messages.get("app.title"));
-        this.battleFactory = java.util.Objects.requireNonNull(battleFactory);
-        this.lobbyFactory = java.util.Objects.requireNonNull(lobbyFactory);
+        this.battleFactory = Objects.requireNonNull(battleFactory);
+        this.lobbyFactory = Objects.requireNonNull(lobbyFactory);
         this.settings = settings;
         this.scoreboard = scoreboard;
         this.settingsRepository = settingsRepository;
@@ -171,7 +187,7 @@ public class MainFrame extends JFrame {
         addScreen(Screen.P2P_LOBBY, new JPanel());
         // 개발자 연결 상태 오버레이: 화면·연결은 늦게 생기므로 공급자로 넘긴다.
         // 대전 화면은 온라인 대전 중일 때만 넘긴다 (로컬 대전·싱글은 대상이 아니다)
-        debugOverlay = new tetris.ui.versus.NetDebugOverlay(tetris.DevMode::enabled,
+        debugOverlay = new NetDebugOverlay(DevMode::enabled,
                 () -> p2pLobby, () -> devRtt,
                 () -> battleOnline && screens.get(Screen.BATTLE) instanceof BattlePanel battle ? battle : null);
         setContentPane(root);
@@ -192,7 +208,7 @@ public class MainFrame extends JFrame {
     /** 창 제목에 현재 개발자 모드 상태를 반영한다 (--dev 또는 설정 토글). 설정 변경 시에도 다시 부른다 */
     private void updateTitle() {
         String base = Messages.get("app.title");
-        setTitle(tetris.DevMode.enabled() ? base + " [개발자 모드]" : base);
+        setTitle(DevMode.enabled() ? base + " [개발자 모드]" : base);
     }
 
     /** 화면 전환. 기존 ReturnToMain 역할 = showScreen(MAIN_MENU) */
@@ -368,14 +384,14 @@ public class MainFrame extends JFrame {
 
     /** 로컬 대전 (S9-B1). 결과는 대전 결과 화면으로만 가고 이름 입력·스코어보드 저장을 거치지 않는다 (R3-NOSCORE) */
     public void startBattle(BattleMode mode) {
-        java.util.Objects.requireNonNull(mode);
+        Objects.requireNonNull(mode);
         var keys = new BattleKeyMap();
         String label = BattleModes.label(mode);
         BattlePanel panel = prepareBattleScreen(keys, label, mode, null);
         long generation = battleGeneration;
         battleController = new BattleScreenController(getRootPane(),
                 battleFactory.apply(BattleModes.localConfig(mode, settings.getDifficulty())), keys, panel,
-                snapshot -> javax.swing.SwingUtilities.invokeLater(() -> {
+                snapshot -> SwingUtilities.invokeLater(() -> {
                     if (currentScreen != Screen.BATTLE || generation != battleGeneration) return;
                     battleResultPanel.setSnapshot(snapshot, label);
                     showScreen(Screen.BATTLE_RESULT);
@@ -410,8 +426,8 @@ public class MainFrame extends JFrame {
         closeBattle();
         if (p2p == null) {
             LobbyClient lobby = lobbyFactory.get();
-            java.util.function.IntSupplier port = lobby instanceof SocketLobbyClient socket ? socket::localPort : () -> -1;
-            java.util.function.Supplier<List<String>> recent = List::of;
+            IntSupplier port = lobby instanceof SocketLobbyClient socket ? socket::localPort : () -> -1;
+            Supplier<List<String>> recent = List::of;
             if (lobby instanceof SocketLobbyClient saved) recent = saved::recentPeers;
             p2p = new P2pLobbyController(lobby, new P2pLobbyController.Navigation() {
                 @Override public void startMatch(BattleClient client, MatchConfig config, LobbySnapshot.Role role) {
@@ -424,23 +440,23 @@ public class MainFrame extends JFrame {
                     }
                 }
                 @Override public void back() { openBattleModes(); }
-                @Override public void healthChanged(tetris.feature.network.lobby.LinkHealth health) {
+                @Override public void healthChanged(LinkHealth health) {
                     if (battleOnline && screens.get(Screen.BATTLE) instanceof BattlePanel battle) {
                         battle.setConnectionNotice(P2pLobbyController.lagText(health));
                     }
                 }
-            }, port, tetris.feature.network.LanAddresses::current, recent);
+            }, port, LanAddresses::current, recent);
             p2pLobby = lobby;
             JComponent previous = screens.remove(Screen.P2P_LOBBY);
             if (previous != null) root.remove(previous);
             var panel = p2p.panel();
             panel.setPreferredSize(GamePanel.preferredSizeFor(fitCellSize(settings.getScreenSize().cellPixels())));
             JComponent screen = panel;
-            if (tetris.DevMode.enabled()) {
-                devRtt = new tetris.ui.versus.DevRttPanel(lobby, tetris.feature.save.DataDirectory.resolve().resolve("dev"));
-                var wrapper = new JPanel(new java.awt.BorderLayout());
-                wrapper.add(panel, java.awt.BorderLayout.CENTER);
-                wrapper.add(devRtt, java.awt.BorderLayout.SOUTH);
+            if (DevMode.enabled()) {
+                devRtt = new DevRttPanel(lobby, DataDirectory.resolve().resolve("dev"));
+                var wrapper = new JPanel(new BorderLayout());
+                wrapper.add(panel, BorderLayout.CENTER);
+                wrapper.add(devRtt, BorderLayout.SOUTH);
                 screen = wrapper;
             }
             addScreen(Screen.P2P_LOBBY, screen);
@@ -458,7 +474,7 @@ public class MainFrame extends JFrame {
         BattlePanel panel = prepareBattleScreen(keys, label, config.mode(), viewer);
         long generation = battleGeneration;
         battleController = BattleScreenController.online(getRootPane(), client, keys, panel,
-                snapshot -> javax.swing.SwingUtilities.invokeLater(() -> {
+                snapshot -> SwingUtilities.invokeLater(() -> {
                     if (currentScreen != Screen.BATTLE || generation != battleGeneration) return;
                     onlineResultPanel.setSnapshot(snapshot, label, viewer);
                     showScreen(Screen.P2P_RESULT);
@@ -516,7 +532,7 @@ public class MainFrame extends JFrame {
     // ── 설정·저장 ────────────────────────────
     private boolean onSettingsChanged() {
         // 설정의 개발자 토글을 개발자 모드 스위치에 반영한다 (dev-net-overlay). --dev로 켠 상태는 그대로 유지된다
-        tetris.DevMode.setSettingEnabled(settings.isDevNetworkOverlay());
+        DevMode.setSettingEnabled(settings.isDevNetworkOverlay());
         updateTitle();
         debugOverlay.refresh(); // 설정에서 끄면 열려 있는 화면의 줄이 바로 사라지고 타이머가 멈춘다
         if (settings.getScreenSize() != appliedScreenSize) applyScreenSize(settings.getScreenSize());
