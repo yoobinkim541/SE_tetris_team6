@@ -49,10 +49,10 @@ class BattleMainFrameTest {
             // Always exercise the real factory. OS injection is explicitly opt-in;
             // the default GUI run dispatches KeyEvents through the same focused panel.
             boolean nativeInput=Boolean.getBoolean("audit.native");
-            key(robot,java.awt.event.KeyEvent.VK_LEFT,true,nativeInput);
-            key(robot,java.awt.event.KeyEvent.VK_D,true,nativeInput);
-            key(robot,java.awt.event.KeyEvent.VK_D,false,nativeInput);
-            key(robot,java.awt.event.KeyEvent.VK_LEFT,false,nativeInput);
+            key(robot,java.awt.event.KeyEvent.VK_A,true,nativeInput);
+            key(robot,java.awt.event.KeyEvent.VK_RIGHT,true,nativeInput);
+            key(robot,java.awt.event.KeyEvent.VK_RIGHT,false,nativeInput);
+            key(robot,java.awt.event.KeyEvent.VK_A,false,nativeInput);
             assertTrue(moved.await(3, java.util.concurrent.TimeUnit.SECONDS), "input must move both real sessions horizontally");
             SwingUtilities.invokeAndWait(() -> client.get().send(new PlayerCommand(PlayerId.TWO,
                 tetris.feature.setting.GameAction.QUIT,true,10000)));
@@ -65,7 +65,7 @@ class BattleMainFrameTest {
             });
         } finally {
             if(Boolean.getBoolean("audit.native")) {
-                robot.keyRelease(java.awt.event.KeyEvent.VK_LEFT); robot.keyRelease(java.awt.event.KeyEvent.VK_D);
+                robot.keyRelease(java.awt.event.KeyEvent.VK_A); robot.keyRelease(java.awt.event.KeyEvent.VK_RIGHT);
             }
             SwingUtilities.invokeAndWait(() -> { if(frame[0]!=null)frame[0].dispose(); });
         }
@@ -205,6 +205,71 @@ class BattleMainFrameTest {
             until("client recorded the host address", () ->
                 new JsonRecentPeerRepository(directory.resolve("recent1.json")).load().equals(java.util.List.of("127.0.0.1")));
             assertTrue(new JsonRecentPeerRepository(directory.resolve("recent0.json")).load().isEmpty(), "the host records nothing");
+        } finally {
+            SwingUtilities.invokeAndWait(() -> { for (var f : frames) if (f != null) f.dispose(); });
+        }
+    }
+
+    /**
+     * 재대전 회귀: 클라이언트가 먼저 "다시 대전"을 누른 뒤 호스트가 누르면 호스트 쪽 rematch() 안에서 경기가 바로 시작된다.
+     * 그 뒤 로비 화면으로 덮어써서 방금 시작한 경기를 닫으면 호스트는 로비에, 클라이언트는 첫 화면에 멈춘다 (R3-REMATCH)
+     */
+    @Test void hostRematchAfterTheClientVotedStartsTheNextMatchOnBothWindows() throws Exception {
+        MainFrame[] frames = new MainFrame[2];
+        P2pLobbyController[] lobby = new P2pLobbyController[2];
+        try {
+            SwingUtilities.invokeAndWait(() -> {
+                for (int i = 0; i < 2; i++) {
+                    var recent = new JsonRecentPeerRepository(directory.resolve("rematch-recent" + i + ".json"));
+                    frames[i] = new MainFrame(new Settings(), new Scoreboard(java.util.List.of()),
+                        new JsonSettingsRepository(directory.resolve("rematch-settings" + i + ".json")),
+                        new JsonScoreboardRepository(directory.resolve("rematch-scores.json")),
+                        LocalBattleClient::new, () -> MainFrame.socketLobby(recent));
+                    frames[i].setVisible(true);
+                    frames[i].openBattleModes();
+                    frames[i].openP2pLobby();
+                    try { lobby[i] = (P2pLobbyController) field(frames[i], "p2p"); } catch (Exception e) { throw new RuntimeException(e); }
+                }
+                lobby[0].panel().portField().setText("0");
+                lobby[0].panel().hostButton().doClick();
+            });
+            int[] port = new int[1];
+            until("host listening", () -> (port[0] = ((tetris.feature.network.lobby.SocketLobbyClient)
+                field(lobby[0], "lobby")).localPort()) > 0);
+            SwingUtilities.invokeAndWait(() -> {
+                lobby[1].panel().addressField().setText("127.0.0.1");
+                lobby[1].panel().portField().setText(String.valueOf(port[0]));
+                lobby[1].panel().connectButton().doClick();
+            });
+            until("both configured", () -> lobby[0].snapshot().config() != null && lobby[1].snapshot().config() != null
+                && lobby[1].snapshot().state() == tetris.feature.network.lobby.LobbySnapshot.State.LOBBY);
+            SwingUtilities.invokeAndWait(() -> lobby[1].panel().readyButton().doClick());
+            until("host sees the vote", () -> lobby[0].snapshot().peerReady());
+            SwingUtilities.invokeAndWait(() -> lobby[0].panel().readyButton().doClick());
+            until("first match on both", () -> field(frames[0], "currentScreen") == MainFrame.Screen.BATTLE
+                && field(frames[1], "currentScreen") == MainFrame.Screen.BATTLE);
+            SwingUtilities.invokeAndWait(() -> { try {
+                ((BattleClient) field(field(frames[0], "battleController"), "client"))
+                    .send(new PlayerCommand(PlayerId.ONE, tetris.feature.setting.GameAction.QUIT, true, 99));
+            } catch (Exception e) { throw new RuntimeException(e); } });
+            until("both on the result screen", () -> field(frames[0], "currentScreen") == MainFrame.Screen.P2P_RESULT
+                && field(frames[1], "currentScreen") == MainFrame.Screen.P2P_RESULT);
+
+            var rematch = MainFrame.class.getDeclaredMethod("rematchP2p"); rematch.setAccessible(true);
+            SwingUtilities.invokeAndWait(() -> { try { rematch.invoke(frames[1]); } catch (Exception e) { throw new RuntimeException(e); } });
+            until("host remembers the client's rematch vote", () -> lobby[0].snapshot().peerReady());
+            SwingUtilities.invokeAndWait(() -> { try { rematch.invoke(frames[0]); } catch (Exception e) { throw new RuntimeException(e); } });
+
+            until("second match on both", () -> field(frames[0], "currentScreen") == MainFrame.Screen.BATTLE
+                && field(frames[1], "currentScreen") == MainFrame.Screen.BATTLE);
+            until("the client receives the host's states", () -> {
+                Object controller = field(frames[1], "battleController");
+                return controller != null && ((tetris.feature.network.match.ClientBattleClient) field(controller, "client"))
+                    .snapshot().phase() == MatchPhase.PLAYING;
+            });
+            SwingUtilities.invokeAndWait(() -> { try {
+                assertNotNull(field(frames[0], "battleController"), "the host keeps running the new match");
+            } catch (Exception e) { throw new RuntimeException(e); } });
         } finally {
             SwingUtilities.invokeAndWait(() -> { for (var f : frames) if (f != null) f.dispose(); });
         }

@@ -233,6 +233,36 @@ class LinkHealthLobbyTest {
         assertEquals(1L, ping.nonce());
     }
 
+    /** 개발자 모드 측정: 요청한 횟수만큼 PING을 보내고, heartbeat를 포함한 모든 PONG을 표본으로 알린 뒤 멈춘다 */
+    @Test
+    void probeRtt는_요청한_횟수만큼_PING을_보내고_PONG마다_표본을_알린다() throws Exception {
+        BlockingQueue<LobbySnapshot> hs = subscribeSnapshots();
+        BlockingQueue<LinkHealth> hq = subscribeHealth();
+        BlockingQueue<tetris.feature.network.tools.LatencySample> samples = new LinkedBlockingQueue<>();
+        callOn(hostExec, () -> host.subscribeRtt(samples::add));
+        RawPeer peer = connectRawPeer(hs);
+        awaitQueue(hq, h -> h.status() == LinkHealth.Status.NORMAL);
+
+        runOn(hostExec, () -> host.probeRtt(3, 50));
+        Runnable probe = pulse.currentTick();
+        for (int i = 0; i < 3; i++) {
+            runOn(hostExec, probe);
+            peer.send(ControlPayloads.Ping.from(peer.next(MessageType.PING).payload()).pong());
+            var sample = samples.poll(WAIT_SECONDS, TimeUnit.SECONDS);
+            assertNotNull(sample, "PONG " + (i + 1) + "의 표본이 오지 않았다");
+            assertEquals("host->client", sample.direction());
+            assertTrue(sample.localMillis() >= 0.0);
+        }
+        assertTrue(pulse.isLastClosed(), "요청한 횟수를 보내면 측정 pulse를 닫는다");
+        runOn(hostExec, probe);
+        assertEquals(0, samples.size());
+
+        // 측정 중이 아니어도 heartbeat PONG은 표본으로 남는다
+        runOn(hostExec, () -> pulse.ticks.getFirst().run());
+        peer.send(ControlPayloads.Ping.from(peer.next(MessageType.PING).payload()).pong());
+        assertNotNull(samples.poll(WAIT_SECONDS, TimeUnit.SECONDS), "heartbeat PONG 표본");
+    }
+
     @Test
     void PONG_RTT가_3회_200ms를_넘으면_LAGGING_150ms이하_3회면_NORMAL() throws Exception {
         BlockingQueue<LobbySnapshot> hs = subscribeSnapshots();

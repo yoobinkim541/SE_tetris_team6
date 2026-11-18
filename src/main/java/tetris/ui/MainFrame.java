@@ -75,6 +75,8 @@ public class MainFrame extends JFrame {
     private final java.util.function.Supplier<LobbyClient> lobbyFactory;
     private final BattleResultPanel onlineResultPanel;
     private P2pLobbyController p2p;
+    /** 개발자 모드에서만 P2P 로비 아래에 붙는 측정 패널. 일반 실행에서는 항상 null */
+    private tetris.ui.versus.DevRttPanel devRtt;
     private boolean battleOnline;
 
     public MainFrame(Settings settings, Scoreboard scoreboard,
@@ -416,7 +418,15 @@ public class MainFrame extends JFrame {
             if (previous != null) root.remove(previous);
             var panel = p2p.panel();
             panel.setPreferredSize(GamePanel.preferredSizeFor(fitCellSize(settings.getScreenSize().cellPixels())));
-            addScreen(Screen.P2P_LOBBY, panel);
+            JComponent screen = panel;
+            if (tetris.DevMode.enabled()) {
+                devRtt = new tetris.ui.versus.DevRttPanel(lobby, tetris.feature.save.DataDirectory.resolve().resolve("dev"));
+                var wrapper = new JPanel(new java.awt.BorderLayout());
+                wrapper.add(panel, java.awt.BorderLayout.CENTER);
+                wrapper.add(devRtt, java.awt.BorderLayout.SOUTH);
+                screen = wrapper;
+            }
+            addScreen(Screen.P2P_LOBBY, screen);
         }
         showScreen(Screen.P2P_LOBBY);
     }
@@ -444,18 +454,27 @@ public class MainFrame extends JFrame {
         p2p.panel().focusTarget().requestFocusInWindow();
     }
 
-    /** 결과 화면 "다시 대전": 같은 연결의 로비로 가서 이 PC의 준비를 켠다 (R3-REMATCH) */
+    /**
+     * 결과 화면 "다시 대전": 같은 연결의 로비로 가서 이 PC의 준비를 켠다 (R3-REMATCH).
+     * 상대가 이미 준비했으면 rematch() 안에서 경기가 바로 시작되므로, 로비 화면을 먼저 띄운 뒤 준비를 켠다.
+     * 순서가 반대면 방금 띄운 경기 화면을 로비가 덮으면서 경기를 닫는다
+     */
     private void rematchP2p() {
         if (p2p == null) { openBattleModes(); return; }
-        p2p.rematch();
         showScreen(Screen.P2P_LOBBY);
-        p2p.panel().focusTarget().requestFocusInWindow();
+        var lobby = p2p;
+        lobby.rematch();
+        if (currentScreen == Screen.P2P_LOBBY) lobby.panel().focusTarget().requestFocusInWindow();
     }
 
     private void closeP2p() {
         if (p2p == null) return;
         var closing = p2p;
         p2p = null;
+        if (devRtt != null) {
+            devRtt.close();
+            devRtt = null;
+        }
         closing.close();
     }
 

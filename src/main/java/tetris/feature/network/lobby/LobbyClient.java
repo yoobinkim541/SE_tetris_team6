@@ -1,6 +1,7 @@
 package tetris.feature.network.lobby;
 
 import java.util.Optional;
+import tetris.feature.network.tools.LatencySample;
 import java.util.concurrent.CompletionStage;
 import java.util.function.Consumer;
 import tetris.feature.versus.api.BattleClient;
@@ -35,6 +36,13 @@ public interface LobbyClient extends AutoCloseable {
     /** Delivers the current link health first, then updates whenever link health status changes. */
     default Subscription subscribeHealth(Consumer<LinkHealth> listener) {
         return () -> { };
+    }
+    /** 개발자 모드: 연결된 상대와 주고받은 PING/PONG 왕복 표본을 받는다. heartbeat와 probeRtt 응답이 모두 온다 */
+    default Subscription subscribeRtt(Consumer<LatencySample> listener) {
+        return () -> { };
+    }
+    /** 개발자 모드: heartbeat와 별도로 intervalMillis마다 PING을 count번 보낸다. 연결이 없으면 아무것도 하지 않는다 */
+    default void probeRtt(int count, int intervalMillis) {
     }
     /** Idempotently cancels work, releases resources and removes subscriptions. */
     @Override void close();

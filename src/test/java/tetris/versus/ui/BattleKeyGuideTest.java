@@ -25,13 +25,30 @@ class BattleKeyGuideTest {
         assertEquals(KeyEvent.getKeyText(KeyEvent.VK_SPACE), BattleKeyMap.keyLabel(KeyEvent.VK_SPACE));
         var keys = new BattleKeyMap();
         assertEquals(List.of("← →  이동", "↑  회전", "↓  내리기", KeyEvent.getKeyText(KeyEvent.VK_SPACE) + "  즉시 낙하"),
-                keys.playerLines(PlayerId.ONE));
-        assertEquals("A D  이동", keys.playerLines(PlayerId.TWO).getFirst());
+                keys.playerLines(PlayerId.TWO));
+        assertEquals("A D  이동", keys.playerLines(PlayerId.ONE).getFirst());
         assertTrue(keys.assign(PlayerId.TWO, GameAction.ROTATE, KeyEvent.VK_Z));
         assertEquals("Z  회전", keys.playerLines(PlayerId.TWO).get(1));
         assertEquals("일시정지 P · 나가기 Q", keys.sharedLine());
         assertEquals("일시정지 P · 기권 Q 두 번", BattleKeyMap.online().sharedLine());
         assertFalse(keys.guide().contains("Left"), "안내에 영어 방향키 이름을 쓰지 않는다");
+    }
+
+    /** 로컬은 왼쪽 보드(P1)가 키보드 왼쪽 WASD, 오른쪽 보드(P2)가 방향키. P2P 내 키는 방향키 유지 (D-14 개정) */
+    @Test
+    void localKeysFollowBoardSidesAndOnlineKeepsArrows() {
+        var local = new BattleKeyMap();
+        int[][] expected = {
+            {KeyEvent.VK_A, KeyEvent.VK_LEFT}, {KeyEvent.VK_D, KeyEvent.VK_RIGHT}, {KeyEvent.VK_S, KeyEvent.VK_DOWN},
+            {KeyEvent.VK_W, KeyEvent.VK_UP}, {KeyEvent.VK_F, KeyEvent.VK_SPACE}};
+        GameAction[] actions = {GameAction.MOVE_LEFT, GameAction.MOVE_RIGHT, GameAction.SOFT_DROP,
+            GameAction.ROTATE, GameAction.HARD_DROP};
+        for (int i = 0; i < actions.length; i++) {
+            assertEquals(expected[i][0], local.keyOf(PlayerId.ONE, actions[i]), "P1 " + actions[i]);
+            assertEquals(expected[i][1], local.keyOf(PlayerId.TWO, actions[i]), "P2 " + actions[i]);
+            assertEquals(expected[i][1], BattleKeyMap.online().keyOf(PlayerId.ONE, actions[i]), "P2P " + actions[i]);
+        }
+        assertTrue(local.guide().startsWith("P1: 왼쪽 A"), local.guide());
     }
 
     @Test
