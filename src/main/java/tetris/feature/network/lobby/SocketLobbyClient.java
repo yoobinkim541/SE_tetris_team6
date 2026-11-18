@@ -332,10 +332,11 @@ public final class SocketLobbyClient implements LobbyClient {
             return;
         }
         closed = true;
-        releaseActiveWork();
+        // 닫힌 뒤에는 정리 중 생기는 상태 변화도 구독자에게 보내지 않는다
         subscribers.clear();
         healthSubscribers.clear();
         rttSubscribers.clear();
+        releaseActiveWork();
     }
 
     private void onAttemptCompleted(
