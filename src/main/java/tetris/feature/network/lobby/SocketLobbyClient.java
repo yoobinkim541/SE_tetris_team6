@@ -1,6 +1,5 @@
 package tetris.feature.network.lobby;
 
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -70,29 +69,10 @@ public final class SocketLobbyClient implements LobbyClient {
     private record SentPing(long millis, long nanos) {
     }
 
-    private static final class Subscriber {
-        final Consumer<LobbySnapshot> listener;
-
-        boolean active = true;
-
-        Subscriber(Consumer<LobbySnapshot> listener) {
-            this.listener = listener;
-        }
-    }
-
-    private static final class HealthSubscriber {
-        final Consumer<LinkHealth> listener;
-        boolean active = true;
-
-        HealthSubscriber(Consumer<LinkHealth> listener) {
-            this.listener = listener;
-        }
-    }
-
     private final Executor dispatcher;
     private final PeerEstablisher establisher;
-    private final List<Subscriber> subscribers = new ArrayList<>();
-    private final List<HealthSubscriber> healthSubscribers = new ArrayList<>();
+    private final OrderedListeners<LobbySnapshot> subscribers = new OrderedListeners<>();
+    private final OrderedListeners<LinkHealth> healthSubscribers = new OrderedListeners<>();
 
     private LobbySnapshot snapshot = INITIAL_SNAPSHOT;
     private LinkHealth currentHealth = LinkHealth.NONE;
@@ -109,13 +89,9 @@ public final class SocketLobbyClient implements LobbyClient {
     private final HeartbeatPolicy policy;
     private final RecentPeers recentPeers;
     private final Executor io;
-    private final ArrayDeque<LobbySnapshot> pendingPublications = new ArrayDeque<>();
-    private boolean publishing;
-    private final ArrayDeque<LinkHealth> pendingHealthPublications = new ArrayDeque<>();
-    private boolean publishingHealth;
     private final LinkedHashMap<Long, SentPing> pendingPings = new LinkedHashMap<>();
     /** 개발자 모드 연결 통계 (dev-net-overlay). 연결마다 새로 만들고 끊기면 비운다 */
-    private StatsCollector stats;
+    private LinkStatsCollector stats;
     private ConnectionHealth connectionHealth;
     private MatchPulse.Handle heartbeatHandle;
     private long heartbeatNonce;
@@ -181,7 +157,7 @@ public final class SocketLobbyClient implements LobbyClient {
     /** 개발자 모드 연결 상태 표시용 통계. 활성 연결이 없으면 비어 있다 (dev-net-overlay) */
     @Override
     public Optional<LinkStats> linkStats() {
-        StatsCollector current = stats;
+        LinkStatsCollector current = stats;
         if (current == null || activeLink == null) {
             return Optional.empty();
         }
@@ -340,30 +316,14 @@ public final class SocketLobbyClient implements LobbyClient {
     public Subscription subscribe(Consumer<LobbySnapshot> listener) {
         Objects.requireNonNull(listener, "listener");
         ensureOpen();
-        Subscriber sub = new Subscriber(listener);
-        subscribers.add(sub);
-        listener.accept(snapshot);
-        return () -> {
-            if (sub.active) {
-                sub.active = false;
-                subscribers.remove(sub);
-            }
-        };
+        return subscribers.add(listener, snapshot);
     }
 
     @Override
     public Subscription subscribeHealth(Consumer<LinkHealth> listener) {
         Objects.requireNonNull(listener, "listener");
         ensureOpen();
-        HealthSubscriber sub = new HealthSubscriber(listener);
-        healthSubscribers.add(sub);
-        listener.accept(currentHealth);
-        return () -> {
-            if (sub.active) {
-                sub.active = false;
-                healthSubscribers.remove(sub);
-            }
-        };
+        return healthSubscribers.add(listener, currentHealth);
     }
 
     @Override
@@ -372,16 +332,11 @@ public final class SocketLobbyClient implements LobbyClient {
             return;
         }
         closed = true;
-        releaseActiveWork();
-        for (Subscriber sub : subscribers) {
-            sub.active = false;
-        }
+        // 닫힌 뒤에는 정리 중 생기는 상태 변화도 구독자에게 보내지 않는다
         subscribers.clear();
-        for (HealthSubscriber sub : healthSubscribers) {
-            sub.active = false;
-        }
         healthSubscribers.clear();
         rttSubscribers.clear();
+        releaseActiveWork();
     }
 
     private void onAttemptCompleted(
@@ -443,7 +398,7 @@ public final class SocketLobbyClient implements LobbyClient {
         stopHeartbeat();
         long now = clock.nowMillis();
         Role lobbyRole = (link.role() == PeerRole.HOST) ? Role.HOST : Role.CLIENT;
-        stats = new StatsCollector(lobbyRole, link.peerAddress(), now);
+        stats = new LinkStatsCollector(lobbyRole, link.peerAddress(), now);
         connectionHealth = new ConnectionHealth(policy, now);
         publishHealth(new LinkHealth(LinkHealth.Status.NORMAL, -1));
         heartbeatHandle = pulse.start((int) policy.intervalMillis(), () -> heartbeat(link));
@@ -581,7 +536,7 @@ public final class SocketLobbyClient implements LobbyClient {
             publish(INITIAL_SNAPSHOT);
         }
         if (statusChanged) {
-            notifyHealthSubscribers(nextHealth);
+            healthSubscribers.publish(nextHealth);
         }
     }
 
@@ -591,26 +546,7 @@ public final class SocketLobbyClient implements LobbyClient {
         if (!statusChanged) {
             return;
         }
-        notifyHealthSubscribers(next);
-    }
-
-    private void notifyHealthSubscribers(LinkHealth next) {
-        pendingHealthPublications.addLast(next);
-        if (publishingHealth) return;
-        publishingHealth = true;
-        try {
-            while (!pendingHealthPublications.isEmpty()) {
-                LinkHealth value = pendingHealthPublications.removeFirst();
-                for (HealthSubscriber sub : List.copyOf(healthSubscribers)) {
-                    if (sub.active && !closed) {
-                        sub.listener.accept(value);
-                    }
-                }
-            }
-        } finally {
-            publishingHealth = false;
-            pendingHealthPublications.clear();
-        }
+        healthSubscribers.publish(next);
     }
 
     private void tryStartMatch() {
@@ -666,23 +602,7 @@ public final class SocketLobbyClient implements LobbyClient {
 
     private void publish(LobbySnapshot next) {
         snapshot = next;
-        // 구독자 콜백 안에서 다시 발행해도(예: STARTING을 받고 battleClient()로 PLAYING) 모든 구독자가 같은 순서로 받는다
-        pendingPublications.addLast(next);
-        if (publishing) return;
-        publishing = true;
-        try {
-            while (!pendingPublications.isEmpty()) {
-                LobbySnapshot value = pendingPublications.removeFirst();
-                for (Subscriber sub : List.copyOf(subscribers)) {
-                    if (sub.active && !closed) {
-                        sub.listener.accept(value);
-                    }
-                }
-            }
-        } finally {
-            publishing = false;
-            pendingPublications.clear();
-        }
+        subscribers.publish(next);
     }
 
     private void ensureOpen() {
@@ -702,85 +622,6 @@ public final class SocketLobbyClient implements LobbyClient {
             return error.getCause();
         }
         return error;
-    }
-
-    /**
-     * 연결 하나의 통계를 모은다 (dev-net-overlay). 고정 크기만 쓴다: RTT 최근 {@link LinkStats#MAX_RTT_SAMPLES}개,
-     * 수신 시각 최근 {@code FREQUENCY_WINDOW_MILLIS}. 모두 dispatcher 스레드에서만 읽고 쓴다.
-     */
-    private static final class StatsCollector {
-        private final LobbySnapshot.Role role;
-        private final String peerAddress;
-        private final long connectedAt;
-        private final ArrayDeque<Long> rtts = new ArrayDeque<>();
-        private final ArrayDeque<Long> frameTimes = new ArrayDeque<>();
-        private final ArrayDeque<Long> stateTimes = new ArrayDeque<>();
-        private long lastFrameAt;
-        private long lastRttMillis = -1;
-        private long pingsSent;
-        private long pongsReceived;
-
-        StatsCollector(LobbySnapshot.Role role, String peerAddress, long connectedAt) {
-            this.role = role;
-            this.peerAddress = peerAddress;
-            this.connectedAt = connectedAt;
-            this.lastFrameAt = connectedAt;
-        }
-
-        void onPingSent() {
-            pingsSent++;
-        }
-
-        /** 알려진 nonce의 PONG. 표본은 최근 {@link LinkStats#MAX_RTT_SAMPLES}개만 남긴다. 프레임 수는 호출자가 센다 */
-        void onPong(long rttMillis) {
-            long rtt = Math.max(0L, rttMillis);
-            pongsReceived++;
-            lastRttMillis = rtt;
-            rtts.addLast(rtt);
-            while (rtts.size() > LinkStats.MAX_RTT_SAMPLES) rtts.removeFirst();
-        }
-
-        void onFrame(long now, boolean state) {
-            lastFrameAt = now;
-            frameTimes.addLast(now);
-            if (state) stateTimes.addLast(now);
-            prune(frameTimes, now);
-            prune(stateTimes, now);
-        }
-
-        LinkStats snapshot(long now, LinkHealth.Status status) {
-            prune(frameTimes, now);
-            prune(stateTimes, now);
-            return new LinkStats(role, peerAddress, status,
-                    lastRttMillis, minRtt(), avgRtt(), maxRtt(), rtts.size(),
-                    Math.max(0L, now - lastFrameAt), frameTimes.size(), stateTimes.size(),
-                    pingsSent, pongsReceived);
-        }
-
-        private long minRtt() {
-            long min = -1;
-            for (long rtt : rtts) min = min < 0 ? rtt : Math.min(min, rtt);
-            return min;
-        }
-
-        private long avgRtt() {
-            if (rtts.isEmpty()) return -1;
-            long sum = 0;
-            for (long rtt : rtts) sum += rtt;
-            return sum / rtts.size(); // 정수 나눗셈 평균
-        }
-
-        private long maxRtt() {
-            long max = -1;
-            for (long rtt : rtts) max = Math.max(max, rtt);
-            return max;
-        }
-
-        private static void prune(ArrayDeque<Long> times, long now) {
-            while (!times.isEmpty() && now - times.peekFirst() > LinkStats.FREQUENCY_WINDOW_MILLIS) {
-                times.removeFirst();
-            }
-        }
     }
 
     private final class LinkListener implements PeerListener {

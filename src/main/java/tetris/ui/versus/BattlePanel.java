@@ -1,6 +1,7 @@
 package tetris.ui.versus;
 
 import java.awt.*;
+import java.util.List;
 import java.util.Objects;
 import javax.swing.JPanel;
 import tetris.feature.versus.api.BattleMode;
@@ -21,7 +22,7 @@ public final class BattlePanel extends JPanel {
     private String notice = "";
     private String connectionNotice = "";
     /** 개발자 모드 연결 상태 줄 (dev-net-overlay). 비어 있으면 그리지 않는다 */
-    private java.util.List<String> debugLines = java.util.List.of();
+    private List<String> debugLines = List.of();
     private MatchSnapshot snapshot;
     private final PaintLog paintLog = new PaintLog();
     public BattlePanel(boolean colorBlind) {
@@ -61,11 +62,11 @@ public final class BattlePanel extends JPanel {
     public void setConnectionNotice(String text) { connectionNotice = Objects.requireNonNull(text); repaint(); }
     public String connectionNotice() { return connectionNotice; }
     /** 개발자 모드 연결 상태 줄 (dev-net-overlay). 빈 목록이면 보드 아래에 아무것도 그리지 않는다 */
-    public void setDebugLines(java.util.List<String> lines) {
-        debugLines = java.util.List.copyOf(Objects.requireNonNull(lines, "lines"));
+    public void setDebugLines(List<String> lines) {
+        debugLines = List.copyOf(Objects.requireNonNull(lines, "lines"));
         repaint();
     }
-    public java.util.List<String> debugLines() { return debugLines; }
+    public List<String> debugLines() { return debugLines; }
     /** 시간제한 대전의 남은 시간. 올림해서 0:00이면 끝났다는 뜻. 시간 제한이 없으면 빈 문자열 */
     public static String timeText(long remainingMillis) {
         if (remainingMillis < 0) return "";
