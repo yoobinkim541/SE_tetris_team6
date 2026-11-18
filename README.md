@@ -2,9 +2,9 @@
 
 Java 21과 Swing으로 구현한 테트리스입니다. 일반 모드의 난이도 3종과 아이템 모드, 키 설정, 분류별 스코어보드에 더해 3차 요구사항의 **로컬 2인 대전과 같은 LAN의 P2P 대전**(일반·아이템·시간제한 3모드)을 제공합니다. Windows 실행 패키지는 Java 설치 없이 실행됩니다.
 
-**[Windows ZIP 바로 다운로드](https://github.com/yoobinkim541/SE_tetris_team6/releases/download/v0.5.0-rc.1/SE-Tetris-windows.zip)** · **[실행 JAR 다운로드](https://github.com/yoobinkim541/SE_tetris_team6/releases/download/v0.5.0-rc.1/SE-Tetris.jar)** · **[릴리스 보기](https://github.com/yoobinkim541/SE_tetris_team6/releases/tag/v0.5.0-rc.1)** · [전체 릴리스](https://github.com/yoobinkim541/SE_tetris_team6/releases)
+**[Windows ZIP 바로 다운로드](https://github.com/yoobinkim541/SE_tetris_team6/releases/download/v0.5.0-rc.2/SE-Tetris-windows.zip)** · **[실행 JAR 다운로드](https://github.com/yoobinkim541/SE_tetris_team6/releases/download/v0.5.0-rc.2/SE-Tetris.jar)** · **[릴리스 보기](https://github.com/yoobinkim541/SE_tetris_team6/releases/tag/v0.5.0-rc.2)** · [전체 릴리스](https://github.com/yoobinkim541/SE_tetris_team6/releases)
 
-현재 다운로드 버전은 **v0.5.0-rc.1 (요구사항 3 대전 모드 후보, main `60562eb`)** 입니다. 같은 릴리스의 `SHA256SUMS.txt`로 파일을 대조할 수 있습니다. 이 릴리스 뒤에 main에 반영된 P2P 다시 대전 수정(#186), 로컬 대전 키 좌우 정렬(#187), 개발자 모드(#188)는 포함되어 있지 않습니다. 그래서 이 빌드의 로컬 대전 키는 P1 방향키·P2 A/D/S/W/F이며, 아래 설명은 최신 main 기준입니다. 기말평가일은 **2026-12-01**이며, 평가 빌드는 D-1(11/30)에 고정합니다([릴리스 확인표](docs/release-checklist.md)).
+현재 다운로드 버전은 **v0.5.0-rc.2 (요구사항 3 대전 모드 후보 2, main `c929d01`)** 입니다. 같은 릴리스의 `SHA256SUMS.txt`로 파일을 대조할 수 있습니다. rc.1 이후의 P2P 다시 대전 수정(#186), 로컬 대전 키 좌우 정렬(#187), 개발자 모드(#188)가 들어 있고, 아래 설명은 이 빌드 기준입니다(develop 전용 기능은 따로 표시). 기말평가일은 **2026-12-01**이며, 평가 빌드는 D-1(11/30)에 고정합니다([릴리스 확인표](docs/release-checklist.md)).
 
 문서 바로가기
 
@@ -102,7 +102,7 @@ java -jar SE-Tetris.jar
 
 ### 개발자 모드
 
-실행 인자 `--dev`(또는 JVM 속성 `-Dtetris.dev=true`)로 켭니다. 켜지 않으면 화면과 동작은 일반 실행과 같습니다. main(#188)부터 들어 있습니다.
+실행 인자 `--dev`(또는 JVM 속성 `-Dtetris.dev=true`)로 켭니다. 켜지 않으면 화면과 동작은 일반 실행과 같습니다. v0.5.0-rc.2(main #188)부터 들어 있습니다.
 
 - 창 제목에 `[개발자 모드]`가 붙습니다.
 - P2P 로비 아래에 RTT 측정 패널이 붙습니다. 연결 중 heartbeat 왕복 시간을 자동으로 모으고, `RTT 200회 측정`으로 PING을 200번 따로 보냅니다. `CSV 저장`을 누르면 모은 표본을 `%APPDATA%/SETetrisTeam6/dev/rtt-<시각>.csv`에 저장합니다.
@@ -157,7 +157,7 @@ flowchart LR
 | 메뉴·삭제 연출·표시 (MOD/ANI/RND) | 구현·자동 검증 | [PR #100](https://github.com/yoobinkim541/SE_tetris_team6/pull/100), [#106](https://github.com/yoobinkim541/SE_tetris_team6/pull/106), [#107](https://github.com/yoobinkim541/SE_tetris_team6/pull/107) |
 | 설정·4분류 Top 10·JSON 호환 (SET/SBD/PER) | 구현·자동 검증 | [PR #100](https://github.com/yoobinkim541/SE_tetris_team6/pull/100), [#103](https://github.com/yoobinkim541/SE_tetris_team6/pull/103), [#104](https://github.com/yoobinkim541/SE_tetris_team6/pull/104) |
 | 비기능 테스트·LINE 70% 게이트 (§14.2/14.3, CI) | 구현·CI 성공 확인 | [PR #96](https://github.com/yoobinkim541/SE_tetris_team6/pull/96): 총 240,000회 입력, 시간·불변식 검증 |
-| 아이콘·JRE 포함 EXE·ZIP·JAR (DEP/CD) | 구현·릴리스 공개 | [v0.5.0-rc.1](https://github.com/yoobinkim541/SE_tetris_team6/releases/tag/v0.5.0-rc.1), [EXE 검증 기록](docs/validation-report-2026-10-26.md) |
+| 아이콘·JRE 포함 EXE·ZIP·JAR (DEP/CD) | 구현·릴리스 공개 | [v0.5.0-rc.2](https://github.com/yoobinkim541/SE_tetris_team6/releases/tag/v0.5.0-rc.2), [EXE 검증 기록](docs/validation-report-2026-10-26.md) |
 | 로컬 2인 대전·공격·대기열·승패 (3차) | 구현·자동 검증 | [Sprint 8 로컬 대전](docs/sprint8-local.md), [경계 검증 PR #175](https://github.com/yoobinkim541/SE_tetris_team6/pull/175), [스트레스 PR #177](https://github.com/yoobinkim541/SE_tetris_team6/pull/177) |
 | 3모드·P2P 로비·호스트 권위 경기 (3차) | 구현·자동 검증 | [PR #150](https://github.com/yoobinkim541/SE_tetris_team6/pull/150), [#167](https://github.com/yoobinkim541/SE_tetris_team6/pull/167) |
 | 다시 대전·지연·끊김·최근 IP (3차) | 구현·자동 검증 | [PR #158](https://github.com/yoobinkim541/SE_tetris_team6/pull/158), [#167](https://github.com/yoobinkim541/SE_tetris_team6/pull/167), [#174](https://github.com/yoobinkim541/SE_tetris_team6/pull/174), [#186](https://github.com/yoobinkim541/SE_tetris_team6/pull/186) |
@@ -173,7 +173,7 @@ flowchart LR
 |---|---|---|
 | test + JaCoCo | develop `2cacf1c` (2026-11-18 로컬) | 1,274개 / 실패 0 / 생략 21, LINE 88.28% (5,326 / 6,033) |
 | 평가 번들 (`scripts/build-eval-bundle.ps1`) | main `60562eb` (2026-11-16, [#162](https://github.com/yoobinkim541/SE_tetris_team6/issues/162)) | check·guiAcceptance·packageApp 성공, 1,237개 / 실패 0, LINE 88.31% |
-| CI | main `c929d01` (#191) | Linux 테스트·커버리지, Windows 인수·패키징 성공 |
+| Package 워크플로 (v0.5.0-rc.2) | main `c929d01` (#191) | check·guiAcceptance·packageApp·EXE 실행 성공, 1,242개 / 실패 0 / 생략 21, LINE 88.16% |
 
 2차 시점의 전체 인수 기록(requirementsAudit 71건, Java UI 배율 100/150/200%)은 [2026-10-26 보고서](docs/validation-report-2026-10-26.md)에 있습니다. 사용자 평가·교수자 확인은 위 표의 미진행 상태를 유지합니다.
 
