@@ -44,6 +44,14 @@ public interface LobbyClient extends AutoCloseable {
     /** 개발자 모드: heartbeat와 별도로 intervalMillis마다 PING을 count번 보낸다. 연결이 없으면 아무것도 하지 않는다 */
     default void probeRtt(int count, int intervalMillis) {
     }
+
+    /**
+     * 개발자 모드 연결 상태 표시용 통계 (dev-net-overlay). 활성 연결(LOBBY 이후)이 없으면 비어 있다.
+     * 수집·조회는 모두 dispatcher 스레드에서 한다.
+     */
+    default Optional<LinkStats> linkStats() {
+        return Optional.empty();
+    }
     /** Idempotently cancels work, releases resources and removes subscriptions. */
     @Override void close();
 

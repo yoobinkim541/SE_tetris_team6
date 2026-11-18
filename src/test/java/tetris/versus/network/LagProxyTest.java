@@ -99,10 +99,11 @@ class LagProxyTest {
     /**
      * 경기 상태처럼 16ms마다 끊임없이 보내도 각 메시지는 "도착 시각 + 지연"에 전달돼야 한다.
      * 지연을 기다리는 동안 도착한 데이터가 다시 한 번 지연되면 실효 지연이 최대 두 배로 부풀어 측정을 왜곡한다.
+     * 지연 100ms: 정상 왕복은 약 200ms, 누적되면 최대 약 400ms라 스케줄링 여유 100ms를 둬도 둘을 구분한다.
      */
     @Test
     void 연속_송신에서도_지연이_누적되지_않는다() throws Exception {
-        int delay = 60, messages = 60, intervalMillis = 10;
+        int delay = 100, messages = 60, intervalMillis = 10;
         try (ServerSocket echoServer = new ServerSocket(0, 1, loopback())) {
             startEchoServer(echoServer, new AtomicInteger(Integer.MIN_VALUE));
             try (LagProxy proxy = new LagProxy(
@@ -133,9 +134,9 @@ class LagProxyTest {
                         worst = Math.max(worst, TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - sent[i]));
                     }
                     sender.join();
-                    // 왕복 = 방향마다 지연 1번씩. 스케줄링 여유 50ms 안이어야 한다 (누적되면 수백 ms가 된다)
+                    // 왕복 = 방향마다 지연 1번씩. 부하가 있어도 스케줄링 여유 100ms 안이어야 한다 (누적되면 약 2배가 된다)
                     assertTrue(worst >= 2L * delay, "왕복이 주입 지연보다 짧다: " + worst + "ms");
-                    assertTrue(worst < 2L * delay + 50, "연속 송신에서 지연이 누적됐다: 최대 왕복 " + worst + "ms");
+                    assertTrue(worst < 2L * delay + 100, "연속 송신에서 지연이 누적됐다: 최대 왕복 " + worst + "ms");
                 }
             }
         }
@@ -166,12 +167,15 @@ class LagProxyTest {
         }
     }
 
+    /** 정지 시각은 start()부터 센다. 접속·첫 바이트가 부하로 늦어도 정지 전에 들어오도록 1초를 둔다 */
     @Test
     void 정지_시각_뒤_바이트는_전달되지_않고_연결은_남는다() throws Exception {
+        long stallMillis = 1_000;
         try (ServerSocket echoServer = new ServerSocket(0, 1, loopback())) {
             startEchoServer(echoServer, new AtomicInteger(Integer.MIN_VALUE));
             try (LagProxy proxy = new LagProxy(
-                    0, new InetSocketAddress(loopback(), echoServer.getLocalPort()), 0, 100)) {
+                    0, new InetSocketAddress(loopback(), echoServer.getLocalPort()), 0, stallMillis)) {
+                long startedNanos = System.nanoTime();
                 proxy.start();
                 try (Socket client = new Socket(loopback(), proxy.localPort())) {
                     client.setTcpNoDelay(true);
@@ -181,7 +185,8 @@ class LagProxyTest {
                     client.getOutputStream().flush();
                     assertEquals(1, client.getInputStream().read(), "정지 전 바이트는 그대로 통과해야 한다");
 
-                    awaitNanos(TimeUnit.MILLISECONDS.toNanos(250));
+                    long afterStall = startedNanos + TimeUnit.MILLISECONDS.toNanos(stallMillis + 250);
+                    awaitNanos(Math.max(0, afterStall - System.nanoTime()));
                     assertFalse(client.isClosed(), "정지 뒤에도 연결은 유지된다");
 
                     client.setSoTimeout(1_000);
