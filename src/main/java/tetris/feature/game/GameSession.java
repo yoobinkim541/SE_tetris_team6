@@ -14,7 +14,6 @@ import tetris.feature.item.Cell;
 import tetris.feature.item.GameModifiers;
 import tetris.feature.item.ItemResult;
 import tetris.feature.item.ItemType;
-import tetris.feature.rule.BasicRotationPolicy;
 import tetris.feature.rule.BlockGenerator;
 import tetris.feature.rule.ItemBlockGenerator;
 import tetris.feature.rule.LevelPolicy;
@@ -24,6 +23,9 @@ import tetris.feature.rule.NextBlockQueue;
 import tetris.feature.rule.RotationPolicy;
 import tetris.feature.rule.ScoringPolicy;
 import tetris.feature.rule.SpawnPolicy;
+import tetris.feature.rule.SrsRotationPolicy;
+import tetris.feature.rule.TSpinDetector;
+import tetris.feature.rule.TSpinType;
 import tetris.feature.versus.AttackRowExtractor;
 import tetris.feature.versus.api.AttackRows;
 import tetris.feature.versus.api.LockResult;
@@ -56,9 +58,11 @@ public class GameSession {
     private boolean lockDelayActive;              // 착지해 Lock 유예 타이머가 도는 중인지 (LCK-6)
     private int lockResets;                       // 이번 블록이 유예 타이머를 다시 센 횟수 (최대 LockPolicy.maxResets)
     private boolean lastActionIsRotate;           // 마지막으로 성공한 조작이 회전인지 (T-스핀 판정용, ROT-7)
+    private int lastKickIndex = -1;               // 마지막 회전에 쓰인 SRS 킥 번호. 회전한 적 없으면 -1 (TSP-3)
+    private TSpinType lastTSpin = TSpinType.NONE; // 가장 최근 Lock의 T-스핀 판정. 다음 Lock 때 바뀐다 (TSP-4)
 
     private final SpawnPolicy spawnPolicy = new SpawnPolicy();
-    private final RotationPolicy rotationPolicy = new BasicRotationPolicy();
+    private final RotationPolicy rotationPolicy = new SrsRotationPolicy(); // ROT-8: SRS Wall Kick
     private final LockPolicy lockPolicy;
     private final LevelPolicy levelPolicy;
     private final ScoringPolicy scoringPolicy = new ScoringPolicy();
@@ -128,6 +132,7 @@ public class GameSession {
         pausedDuringClearing = false;
         crushing = false;
         resetLockState();
+        lastTSpin = TSpinType.NONE;
         modifiers = new GameModifiers();
 
         state = GameState.PLAYING; // Spawn 충돌 시 PLAYING -> GAME_OVER 전이가 되도록 먼저 전환
@@ -176,8 +181,10 @@ public class GameSession {
     public void rotateRight() {
         if (state != GameState.PLAYING || spawnPending) return;
         if (currentBlock.isWeight()) return; // ITW-1: 무게추는 회전하지 않는다
-        if (!rotationPolicy.rotate(board, currentBlock)) return;
+        int kick = rotationPolicy.tryRotate(board, currentBlock);
+        if (kick < 0) return;
         lastActionIsRotate = true;
+        lastKickIndex = kick;
         onMovedOrRotated();
         listener.onChanged(snapshot());
     }
@@ -295,6 +302,9 @@ public class GameSession {
     /** 착지해 Lock 유예 타이머가 도는 중인지 (LCK-6) */
     public boolean isLockDelayActive() { return lockDelayActive; }
 
+    /** 가장 최근 Lock이 T-스핀이었는지 (TSP-4). 새 게임은 NONE에서 시작하고 Lock할 때마다 다시 판정한다 */
+    public TSpinType getLastTSpin() { return lastTSpin; }
+
     /** Compatibility hook; an in-flight lock keeps its original boundary. */
     public void setSpawnBoundary(SpawnBoundary boundary) {
         if (boundary == null) throw new IllegalArgumentException("spawnBoundary");
@@ -337,7 +347,8 @@ public class GameSession {
                 state == GameState.CLEARING ? pendingClear.flashCells() : List.of(), // ANI-5: CLEARING이 아니면 빈 목록
                 mode == GameMode.ITEM ? 10 - lines % 10 : 0,
                 modifiers.effects(),
-                board.copyItemCells());
+                board.copyItemCells(),
+                lastTSpin);
     }
 
     // ── 명세 4장 파이프라인 (내부) ────────────
@@ -414,6 +425,7 @@ public class GameSession {
         lockDelayActive = false;
         lockResets = 0;
         lastActionIsRotate = false;
+        lastKickIndex = -1;
     }
 
     /** 성공하면 한 칸 내리고 +Level (SCR-1). 실패하면 아무것도 바꾸지 않는다 (SCR-4) */
@@ -491,6 +503,7 @@ public class GameSession {
     /** §5 LOCK. Level은 L6과 다음 Spawn의 S3에서만 바뀐다 (PIPE-1) */
     private void lockCurrentBlock() {
         lockDelayActive = false;
+        lastTSpin = TSpinDetector.detect(board, currentBlock, lastActionIsRotate, lastKickIndex); // 보드에 기록하기 전 (TSP-2)
         modifiers.beginLock();
         Block placed = placeCurrentBlock();           // L1
         ClearPlan plan = collectClearTargets(placed); // L2
