@@ -37,8 +37,8 @@
 - `LobbyCode`: `ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"`, `LENGTH = 6`, `static String generate(Random)`, `static Optional<String> normalize(String input)`(공백·`-` 제거, 대문자, 길이·문자 검사), `static String display(String code)` → `K7Q-M2X`.
 - `RelayLine`: `MAX_BYTES = 64`; `static String read(InputStream in) throws IOException` — `\n`까지 한 바이트씩 읽음, 64바이트 초과·EOF는 `IOException`; `static void write(OutputStream out, String line)` — `line + "\n"` UTF-8 후 flush.
 
-- [ ] 테스트: 코드 길이·문자 집합, normalize(`" k7q-m2x "`→`K7QM2X`, `O`·`0` 포함·길이 틀림 → empty), display; RelayLine이 `OK\n` 뒤에 붙은 프레임 바이트를 스트림에 남긴다(ByteArrayInputStream으로 확인), 65바이트 거부, EOF 거부.
-- [ ] 실패 확인 → 구현 → PASS → 커밋 `Feat: [challenge] 로비 코드와 중계 핸드셰이크 줄 읽기`.
+- [x] 테스트: 코드 길이·문자 집합, normalize(`" k7q-m2x "`→`K7QM2X`, `O`·`0` 포함·길이 틀림 → empty), display; RelayLine이 `OK\n` 뒤에 붙은 프레임 바이트를 스트림에 남긴다(ByteArrayInputStream으로 확인), 65바이트 거부, EOF 거부.
+- [x] 실패 확인 → 구현 → PASS → 커밋 `Feat: [challenge] 로비 코드와 중계 핸드셰이크 줄 읽기`.
 
 ### Task 2: 중계 서버 (`tetris.relay.RelayServer`)
 
@@ -51,7 +51,7 @@
 
 **동작:** 설계 §6 그대로. 연결마다 가상 스레드 1개가 핸드셰이크를 처리하고, 짝 맺으면 방향별 pump 가상 스레드 2개를 둔다. 주기 점검(1초)이 만료·무활동·막힌 쓰기·수명을 검사한다(테스트는 `sweep()`을 직접 호출할 수 있게 package-private). 방 정리는 한 번만.
 
-- [ ] 테스트(실제 loopback 소켓, `RelayLine` 사용)
+- [x] 테스트(실제 loopback 소켓, `RelayLine` 사용)
   - 호스트 `ROOM` 수신, JOIN `OK`·호스트 `PAIRED`, 이후 양방향 바이트 그대로
   - `OK` 직후 붙은 바이트 보존: 클라이언트가 `JOIN` 줄과 바이트 10개를 한 번에 쓰면 호스트가 `PAIRED` 뒤 그 10바이트를 받음
   - 없는 코드 `NO_ROOM`, 두 번째 JOIN `ROOM_FULL`, 동시 JOIN 2개 중 정확히 하나 `OK`
@@ -61,7 +61,7 @@
   - `NO_ROOM` 11번째 `SLOW_DOWN`, 대기 방 한도 초과 `FULL`, 연결 한도 초과 즉시 닫힘
   - 읽지 않는 상대로 막힌 쓰기 → stalledWriteLimit 뒤 정리(가짜 시계)
   - 100회 접속·종료 반복 후 `openConnections()==0`, 방 0
-- [ ] 실패 확인 → 구현 → PASS(3회 `--rerun`) → 커밋 `Feat: [challenge] 로비 코드 중계 서버`.
+- [x] 실패 확인 → 구현 → PASS(3회 `--rerun`) → 커밋 `Feat: [challenge] 로비 코드 중계 서버`.
 
 ### Task 3: 게임 쪽 중계 경유 연결 수립
 
@@ -74,8 +74,8 @@
 - `AttemptState`에 `displayPeer`(null이면 기존 `socket.getInetAddress()`); 중계는 `"인터넷 · " + LobbyCode.display(code)`.
 - 취소는 기존 `cancel()`이 소켓을 닫아 워커의 블로킹 읽기를 깨운다. 늦은 `ROOM` 콜백은 `settled`면 버린다.
 
-- [ ] 테스트(로컬 `RelayServer` 사용): 두 시도가 HELLO까지 수립·역할·`peerAddress()=="인터넷 · XXX-XXX"`; 코드 콜백이 dispatcher 스레드; 없는 코드 `NO_ROOM`; 서버 없음 `RELAY_UNAVAILABLE`; 코드 받은 뒤 취소 → future 취소, 서버 `waitingRooms()==0`; 서버가 대기 방을 만료시키면 `ROOM_EXPIRED`; 수립 후 메시지 왕복.
-- [ ] 실패 확인 → 구현 → PASS → 기존 `tetris.versus.network.*` 전부 PASS → 커밋 `Feat: [challenge] 중계 서버 경유 연결 수립`.
+- [x] 테스트(로컬 `RelayServer` 사용): 두 시도가 HELLO까지 수립·역할·`peerAddress()=="인터넷 · XXX-XXX"`; 코드 콜백이 dispatcher 스레드; 없는 코드 `NO_ROOM`; 서버 없음 `RELAY_UNAVAILABLE`; 코드 받은 뒤 취소 → future 취소, 서버 `waitingRooms()==0`; 서버가 대기 방을 만료시키면 `ROOM_EXPIRED`; 수립 후 메시지 왕복.
+- [x] 실패 확인 → 구현 → PASS → 기존 `tetris.versus.network.*` 전부 PASS → 커밋 `Feat: [challenge] 중계 서버 경유 연결 수립`.
 
 ### Task 4: 로비 클라이언트
 
@@ -86,8 +86,8 @@
 - `SocketLobbyClient`: 생성자 인자에 `InetSocketAddress relayAddress` 추가(기존 생성자는 `RelayAddress.fromSystemProperty()` 기본값 `158.179.174.70:47123`). `hostOnline()`은 HOSTING, `joinOnline()`은 CONNECTING을 발행하고 기존 `onAttemptCompleted`로 합류. 중계로 수립된 링크는 `recentPeers.record`를 호출하지 않는다(시도에 `relay` 플래그).
 - `RelayAddress.parse("host:port")` IPv4 숫자만.
 
-- [ ] 테스트: 두 `SocketLobbyClient`가 로컬 서버로 LOBBY → selectConfig → 양쪽 ready → START → 경기(HostBattleClient 주입 패턴은 `P2pMatchTest` 재사용) → RESULT → returnToLobby → 재대전; 코드 구독이 HOSTING 동안 코드 1회; 최근 IP 저장소에 기록 0건; 취소 시 INITIAL과 서버 방 0.
-- [ ] 실패 확인 → 구현 → PASS → 커밋 `Feat: [challenge] 로비 클라이언트 인터넷 방 만들기·코드 입장`.
+- [x] 테스트: 두 `SocketLobbyClient`가 로컬 서버로 LOBBY → selectConfig → 양쪽 ready → START → 경기(HostBattleClient 주입 패턴은 `P2pMatchTest` 재사용) → RESULT → returnToLobby → 재대전; 코드 구독이 HOSTING 동안 코드 1회; 최근 IP 저장소에 기록 0건; 취소 시 INITIAL과 서버 방 0.
+- [x] 실패 확인 → 구현 → PASS → 커밋 `Feat: [challenge] 로비 클라이언트 인터넷 방 만들기·코드 입장`.
 
 ### Task 5: 화면
 
@@ -95,14 +95,14 @@
 
 - 패널: "인터넷 방 만들기" 버튼, "코드" 입력 칸 + "코드로 입장" 버튼 행 추가(기존 행 아래). `Actions`에 `hostOnline()`, `joinOnline(String code)`.
 - 컨트롤러: HOSTING 문구가 인터넷 모드면 `"인터넷 방 대기 중 · 코드 K7Q-M2X (친구에게 알려 주세요)"`(코드 받기 전 `"인터넷 방 만드는 중…"`). `failureText`에 설계 §7.2 문구 추가. 인터넷 모드 연결에서 끊김·TIMEOUT 안내는 `"중계 서버 연결이 끊겼습니다. 다시 시도하세요."`.
-- [ ] 테스트: 가짜 LobbyClient로 버튼 → 호출, 코드 수신 → 문구, 각 실패 코드 → 문구, LAN 문구 불변.
-- [ ] 실패 확인 → 구현 → PASS → `.\gradlew.bat check --no-daemon` PASS → 커밋 `Feat: [challenge] P2P 화면에 인터넷 방 만들기·코드 입장`.
+- [x] 테스트: 가짜 LobbyClient로 버튼 → 호출, 코드 수신 → 문구, 각 실패 코드 → 문구, LAN 문구 불변.
+- [x] 실패 확인 → 구현 → PASS → `.\gradlew.bat check --no-daemon` PASS → 커밋 `Feat: [challenge] P2P 화면에 인터넷 방 만들기·코드 입장`.
 
 ### Task 6: 배포와 실측
 
 **Files:** Create `scripts/deploy-relay.ps1`, `scripts/tetris-relay.service`; Modify 설계 문서 §8 결과
 
-- [ ] `.\gradlew.bat releaseJar` → 스크립트: `scp`로 JAR·유닛 업로드(`~/.ssh/tetris_relay`, `opc@158.179.174.70`), 서버에 `java-21-openjdk-headless` 설치(없을 때만), 기존 SSH 터널 점유 정리, `systemctl enable --now tetris-relay`, `ss -ltn`으로 47123 확인.
-- [ ] 이 PC에서 실제 서버로 두 게임 인스턴스(같은 PC 두 JVM) 연결 확인 → 성공·RTT 기록.
-- [ ] 서버 RSS·FD 기록. 커밋 `Feat: [challenge] 중계 서버 배포 스크립트와 실측`, push.
+- [x] `.\gradlew.bat releaseJar` → 스크립트: `scp`로 JAR·유닛 업로드(`~/.ssh/tetris_relay`, `opc@158.179.174.70`), Java는 dnf 대신 Temurin 21 JRE 압축 파일을 올려 풀기(dnf가 약 500MB VM을 멈춤, 설계 §6.3), 기존 SSH 터널 점유 정리, `systemctl enable --now tetris-relay`, `ss -ltn`으로 47123 확인.
+- [x] 이 PC에서 실제 서버로 두 게임 인스턴스(같은 PC 두 JVM) 연결 확인 → 성공·RTT 기록.
+- [x] 서버 RSS·FD 기록. 커밋 `Feat: [challenge] 중계 서버 배포 스크립트와 실측`, push.
 - [ ] 사람 확인 항목: 다른 LAN(핫스팟) 두 PC 3판, p95 RTT.
