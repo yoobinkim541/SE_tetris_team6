@@ -83,6 +83,8 @@ public final class SocketLobbyClient implements LobbyClient {
     private long connectionSequence;
     private String currentMatchId;
     private boolean closed;
+    /** 이번 접속이 성공하면 최근 접속 주소에 남길지 (인터넷 대전의 루프백 접속은 남기지 않는다) */
+    private boolean rememberPeer = true;
     private final Supplier<LocalMatchEngine> engines;
     private final MatchClock clock;
     private final MatchPulse pulse;
@@ -190,6 +192,11 @@ public final class SocketLobbyClient implements LobbyClient {
 
     @Override
     public CompletionStage<Void> connect(String address, int port) {
+        return connect(address, port, true);
+    }
+
+    @Override
+    public CompletionStage<Void> connect(String address, int port, boolean rememberPeer) {
         ensureOpen();
         ensureInitial();
         CompletableFuture<Void> stage = new CompletableFuture<>();
@@ -198,6 +205,7 @@ public final class SocketLobbyClient implements LobbyClient {
         this.activeAttempt = attempt;
         this.pendingStage = stage;
         this.boundPort = -1;
+        this.rememberPeer = rememberPeer;
         attempt.result().whenComplete((link, error) -> onAttemptCompleted(attempt, stage, link, error));
         return stage;
     }
@@ -372,7 +380,7 @@ public final class SocketLobbyClient implements LobbyClient {
         currentMatchId = null;
         startHeartbeat(link);
         Role lobbyRole = (link.role() == PeerRole.HOST) ? Role.HOST : Role.CLIENT;
-        if (lobbyRole == Role.CLIENT) {
+        if (lobbyRole == Role.CLIENT && rememberPeer) {
             String peerAddress = link.peerAddress();
             try {
                 io.execute(() -> {

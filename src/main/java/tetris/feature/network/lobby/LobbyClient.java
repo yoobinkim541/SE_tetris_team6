@@ -16,6 +16,13 @@ public interface LobbyClient extends AutoCloseable {
     /** Completes on entering LOBBY; fails exceptionally on connection failure. */
     CompletionStage<Void> host(int port);
     CompletionStage<Void> connect(String address, int port);
+    /**
+     * rememberPeer가 false면 접속에 성공해도 최근 접속 주소에 남기지 않는다.
+     * 인터넷 대전은 이 PC의 중계 루프백 주소로 접속하므로 남길 주소가 아니다
+     */
+    default CompletionStage<Void> connect(String address, int port, boolean rememberPeer) {
+        return connect(address, port);
+    }
     /** Idempotently cancels pending establishment and returns to INITIAL. */
     void cancel();
     /** Host-only in LOBBY; increments revision and clears both votes. */
