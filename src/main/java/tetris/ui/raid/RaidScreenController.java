@@ -327,12 +327,12 @@ public final class RaidScreenController implements AutoCloseable {
         if (!solo) return raceGuide() + "\n카드는 좌우 후 하드 드롭";
         KeyMap map = keys == null ? new KeyMap() : keys;
         return Messages.keyName(map, GameAction.MOVE_LEFT) + "/" + Messages.keyName(map, GameAction.MOVE_RIGHT) + " 이동"
-                + "  ·  " + Messages.keyName(map, GameAction.ROTATE) + "/" + Messages.keyName(map, GameAction.ROTATE_CCW) + " 회전"
-                + "  ·  " + Messages.keyName(map, GameAction.HARD_DROP) + " 하드"
-                + "  ·  " + Messages.keyName(map, GameAction.HOLD) + " 홀드"
-                + "  ·  R 필살"
-                + "  ·  " + Messages.keyName(map, GameAction.PAUSE) + " 일시정지"
-                + "  ·  " + Messages.keyName(map, GameAction.QUIT) + " 나가기";
+                + " - " + Messages.keyName(map, GameAction.ROTATE) + "/" + Messages.keyName(map, GameAction.ROTATE_CCW) + " 회전"
+                + " - " + Messages.keyName(map, GameAction.HARD_DROP) + " 하드"
+                + " - " + Messages.keyName(map, GameAction.HOLD) + " 홀드"
+                + " - R 필살"
+                + " - " + Messages.keyName(map, GameAction.PAUSE) + " 일시정지"
+                + " - " + Messages.keyName(map, GameAction.QUIT) + " 나가기";
     }
 
 }

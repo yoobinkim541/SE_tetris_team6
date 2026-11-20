@@ -1,12 +1,16 @@
 package tetris.ui.fx;
 
+import java.awt.AlphaComposite;
 import java.awt.Color;
+import java.awt.Composite;
 import java.awt.Font;
 import java.awt.Graphics2D;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import tetris.feature.raid.api.RaidEvent;
+import tetris.ui.theme.GameTheme;
+import tetris.ui.theme.UiKit;
 
 /**
  * 줄 삭제 불꽃, 화면 흔들림, 데미지 숫자, 가운데 큰 문구, 보스 피격 번쩍임.
@@ -55,7 +59,7 @@ public final class FxLayer {
 
     /** 보드를 옆으로 밀 픽셀. 4줄(데미지 70)과 필살은 크게 */
     public int shakeX() {
-        if (shake <= 0) return 0;
+        if (shake <= 0 || StarfieldBackground.lowEffects()) return 0;
         int amp = shake > 8 ? 7 : 3;
         return shakeDir * Math.min(amp, shake);
     }
@@ -74,15 +78,16 @@ public final class FxLayer {
 
     /** boardX/boardTop: 참가자 0, 1의 보드 가운데·위. 없는 참가자는 건너뛴다 */
     public void paintNumbers(Graphics2D g, int[] boardCenterX, int boardTop) {
-        g.setFont(new Font(Font.DIALOG, Font.BOLD, 22));
         for (Floater floater : numbers) {
             if (floater.player < 0 || floater.player >= boardCenterX.length) continue;
             int alpha = Math.min(255, floater.life * 8);
             int rgb = colorBlind ? (floater.crit ? 0xE69F00 : 0x56B4E9) : floater.rgb;
-            g.setColor(new Color((rgb & 0x00ffffff) | (alpha << 24), true));
             String text = floater.crit ? "치명 " + floater.text : floater.text;
-            int x = boardCenterX[floater.player] - g.getFontMetrics().stringWidth(text) / 2;
-            g.drawString(text, x, boardTop + (int) floater.y);
+            Font font = floater.crit ? GameTheme.popup(420) : GameTheme.fontFor(text, GameTheme.popup(288).getSize(), true);
+            Composite previous = g.getComposite();
+            g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, Math.max(0.15f, alpha / 255f)));
+            UiKit.paintGlowText(g, text, font, new Color(rgb), boardCenterX[floater.player], boardTop + (int) floater.y);
+            g.setComposite(previous);
         }
     }
 
@@ -90,13 +95,11 @@ public final class FxLayer {
         if (banners.isEmpty()) return;
         Banner banner = banners.get(banners.size() - 1);
         int alpha = Math.min(255, banner.life * 10);
-        g.setFont(new Font(Font.DIALOG, Font.BOLD, 42));
-        g.setColor(new Color(0, 0, 0, alpha / 2));
-        int width = g.getFontMetrics().stringWidth(banner.text);
-        g.drawString(banner.text, centerX - width / 2 + 2, centerY + 2);
         int rgb = colorBlind ? 0xF0E442 : banner.rgb;
-        g.setColor(new Color((rgb & 0x00ffffff) | (alpha << 24), true));
-        g.drawString(banner.text, centerX - width / 2, centerY);
+        Composite previous = g.getComposite();
+        g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, Math.max(0.2f, alpha / 255f)));
+        UiKit.paintGlowText(g, banner.text, GameTheme.popup(480), new Color(rgb), centerX, centerY);
+        g.setComposite(previous);
     }
 
     private void absorb(RaidEvent event) {
@@ -128,7 +131,7 @@ public final class FxLayer {
                 burst(1, 0x7EE7FF);
             }
             case BOSS_ATTACK -> flash = Math.max(flash, 70);
-            case BOSS_DEFEATED -> { if (event.player() >= 0) banner("선수를 빼앗김", 0xFFC94D); }
+            case BOSS_DEFEATED -> { }
             default -> {
             }
         }
