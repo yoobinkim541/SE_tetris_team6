@@ -92,7 +92,7 @@ public final class P2pLobbyController implements P2pLobbyPanel.Actions, AutoClos
     public P2pLobbyController(LobbyClient lobby, Navigation navigation, IntSupplier localPort,
                               Supplier<List<String>> lanAddresses, Supplier<List<String>> recentPeers) {
         this(lobby, navigation, localPort, lanAddresses, recentPeers,
-                () -> new InternetRelay(InternetRelay.configuredEndpoints(), SwingUtilities::invokeLater));
+                () -> new InternetRelay(InternetRelay.configuredUri(), SwingUtilities::invokeLater));
     }
 
     /** relayFactory: 인터넷 대전을 시작할 때마다 새 중계 접속 하나를 만든다 (테스트는 가짜 중계) */

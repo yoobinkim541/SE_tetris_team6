@@ -126,33 +126,6 @@ class InternetRelayTest {
     }
 
     @Test
-    void 첫_주소가_막혀_있으면_다음_주소로_접속한다() throws Exception {
-        URI blocked = URI.create("ws://blocked.test:47131/relay");
-        java.util.List<URI> tried = new java.util.ArrayList<>();
-        RelayTransport fallback = (uri, timeout, listener) -> {
-            tried.add(uri);
-            return uri.equals(blocked)
-                    ? CompletableFuture.failedFuture(new IOException("timed out"))
-                    : server.open(uri, timeout, listener);
-        };
-        var endpoints = java.util.List.of(
-                new InternetRelay.Endpoint(blocked, java.time.Duration.ofSeconds(2)),
-                new InternetRelay.Endpoint(RELAY, java.time.Duration.ofSeconds(8)));
-        try (ServerSocket hostGame = new ServerSocket(0, 1, InetAddress.getLoopbackAddress());
-             InternetRelay host = new InternetRelay(endpoints, Runnable::run, fallback)) {
-            assertTrue(await(host.openRoom(hostGame.getLocalPort())).matches("\\d{4}"));
-            assertEquals(java.util.List.of(blocked, RELAY), tried);
-        }
-    }
-
-    @Test
-    void 기본_주소는_바로_붙는_포트를_먼저_시도한다() {
-        assertEquals(java.util.List.of(InternetRelay.DIRECT, InternetRelay.PROXY), InternetRelay.configuredEndpoints());
-        assertTrue(InternetRelay.DIRECT.connectTimeout().compareTo(InternetRelay.PROXY.connectTimeout()) < 0,
-                "막혀 있을 때 오래 기다리지 않도록 바로 붙는 포트는 짧게 기다린다");
-    }
-
-    @Test
     void 짝이_지어지기_전에_닫으면_대기_중인_결과는_CLOSED로_끝난다() throws Exception {
         try (ServerSocket hostGame = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
             InternetRelay host = relay();
