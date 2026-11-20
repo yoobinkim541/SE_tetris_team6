@@ -3,14 +3,18 @@ package tetris.ui;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.event.KeyEvent;
+import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.List;
 import javax.swing.JPanel;
+import tetris.ui.fx.AssetStore;
+import tetris.ui.fx.StarfieldBackground;
 
 /** 시작 메뉴: SE Tetris 제목 + 메뉴 항목 (게임 시작 / 설정 / 스코어보드 / 게임 종료). 기존 LandingScreen + MenuScreen 통합. */
 public class MainMenuPanel extends JPanel {
     private final List<MenuItem> items;
     private final List<String> warnings = new ArrayList<>();
+    private final StarfieldBackground stars;
     private int selected;
 
     public MainMenuPanel(List<MenuItem> items) {
@@ -18,6 +22,7 @@ public class MainMenuPanel extends JPanel {
         this.items = List.copyOf(items);
         setBackground(Theme.BACKGROUND);
         setFocusable(true);
+        stars = new StarfieldBackground(this, AssetStore.BG_MENU);
 
         KeyBindingManager.bindKey(this, KeyEvent.VK_UP, () -> moveSelection(-1));
         KeyBindingManager.bindKey(this, KeyEvent.VK_DOWN, () -> moveSelection(1));
@@ -55,13 +60,24 @@ public class MainMenuPanel extends JPanel {
         int w = getWidth();
         int h = getHeight();
         int unit = Theme.unit(h);
+        stars.paint(g2, w, h);
 
-        g2.setFont(Theme.text(unit * 3, true));
-        g2.setColor(Theme.ACCENT);
-        Theme.drawCentered(g2, Messages.get("app.title"), w / 2, h / 4);
+        BufferedImage logo = AssetStore.SHARED.fit(AssetStore.LOGO, (int) (w * 0.62), Math.max(unit * 4, h / 5));
+        if (logo != null) {
+            g2.drawImage(logo, (w - logo.getWidth()) / 2, Math.max(unit, h / 10), null);
+        } else {
+            g2.setFont(Theme.text(unit * 3, true));
+            g2.setColor(Theme.ACCENT);
+            Theme.drawCentered(g2, Messages.get("app.title"), w / 2, h / 4);
+        }
 
         List<String> labels = items.stream().map(MenuItem::label).toList();
-        Theme.drawMenu(g2, labels, selected, w / 2, h * 2 / 5, unit + unit / 3);
+        int fontSize = unit + unit / 3;
+        int menuTop = h * 2 / 5 - fontSize;
+        int menuHeight = labels.size() * fontSize * 2 + fontSize;
+        g2.setColor(new java.awt.Color(8, 10, 24, 150));
+        g2.fillRoundRect(w / 5, menuTop, w * 3 / 5, menuHeight, 18, 18);
+        Theme.drawMenu(g2, labels, selected, w / 2, h * 2 / 5, fontSize);
 
         g2.setFont(Theme.text(Math.max(10, unit * 3 / 4), false));
         g2.setColor(Theme.WARNING);

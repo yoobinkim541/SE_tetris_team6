@@ -21,6 +21,9 @@ public class Messages {
         TEXT.put("menu.settings", "설정");
         TEXT.put("menu.scoreboard", "스코어보드");
         TEXT.put("menu.exit", "게임 종료");
+        TEXT.put("menu.raid", "보스 레이드");
+        TEXT.put("menu.raid.solo", "솔로 레이드");
+        TEXT.put("menu.raid.coop", "협동 레이드 (2인)");
 
         TEXT.put("game.next", "NEXT");
         TEXT.put("game.score", "SCORE");
@@ -159,6 +162,8 @@ public class Messages {
             case BATTLE_RESULT -> "Enter 모드 선택 · Esc 메인 메뉴";
             case P2P_LOBBY -> "호스트 대기 또는 IP 접속 · 양쪽 모두 게임 시작";
             case P2P_RESULT -> "Enter 로비로 · Esc 메인 메뉴";
+            case RAID_MENU -> get("guide.mainMenu");
+            case RAID -> "R 필살 · P 일시정지 · Esc 나가기";
             case MAIN_MENU -> get("guide.mainMenu");
             case SETTINGS -> get("guide.settings");
             case SCOREBOARD -> get("guide.scoreboard");
