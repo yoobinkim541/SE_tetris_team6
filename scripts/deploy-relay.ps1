@@ -60,7 +60,7 @@ Write-Host '== 3/4 VM 준비와 서비스 재시작 =='
 # 원격 셸 스크립트는 ASCII만 쓴다. 하는 일: 스왑이 없으면 1GB 추가,
 # 메모리를 많이 쓰는 백그라운드 작업 끄기(dnf 캐시 자동 갱신 타이머와 PCP 성능 기록. 부팅 약 1시간 뒤 dnf 캐시 갱신 때 VM이 멈췄다.
 # 손으로 하는 dnf 설치와 Oracle 모니터링 에이전트는 그대로 둔다), JRE 풀기(새 폴더에 푼 뒤 바꿔 끼움),
-# 전용 사용자, 예전 SSH 역방향 터널(sshd)이 포트를 잡고 있으면 정리, JAR·유닛 설치, 재시작, 포트 확인
+# 전용 사용자, 예전 SSH 역방향 터널(sshd)이 포트를 잡고 있으면 정리, JAR·유닛 설치(Windows 체크아웃의 CRLF 제거), 재시작, 포트 확인
 $remote = @'
 set -euo pipefail
 if ! swapon --show | grep -q .; then
@@ -88,6 +88,7 @@ for pid in $(sudo ss -ltnpH "( sport = :__PORT__ )" | grep -o 'sshd[^)]*pid=[0-9
   sudo kill "$pid" || true
 done
 sudo install -D -m 0644 /tmp/SE-Tetris.jar /opt/tetris-relay/relay.jar
+sed -i 's/\r$//' /tmp/tetris-relay.service
 sudo install -m 0644 /tmp/tetris-relay.service /etc/systemd/system/tetris-relay.service
 rm -f /tmp/SE-Tetris.jar /tmp/tetris-relay.service /tmp/jre21-linux-x64.tar.gz
 sudo systemctl daemon-reload
