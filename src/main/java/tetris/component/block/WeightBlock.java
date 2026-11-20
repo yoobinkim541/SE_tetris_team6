@@ -43,4 +43,14 @@ public class WeightBlock extends Block {
     public void rotateClockwise() {
         // ITW-1: 회전 입력은 무시한다
     }
+
+    @Override
+    public int[][] rotateLeft() {
+        return rotateRight();
+    }
+
+    @Override
+    public void rotateCounterClockwise() {
+        // ITW-1: 회전 입력은 무시한다
+    }
 }

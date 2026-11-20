@@ -259,24 +259,30 @@ public class MainFrame extends JFrame {
     }
 
     private GameSession createSession(GameMode mode) {
-        return newSession(mode, settings.getDifficulty(), new Random(), new SwingGameClock(this::onTick), gamePanel);
+        return newSession(mode, settings.getDifficulty(), settings.getControlStyle(), new Random(), new SwingGameClock(this::onTick), gamePanel);
     }
 
     /**
      * 한 판을 진행할 세션을 만든다. 블록은 난이도 가중치를 쓰는 WeightedBlockGenerator로 만들어,
      * 분포 테스트를 통과한 생성기가 실제 게임에서도 그대로 쓰이게 한다.
      * 아이템 모드는 항상 NORMAL 규칙이라 가중치도 NORMAL로 맞춘다.
+     * 조작 방식은 시작할 때의 설정을 따른다 (CTL-1).
      */
     static GameSession newSession(GameMode mode, Difficulty difficulty, Random random, GameClock clock, GameListener listener) {
+        return newSession(mode, difficulty, tetris.feature.setting.ControlStyle.MODERN, random, clock, listener);
+    }
+
+    static GameSession newSession(GameMode mode, Difficulty difficulty, tetris.feature.setting.ControlStyle style,
+                                  Random random, GameClock clock, GameListener listener) {
         Difficulty effective = mode == GameMode.ITEM ? Difficulty.NORMAL : difficulty;
-        return new GameSession(mode, effective, new WeightedBlockGenerator(effective.weights(), random), clock, listener);
+        return new GameSession(mode, effective, new WeightedBlockGenerator(effective.weights(), random), clock, listener, style);
     }
 
     private void startGame(GameMode mode) {
         closeBattle();
         session.end();
         session = createSession(mode);
-        keyBindings.bindGameKeys(gamePanel, settings.getKeyMap(), session);
+        keyBindings.bindGameKeys(gamePanel, settings.getKeyMap(), session, settings.getControlStyle());
         keyBindings.setSuspended(false);
         keyBindings.clearPressedKeys();
         showScreen(Screen.GAME);
@@ -390,7 +396,7 @@ public class MainFrame extends JFrame {
         BattlePanel panel = prepareBattleScreen(keys, label, mode, null);
         long generation = battleGeneration;
         battleController = new BattleScreenController(getRootPane(),
-                battleFactory.apply(BattleModes.localConfig(mode, settings.getDifficulty())), keys, panel,
+                battleFactory.apply(BattleModes.localConfig(mode, settings.getDifficulty(), settings.getControlStyle())), keys, panel,
                 snapshot -> SwingUtilities.invokeLater(() -> {
                     if (currentScreen != Screen.BATTLE || generation != battleGeneration) return;
                     battleResultPanel.setSnapshot(snapshot, label);
@@ -462,6 +468,7 @@ public class MainFrame extends JFrame {
             addScreen(Screen.P2P_LOBBY, screen);
         }
         showScreen(Screen.P2P_LOBBY);
+        if (p2p != null) p2p.useControlStyle(settings.getControlStyle());
         debugOverlay.refresh(); // 개발자 모드면 로비 줄 표시를 시작한다
     }
 

@@ -18,4 +18,12 @@ public interface RotationPolicy {
     default int tryRotate(Board board, Block block) {
         return rotate(board, block) ? 0 : -1;
     }
+
+    /**
+     * 반시계 90° 회전. 성공하면 킥 번호(0 = 제자리), 실패하면 -1.
+     * 1차 규칙(BasicRotationPolicy)도 제자리 반시계는 가능하지만, 클래식 조작에서는 세션이 호출하지 않는다 (ROT-9).
+     */
+    default int tryRotateCounterClockwise(Board board, Block block) {
+        return -1;
+    }
 }

@@ -35,7 +35,7 @@ class BattleDemoAcceptanceTest {
                     var output=new java.io.File("build/reports/sprint7-demo.png"); output.getParentFile().mkdirs();
                     javax.imageio.ImageIO.write(image,"png",output);
                 } catch(java.io.IOException error) { throw new java.io.UncheckedIOException(error); }
-                key(root,KeyEvent.VK_Q,false); assertFalse(frame.isDisplayable());
+                key(root,KeyEvent.VK_ESCAPE,false); assertFalse(frame.isDisplayable());
             } finally { frame.dispose(); }
         });
     }

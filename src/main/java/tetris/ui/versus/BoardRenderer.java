@@ -1,5 +1,7 @@
 package tetris.ui.versus;
-
+import java.awt.AlphaComposite;
+import java.awt.Color;
+import java.awt.Composite;
 import java.awt.Color;
 import java.awt.Font;
 import java.awt.Graphics2D;
@@ -18,6 +20,24 @@ public final class BoardRenderer {
             for (int r=0;r<cells.length;r++) for (int c=0;c<cells[r].length;c++)
                 paintCell(board,cells[r][c],x+c*size,y+r*size,size);
         } finally { board.dispose(); }
+    }
+    /** 착지 미리보기. 색맹 모드는 윤곽만 그린다 (GST-2) */
+    public void paintGhost(Graphics2D g, int[][] ghost, int x, int y, int size) {
+        if (ghost == null || size <= 0) return;
+        Graphics2D layer = (Graphics2D) g.create();
+        try {
+            if (!colorBlind) layer.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.35f));
+            for (int r = 0; r < ghost.length; r++) for (int c = 0; c < ghost[r].length; c++) {
+                if (ghost[r][c] == 0) continue;
+                int px = x + c * size, py = y + r * size;
+                if (colorBlind) {
+                    layer.setColor(palette.color(tetris.component.block.BlockType.values()[ghost[r][c] - 1], true));
+                    layer.drawRect(px + 2, py + 2, Math.max(1, size - 5), Math.max(1, size - 5));
+                } else {
+                    paintCell(layer, ghost[r][c], px, py, size);
+                }
+            }
+        } finally { layer.dispose(); }
     }
     /** items: cells와 같은 크기. 0이 아닌 칸은 아이템 문자(L·B·D·S)를 흰 바탕에 그린다 (R3-ITEM) */
     public void paint(Graphics2D g, int[][] cells, int[][] items, int x, int y, int size) {

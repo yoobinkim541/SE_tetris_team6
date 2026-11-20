@@ -341,8 +341,8 @@ class BattleModesEngineTest {
         press(e, PlayerId.ONE, GameAction.HARD_DROP);
         e.advance(0);
         e.advance(150);
-        // The reservation is consumed as soon as the Next preview refills on Spawn.
-        assertTrue(isItemBlock(one.snapshot().nextBlock()), "P1 crossed 10 lines");
+        // 모던 Next는 3개라, 줄을 넘긴 직후 채워진 새 블록은 미리보기의 맨 뒤다
+        assertTrue(one.snapshot().nextBlocks().stream().anyMatch(BattleModesEngineTest::isItemBlock), "P1 crossed 10 lines");
         assertFalse(isItemBlock(session(e, PlayerId.TWO).snapshot().nextBlock()), "P2 reservation untouched");
         assertFalse(itemPending(session(e, PlayerId.TWO)));
     }

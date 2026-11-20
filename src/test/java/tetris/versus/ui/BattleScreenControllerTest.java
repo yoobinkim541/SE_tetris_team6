@@ -17,7 +17,7 @@ class BattleScreenControllerTest {
                 new BattlePanel(false), state -> {
                     assertEquals(MatchResult.EndReason.FORFEIT, state.result().reason()); result.incrementAndGet();
                 }, () -> true, exit::incrementAndGet);
-            key(root, KeyEvent.VK_Q, false);
+            key(root, KeyEvent.VK_ESCAPE, false);
             assertEquals(1, result.get()); assertEquals(0, exit.get()); controller.close();
         });
     }
@@ -31,7 +31,7 @@ class BattleScreenControllerTest {
             },()->{});
             try {
                 key(root,KeyEvent.VK_P,false);key(root,KeyEvent.VK_P,true);key(root,KeyEvent.VK_P,false);
-                assertEquals(MatchPhase.PLAYING,state.get().phase());key(root,KeyEvent.VK_Q,false);
+                assertEquals(MatchPhase.PLAYING,state.get().phase());key(root,KeyEvent.VK_ESCAPE,false);
                 assertEquals(MatchPhase.PLAYING,state.get().phase());
                 controller.focusLost();assertEquals(MatchPhase.PAUSED,state.get().phase());
             } finally {controller.close();}
@@ -86,11 +86,11 @@ class BattleScreenControllerTest {
             var exits = new AtomicInteger(); var answer = new java.util.concurrent.atomic.AtomicBoolean();
             var controller = new BattleScreenController(root, client, new BattleKeyMap(),
                 new BattlePanel(false), s -> {}, answer::get, exits::incrementAndGet);
-            key(root, KeyEvent.VK_Q, false); key(root, KeyEvent.VK_Q, true);
+            key(root, KeyEvent.VK_ESCAPE, false); key(root, KeyEvent.VK_ESCAPE, true);
             assertEquals(0, exits.get());
             key(root, KeyEvent.VK_LEFT, false); key(root, KeyEvent.VK_LEFT, true);
             assertTrue(client.commands().stream().anyMatch(c -> c.playerId() == PlayerId.TWO));
-            answer.set(true); key(root, KeyEvent.VK_Q, false);
+            answer.set(true); key(root, KeyEvent.VK_ESCAPE, false);
             assertEquals(1, exits.get()); controller.close();
             assertNull(root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).get(KeyStroke.getKeyStroke(KeyEvent.VK_A,0)));
         });
@@ -106,11 +106,11 @@ class BattleScreenControllerTest {
             var controller = BattleScreenController.online(root, client, BattleKeyMap.online(), panel,
                 s -> results.incrementAndGet());
             try {
-                key(root, KeyEvent.VK_Q, false); key(root, KeyEvent.VK_Q, true);
+                key(root, KeyEvent.VK_ESCAPE, false); key(root, KeyEvent.VK_ESCAPE, true);
                 assertEquals(MatchPhase.PLAYING, state.get().phase(), "the first Q neither pauses nor forfeits");
                 assertFalse(panel.notice().isEmpty(), "the first Q explains how to confirm");
                 assertEquals(0, results.get());
-                key(root, KeyEvent.VK_Q, false);
+                key(root, KeyEvent.VK_ESCAPE, false);
                 assertEquals(MatchPhase.FINISHED, state.get().phase());
                 assertEquals(MatchResult.win(PlayerId.TWO, MatchResult.EndReason.FORFEIT), state.get().result());
                 assertEquals(1, results.get());
@@ -124,10 +124,10 @@ class BattleScreenControllerTest {
             var panel = new BattlePanel(false);
             var controller = BattleScreenController.online(root, client, BattleKeyMap.online(), panel, s -> { });
             try {
-                key(root, KeyEvent.VK_Q, false); key(root, KeyEvent.VK_Q, true);
+                key(root, KeyEvent.VK_ESCAPE, false); key(root, KeyEvent.VK_ESCAPE, true);
                 key(root, KeyEvent.VK_LEFT, false); key(root, KeyEvent.VK_LEFT, true);
                 assertTrue(panel.notice().isEmpty());
-                key(root, KeyEvent.VK_Q, false);
+                key(root, KeyEvent.VK_ESCAPE, false);
                 assertEquals(MatchPhase.PLAYING, state.get().phase(), "a Q after another key starts over");
             } finally { controller.close(); }
         });

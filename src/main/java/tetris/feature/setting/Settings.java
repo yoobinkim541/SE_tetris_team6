@@ -8,11 +8,13 @@ public class Settings {
     private static final boolean DEFAULT_COLOR_BLIND_MODE = false;
     private static final boolean DEFAULT_DEV_NETWORK_OVERLAY = false; // 개발자 모드: 기본 꺼짐
     private static final Difficulty DEFAULT_DIFFICULTY = Difficulty.NORMAL; // DIF-1
+    private static final ControlStyle DEFAULT_CONTROL_STYLE = ControlStyle.MODERN; // CTL-1
 
     private ScreenSize screenSize = DEFAULT_SCREEN_SIZE;
     private boolean colorBlindMode = DEFAULT_COLOR_BLIND_MODE;
     private boolean devNetworkOverlay = DEFAULT_DEV_NETWORK_OVERLAY;
     private Difficulty difficulty = DEFAULT_DIFFICULTY;
+    private ControlStyle controlStyle = DEFAULT_CONTROL_STYLE;
     private final KeyMap keyMap = new KeyMap();
 
     public ScreenSize getScreenSize() {
@@ -50,6 +52,15 @@ public class Settings {
         this.difficulty = difficulty;
     }
 
+    public ControlStyle getControlStyle() {
+        return controlStyle;
+    }
+
+    public void setControlStyle(ControlStyle style) {
+        if (style == null) throw new IllegalArgumentException("style cannot be null");
+        controlStyle = style;
+    }
+
     /** 키 변경은 KeyMap의 검증 메서드(assign, tryReplaceAll)로만 한다 */
     public KeyMap getKeyMap() {
         return keyMap;
@@ -61,6 +72,7 @@ public class Settings {
         colorBlindMode = DEFAULT_COLOR_BLIND_MODE;
         devNetworkOverlay = DEFAULT_DEV_NETWORK_OVERLAY;
         difficulty = DEFAULT_DIFFICULTY;
+        controlStyle = DEFAULT_CONTROL_STYLE;
         keyMap.resetToDefaults();
     }
 }

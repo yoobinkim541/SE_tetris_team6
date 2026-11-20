@@ -9,7 +9,7 @@ import java.util.Set;
 
 /**
  * 기능 - 키(VK 코드) 매핑과 변경 검증 (KEY-1~6). 기존 ControlKeySet / ControlKeyChange 흡수.
- * 불변식: 7개 기능 모두 지정 가능한 키를 가지며 서로 겹치지 않는다 (KEY-3). 이를 깨는 변경은 적용하지 않는다.
+ * 불변식: 기능마다 지정 가능한 키를 가지며 서로 겹치지 않는다 (KEY-3). 이를 깨는 변경은 적용하지 않는다.
  */
 public class KeyMap {
     public enum AssignResult { OK, UNCHANGED, RESERVED_KEY, DUPLICATE }
@@ -28,7 +28,9 @@ public class KeyMap {
         map.put(GameAction.MOVE_RIGHT, KeyEvent.VK_RIGHT);
         map.put(GameAction.SOFT_DROP, KeyEvent.VK_DOWN);
         map.put(GameAction.ROTATE, KeyEvent.VK_UP);
+        map.put(GameAction.ROTATE_CCW, KeyEvent.VK_Z);
         map.put(GameAction.HARD_DROP, KeyEvent.VK_SPACE);
+        map.put(GameAction.HOLD, KeyEvent.VK_C);
         map.put(GameAction.PAUSE, KeyEvent.VK_P);
         map.put(GameAction.QUIT, KeyEvent.VK_Q);
         return Collections.unmodifiableMap(map); //unmodifiableMap은 내부 element 수정이 불가능하므로 외부에서 DEFAULTS 수정을 구조적으로 차단한다.
@@ -61,7 +63,7 @@ public class KeyMap {
         return AssignResult.OK;
     }
 
-    /** 7개 기능 전체를 한 번에 바꾼다. 누락·예약키·중복이 하나라도 있으면 아무것도 바꾸지 않고 false (명세 12.2) */
+    /** 기능 전체를 한 번에 바꾼다. 누락·예약키·중복이 하나라도 있으면 아무것도 바꾸지 않고 false (명세 12.2) */
     public boolean tryReplaceAll(Map<GameAction, Integer> newKeys) {
         //전체 GameAction에 대한 키 바인딩이 newKeys에 정의되어 있지 않다 -> 키 프리셋 대체 실패
         if (newKeys == null || !newKeys.keySet().containsAll(DEFAULTS.keySet())) return false;

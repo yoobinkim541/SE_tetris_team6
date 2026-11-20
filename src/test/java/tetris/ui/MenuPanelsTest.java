@@ -155,7 +155,7 @@ public class MenuPanelsTest {
 
     @Test
     void devNetworkOverlayIsHiddenWithoutDevFlag() { // 일반 실행의 설정 화면은 2차와 같다
-        settingPanel.moveSelection(4); // Color Blind 바로 아래는 Reset Scoreboard
+        settingPanel.moveSelection(5); // 조작 방식 다음이 Reset Scoreboard
         settingPanel.activateSelected();
         assertFalse(settings.isDevNetworkOverlay());
         assertEquals(0, saves, "Reset Scoreboard 확인창만 열리고 설정은 바뀌지 않는다");
@@ -164,7 +164,7 @@ public class MenuPanelsTest {
     @Test
     void devNetworkOverlayTogglesRightAfterColorBlindUnderDevFlag() { // dev-net-overlay
         SettingPanel dev = new SettingPanel(settings, () -> { saves++; return true; }, () -> true, () -> { }, () -> true);
-        dev.moveSelection(4); // Color Blind 바로 아래
+        dev.moveSelection(5); // 색맹, 조작 방식 다음이 개발자 항목
         dev.activateSelected();
         assertTrue(settings.isDevNetworkOverlay());
         assertEquals(1, saves, "바뀐 설정은 바로 저장한다");
@@ -176,7 +176,7 @@ public class MenuPanelsTest {
     @Test
     void savedDevNetworkOverlayStaysVisibleUntilTurnedOff() { // --dev 없이도 켜진 값은 끌 수 있어야 한다
         settings.setDevNetworkOverlay(true);
-        settingPanel.moveSelection(4);
+        settingPanel.moveSelection(5);
         settingPanel.activateSelected();
         assertFalse(settings.isDevNetworkOverlay());
 
@@ -196,7 +196,7 @@ public class MenuPanelsTest {
     @Test
     void keyCaptureAppliesValidKey() {
         settingPanel.openControlKeys();
-        settingPanel.moveSelection(4); // HARD_DROP
+        settingPanel.moveSelection(5); // HARD_DROP (반시계가 하나 늘었다)
         settingPanel.activateSelected();
         assertTrue(settingPanel.isCapturing());
 

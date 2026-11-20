@@ -16,6 +16,7 @@ import tetris.feature.network.lobby.LobbySnapshot;
 import tetris.feature.network.lobby.LobbySnapshot.Role;
 import tetris.feature.network.lobby.LobbySnapshot.State;
 import tetris.feature.versus.api.BattleClient;
+import tetris.feature.setting.ControlStyle;
 import tetris.feature.versus.api.BattleMode;
 import tetris.feature.versus.api.MatchConfig;
 
@@ -62,6 +63,7 @@ public final class P2pLobbyController implements P2pLobbyPanel.Actions, AutoClos
     private boolean error;
     private LobbySnapshot current;
     private BattleMode selectedMode = BattleMode.CLASSIC;
+    private ControlStyle controlStyle = ControlStyle.MODERN;
     private String message = "";
     private long attempt;
     private boolean inMatch;
@@ -154,7 +156,7 @@ public final class P2pLobbyController implements P2pLobbyPanel.Actions, AutoClos
         selectedMode = Objects.requireNonNull(mode);
         if (closed || current.role() != Role.HOST || current.state() != State.LOBBY) return;
         if (current.config() != null && current.config().mode() == mode) return;
-        lobby.selectConfig(MatchConfig.of(mode));
+        lobby.selectConfig(configFor(mode));
     }
 
     @Override
@@ -227,7 +229,7 @@ public final class P2pLobbyController implements P2pLobbyPanel.Actions, AutoClos
         }
         if (state != State.CONNECTING) connectingTo = null;
         if (snapshot.role() == Role.HOST && state == State.LOBBY && snapshot.config() == null) {
-            lobby.selectConfig(MatchConfig.of(selectedMode));
+            lobby.selectConfig(configFor(selectedMode));
             return; // 설정이 들어간 스냅샷이 곧 다시 온다
         }
         if ((state == State.STARTING || state == State.PLAYING) && !inMatch) {
@@ -252,6 +254,18 @@ public final class P2pLobbyController implements P2pLobbyPanel.Actions, AutoClos
             message = "상대가 나갔습니다.";
         }
         render();
+    }
+
+    /** 호스트 설정의 조작 방식. P2P 규칙은 이 값이 CONFIG로 가서 엔진이 따른다 */
+    public void useControlStyle(ControlStyle style) {
+        controlStyle = style == null ? ControlStyle.MODERN : style;
+        if (!closed && current != null && current.role() == Role.HOST && current.state() == State.LOBBY) {
+            lobby.selectConfig(configFor(selectedMode));
+        }
+    }
+
+    private MatchConfig configFor(BattleMode mode) {
+        return MatchConfig.of(mode).withControlStyle(controlStyle);
     }
 
     /**

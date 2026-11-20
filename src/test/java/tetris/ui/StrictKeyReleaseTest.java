@@ -78,6 +78,7 @@ class StrictKeyReleaseTest {
             case HARD_DROP -> assertTrue(session.snapshot().score() > scoreAfterFirst);
             case PAUSE -> assertEquals(GameState.PLAYING, session.getState());
             case QUIT -> assertEquals(2, quits[0]);
+            case ROTATE_CCW, HOLD -> assertNotNull(session.snapshot().currentBlock());
             default -> fail("non-repeatable action expected");
         }
     }
