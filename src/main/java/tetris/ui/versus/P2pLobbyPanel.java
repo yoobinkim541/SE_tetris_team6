@@ -45,7 +45,7 @@ public final class P2pLobbyPanel extends JPanel {
     private final JComboBox<String> recentBox = new JComboBox<>();
     private final JButton hostButton = new JButton("호스트로 대기");
     private final JButton connectButton = new JButton("접속");
-    private final JTextField codeField = new JTextField("", 5);
+    private final JTextField codeField = new JTextField("", 7);
     private final JButton joinInternetButton = new JButton("참가");
     private final JButton hostInternetButton = new JButton("방 만들기");
     private final JComboBox<BattleMode> modeBox = new JComboBox<>(BattleMode.values());
