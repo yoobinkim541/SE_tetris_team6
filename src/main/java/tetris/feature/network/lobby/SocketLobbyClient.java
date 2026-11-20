@@ -27,6 +27,8 @@ import tetris.feature.network.lobby.LobbySnapshot.State;
 import tetris.feature.network.match.ClientBattleClient;
 import tetris.feature.network.match.DispatcherPulse;
 import tetris.feature.network.match.HostBattleClient;
+import tetris.feature.network.match.ClientRaidClient;
+import tetris.feature.network.match.HostRaidClient;
 import tetris.feature.network.match.MatchPulse;
 import tetris.feature.network.protocol.ControlPayloads;
 import tetris.feature.network.protocol.LobbyPayloads;
@@ -103,6 +105,8 @@ public final class SocketLobbyClient implements LobbyClient {
     private int probeRemaining;
     private HostBattleClient hostBattle;
     private ClientBattleClient clientBattle;
+    private HostRaidClient hostRaid;
+    private ClientRaidClient clientRaid;
 
     public SocketLobbyClient(Executor dispatcher) {
         this(dispatcher, new PeerEstablisher(dispatcher));
@@ -278,6 +282,7 @@ public final class SocketLobbyClient implements LobbyClient {
     @Override
     public Optional<BattleClient> battleClient() {
         ensureOpen();
+        if (snapshot.config() != null && snapshot.config().raid()) return Optional.empty();
         if (snapshot.role() == Role.HOST && snapshot.state() == State.STARTING && hostBattle == null
                 && activeLink != null && currentMatchId != null) {
             PeerLink link = activeLink;
@@ -288,6 +293,21 @@ public final class SocketLobbyClient implements LobbyClient {
         State state = snapshot.state();
         if (state != State.STARTING && state != State.PLAYING && state != State.RESULT) return Optional.empty();
         return Optional.ofNullable(hostBattle != null ? hostBattle : clientBattle);
+    }
+
+    @Override
+    public Optional<tetris.feature.raid.api.RaidClient> raidClient() {
+        ensureOpen();
+        if (snapshot.config() == null || !snapshot.config().raid()) return Optional.empty();
+        if (snapshot.role() == Role.HOST && snapshot.state() == State.STARTING && hostRaid == null
+                && activeLink != null && currentMatchId != null) {
+            PeerLink link = activeLink;
+            hostRaid = new HostRaidClient(currentMatchId, snapshot.config(), clock, pulse, link::send, this::onRaidFinished);
+            if (snapshot.state() == State.STARTING) publishState(State.PLAYING, true, true);
+        }
+        State state = snapshot.state();
+        if (state != State.STARTING && state != State.PLAYING && state != State.RESULT) return Optional.empty();
+        return Optional.ofNullable(hostRaid != null ? hostRaid : clientRaid);
     }
 
     @Override
@@ -314,10 +334,23 @@ public final class SocketLobbyClient implements LobbyClient {
     private void closeBattle() {
         HostBattleClient host = hostBattle;
         ClientBattleClient client = clientBattle;
+        HostRaidClient raidHost = hostRaid;
+        ClientRaidClient raidClient = clientRaid;
         hostBattle = null;
         clientBattle = null;
+        hostRaid = null;
+        clientRaid = null;
         if (host != null) host.close();
         if (client != null) client.close();
+        if (raidHost != null) raidHost.close();
+        if (raidClient != null) raidClient.close();
+    }
+
+    private void onRaidFinished(tetris.feature.raid.api.RaidSnapshot finalState) {
+        if (closed || currentMatchId == null || !finalState.raidId().equals(currentMatchId)) return;
+        if (snapshot.state() == State.PLAYING || snapshot.state() == State.STARTING) {
+            publishState(State.RESULT, false, false);
+        }
     }
 
     @Override
@@ -649,7 +682,8 @@ public final class SocketLobbyClient implements LobbyClient {
                 connectionHealth.onFrame(now);
                 syncHealthFromConnection();
             }
-            if (stats != null) stats.onFrame(now, message.type() == MessageType.STATE);
+            if (stats != null) stats.onFrame(now, message.type() == MessageType.STATE
+                    || message.type() == MessageType.RAID_STATE);
             try {
                 handleMessage(message, now);
             } catch (ProtocolException e) {
@@ -711,8 +745,13 @@ public final class SocketLobbyClient implements LobbyClient {
                             && snapshot.config() != null
                             && message.configRevision() == snapshot.configRevision()) {
                         currentMatchId = message.matchId();
-                        clientBattle = new ClientBattleClient(currentMatchId, snapshot.config(), link::send,
-                                SocketLobbyClient.this::onMatchFinished);
+                        if (snapshot.config().raid()) {
+                            clientRaid = new ClientRaidClient(currentMatchId, snapshot.config(), link::send,
+                                    SocketLobbyClient.this::onRaidFinished);
+                        } else {
+                            clientBattle = new ClientBattleClient(currentMatchId, snapshot.config(), link::send,
+                                    SocketLobbyClient.this::onMatchFinished);
+                        }
                         publish(new LobbySnapshot(
                                 Role.CLIENT,
                                 State.STARTING,
@@ -721,7 +760,7 @@ public final class SocketLobbyClient implements LobbyClient {
                                 true,
                                 true,
                                 snapshot.peerIdentity()));
-                        if (clientBattle != null && snapshot.state() == State.STARTING) {
+                        if ((clientBattle != null || clientRaid != null) && snapshot.state() == State.STARTING) {
                             publishState(State.PLAYING, true, true);
                         }
                     }
@@ -729,8 +768,14 @@ public final class SocketLobbyClient implements LobbyClient {
                 case INPUT -> {
                     if (hostBattle != null) hostBattle.onRemote(message);
                 }
+                case RAID_INPUT -> {
+                    if (hostRaid != null) hostRaid.onRemote(message);
+                }
                 case STATE, RESULT -> {
                     if (clientBattle != null) clientBattle.onRemote(message);
+                }
+                case RAID_STATE, RAID_RESULT -> {
+                    if (clientRaid != null) clientRaid.onRemote(message);
                 }
                 case PING -> {
                     ControlPayloads.Ping ping = ControlPayloads.Ping.from(message.payload());

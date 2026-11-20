@@ -17,6 +17,11 @@ public enum MessageType {
     INPUT(true, false),
     /** 최신 값만 의미 있으므로 밀리면 합칠 수 있다. 나머지 종류는 유실 없이 순서대로 보낸다 */
     STATE(true, false),
+    /** 레이드 클라이언트 입력·필살·카드 선택. 유실 없이 순서대로 보낸다 */
+    RAID_INPUT(true, false),
+    /** 레이드 스냅샷. 최신 값만 의미 있으므로 대전 STATE와 같은 간격으로 보낸다 */
+    RAID_STATE(true, false),
+    RAID_RESULT(true, false),
     RESULT(true, false),
     PING(false, false),
     PONG(false, false),

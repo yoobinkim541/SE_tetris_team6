@@ -10,6 +10,10 @@ public final class RaidRules {
     public static final long ULTIMATE_WINDOW_MILLIS = 1_500;
     public static final long AGGRO_WINDOW_MILLIS = 30_000;
     public static final long GOLDEN_FLEE_MILLIS = 15_000;
+    /** 레이스 제한 시간. 일시정지·카운트다운은 세지 않는다 */
+    public static final long RACE_LIMIT_MILLIS = 5 * 60 * 1000L;
+    /** 레이스에서 먼저 보스를 잡은 사람이 상대 대기열에 넣는 쓰레기 줄 */
+    public static final int RACE_STEAL_ROWS = 2;
     public static final int GAUGE_MAX = 100;
     public static final int ULTIMATE_DAMAGE = 150;
     public static final int GAUGE_PER_LINE = 10;
@@ -31,7 +35,7 @@ public final class RaidRules {
 
     public static int hp(RaidMode mode, int level) {
         if (level < 1) throw new IllegalArgumentException("level");
-        if (mode == RaidMode.SOLO) {
+        if (mode == RaidMode.SOLO || mode == RaidMode.RACE) {
             if (level < SOLO_HP.length) return SOLO_HP[level];
             return (int) Math.round(coopHp(level) * 0.55);
         }

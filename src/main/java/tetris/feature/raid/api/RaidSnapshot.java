@@ -19,7 +19,16 @@ import tetris.feature.versus.api.MatchSnapshot;
  */
 public record RaidSnapshot(String raidId, long revision, RaidMode mode, RaidPhase phase, BossView boss,
                            List<PlayerView> players, int kills, long elapsedMillis, int gauge,
-                           CardOffer offer, List<RaidEvent> events, Result result) {
+                           CardOffer offer, List<RaidEvent> events, Result result,
+                           List<BossView> raceBosses, int[] raceKills, int[] raceGauges) {
+    /** 솔로·협동. 레이스 전용 필드는 비어 있다 */
+    public RaidSnapshot(String raidId, long revision, RaidMode mode, RaidPhase phase, BossView boss,
+                        List<PlayerView> players, int kills, long elapsedMillis, int gauge,
+                        CardOffer offer, List<RaidEvent> events, Result result) {
+        this(raidId, revision, mode, phase, boss, players, kills, elapsedMillis, gauge, offer, events, result,
+                List.of(), new int[0], new int[0]);
+    }
+
     public RaidSnapshot {
         Objects.requireNonNull(raidId, "raidId");
         Objects.requireNonNull(mode, "mode");
@@ -35,6 +44,43 @@ public record RaidSnapshot(String raidId, long revision, RaidMode mode, RaidPhas
             throw new IllegalArgumentException("result must be present exactly when FINISHED");
         }
         events = List.copyOf(events);
+        raceBosses = raceBosses == null ? List.of() : List.copyOf(raceBosses);
+        raceKills = raceKills == null ? new int[0] : raceKills.clone();
+        raceGauges = raceGauges == null ? new int[0] : raceGauges.clone();
+        if (!raceBosses.isEmpty() && raceBosses.size() != players.size()) {
+            throw new IllegalArgumentException("race bosses must match players");
+        }
+        if (raceKills.length != 0 && raceKills.length != players.size()) {
+            throw new IllegalArgumentException("race kills must match players");
+        }
+        if (raceGauges.length != 0 && raceGauges.length != players.size()) {
+            throw new IllegalArgumentException("race gauges must match players");
+        }
+        for (int value : raceGauges) {
+            if (value < 0 || value > 100) throw new IllegalArgumentException("race gauge must be 0..100");
+        }
+    }
+
+    /** 레이스면 그 참가자의 보스, 아니면 공유 보스 */
+    public BossView bossFor(int player) {
+        if (player >= 0 && player < raceBosses.size()) return raceBosses.get(player);
+        return boss;
+    }
+
+    /** 레이스면 그 참가자의 필살 게이지, 아니면 공유 게이지 */
+    public int gaugeFor(int player) {
+        if (player >= 0 && player < raceGauges.length) return raceGauges[player];
+        return gauge;
+    }
+
+    @Override
+    public int[] raceKills() {
+        return raceKills.clone();
+    }
+
+    @Override
+    public int[] raceGauges() {
+        return raceGauges.clone();
     }
 
     /**
@@ -145,7 +191,20 @@ public record RaidSnapshot(String raidId, long revision, RaidMode mode, RaidPhas
         }
     }
 
-    /** 판 결과 (기록 순서: 처치 수 → 총 데미지 → 생존 시간) */
-    public record Result(int kills, long totalDamage, long survivedMillis) {
+    /**
+     * 판 결과. 솔로·협동은 처치 수 → 총 데미지 → 생존 시간.
+     * 레이스는 winner가 0 또는 1이고, 무승부면 null.
+     */
+    public record Result(int kills, long totalDamage, long survivedMillis, Integer winner) {
+        /** 솔로·협동. 승자는 없다 */
+        public Result(int kills, long totalDamage, long survivedMillis) {
+            this(kills, totalDamage, survivedMillis, null);
+        }
+
+        public Result {
+            if (winner != null && (winner < 0 || winner > 1)) {
+                throw new IllegalArgumentException("winner must be 0, 1, or null");
+            }
+        }
     }
 }

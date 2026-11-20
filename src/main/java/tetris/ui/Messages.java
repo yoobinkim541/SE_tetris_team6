@@ -26,6 +26,7 @@ public class Messages {
         TEXT.put("menu.solo.classic", "일반 게임");
         TEXT.put("menu.raid.solo", "솔로 레이드");
         TEXT.put("menu.raid.coop", "협동 레이드 (2인)");
+        TEXT.put("menu.raid.race", "레이스 레이드 (1v1)");
         TEXT.put("menu.multi.classic", "로컬 일반 대전");
         TEXT.put("menu.multi.item", "로컬 아이템 대전");
         TEXT.put("menu.multi.timed", "로컬 시간제한 대전");

@@ -185,7 +185,7 @@ public final class Patterns {
 
         public void apply(PatternContext context) {
             if (!context.coop()) {
-                queue(context, 0, 1);
+                queue(context, Math.max(0, context.target()), 1);
                 return;
             }
             queue(context, -1, 1);
@@ -226,7 +226,7 @@ public final class Patterns {
         public void apply(PatternContext context) {
             int rows = context.level() >= 4 ? 3 : 2;
             if (!context.coop()) rows *= 2;
-            queue(context, context.coop() ? -1 : 0, rows);
+            queue(context, context.coop() ? -1 : Math.max(0, context.target()), rows);
         }
     }
 }

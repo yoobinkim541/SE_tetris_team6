@@ -189,6 +189,7 @@ public class MainFrame extends JFrame {
                 () -> startBattle(BattleMode.TIMED),
                 this::openP2pLobby,
                 this::startCoopRaid,
+                this::startRaceRaid,
                 mainMenu), mainMenu, "멀티플레이", settings::isColorBlindMode);
         PausePanel pausePanel = new PausePanel(this::resumeGame, this::confirmRestart, this::requestQuit);
         gamePanel = new GamePanel(settings, pausePanel, this::onGameOver);
@@ -247,7 +248,8 @@ public class MainFrame extends JFrame {
         if (currentScreen == Screen.RAID && screen != Screen.RAID) closeRaid();
         // P2P 화면 묶음(로비·온라인 경기·온라인 결과)을 떠나면 연결을 닫는다
         if (p2p != null && screen != Screen.P2P_LOBBY && screen != Screen.P2P_RESULT
-                && !(screen == Screen.BATTLE && battleOnline)) closeP2p();
+                && !(screen == Screen.BATTLE && battleOnline)
+                && !(screen == Screen.RAID && battleOnline)) closeP2p();
         currentScreen = screen;
         cards.show(root, screen.name());
         if (screen == Screen.NAME_INPUT) nameInputPanel.focusField();
@@ -472,8 +474,13 @@ public class MainFrame extends JFrame {
                 @Override public void startMatch(BattleClient client, MatchConfig config, LobbySnapshot.Role role) {
                     startOnlineBattle(client, config, role);
                 }
+                @Override public void startRaid(tetris.feature.raid.api.RaidClient client, MatchConfig config,
+                                                LobbySnapshot.Role role) {
+                    startOnlineRaid(client, config, role);
+                }
                 @Override public void connectionLost() {
-                    if (currentScreen == Screen.BATTLE || currentScreen == Screen.P2P_RESULT) {
+                    if (currentScreen == Screen.BATTLE || currentScreen == Screen.P2P_RESULT
+                            || currentScreen == Screen.RAID) {
                         showScreen(Screen.P2P_LOBBY);
                         if (p2p != null) p2p.panel().focusTarget().requestFocusInWindow();
                     }
@@ -482,6 +489,9 @@ public class MainFrame extends JFrame {
                 @Override public void healthChanged(LinkHealth health) {
                     if (battleOnline && screens.get(Screen.BATTLE) instanceof BattlePanel battle) {
                         battle.setConnectionNotice(P2pLobbyController.lagText(health));
+                    }
+                    if (battleOnline && screens.get(Screen.RAID) instanceof tetris.ui.raid.RaidPanel raid) {
+                        raid.setConnectionNotice(P2pLobbyController.lagText(health));
                     }
                 }
             }, port, LanAddresses::current, recent);
@@ -655,13 +665,14 @@ public class MainFrame extends JFrame {
     }
 
     static List<MenuItem> multiMenuItems(Runnable classic, Runnable item, Runnable timed, Runnable online,
-                                         Runnable coop, Runnable mainMenu) {
+                                         Runnable coop, Runnable race, Runnable mainMenu) {
         return List.of(
                 new MenuItem(Messages.get("menu.multi.classic"), classic),
                 new MenuItem(Messages.get("menu.multi.item"), item),
                 new MenuItem(Messages.get("menu.multi.timed"), timed),
                 new MenuItem(Messages.get("menu.multi.online"), online),
                 new MenuItem(Messages.get("menu.raid.coop"), coop),
+                new MenuItem(Messages.get("menu.raid.race"), race),
                 new MenuItem(Messages.get("menu.back"), mainMenu));
     }
 
@@ -696,6 +707,10 @@ public class MainFrame extends JFrame {
         startRaid(RaidMode.COOP);
     }
 
+    private void startRaceRaid() {
+        startRaid(RaidMode.RACE);
+    }
+
     private void startRaid(RaidMode mode) {
         session.end();
         keyBindings.setSuspended(true);
@@ -718,6 +733,27 @@ public class MainFrame extends JFrame {
                     else openBattleModes();
                 } },
                 () -> { if (generation == raidGeneration) startRaid(mode); });
+        if (mode == RaidMode.RACE) panel.setGuide(RaidScreenController.raceGuide());
+    }
+
+    private void startOnlineRaid(tetris.feature.raid.api.RaidClient client, MatchConfig config,
+                                 LobbySnapshot.Role role) {
+        closeBattle();
+        closeRaid();
+        battleOnline = true;
+        PlayerId viewer = role == LobbySnapshot.Role.HOST ? PlayerId.ONE : PlayerId.TWO;
+        var panel = new tetris.ui.raid.RaidPanel(settings.isColorBlindMode());
+        panel.setPreferredSize(GamePanel.preferredSizeFor(fitCellSize(settings.getScreenSize().cellPixels())));
+        panel.setResultLabels("로비로", "다시 대전");
+        JComponent previous = screens.remove(Screen.RAID);
+        if (previous != null) root.remove(previous);
+        addScreen(Screen.RAID, panel);
+        showScreen(Screen.RAID);
+        long generation = raidGeneration;
+        raidController = RaidScreenController.online(getRootPane(), client, panel, viewer,
+                config.controlStyle(),
+                () -> { if (generation == raidGeneration) backToP2pLobby(); },
+                () -> { if (generation == raidGeneration) rematchP2p(); });
     }
 
     private void closeRaid() {

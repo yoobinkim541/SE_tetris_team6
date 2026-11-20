@@ -8,8 +8,9 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import tetris.feature.game.Difficulty;
-import tetris.feature.setting.ControlStyle;
+import tetris.feature.raid.api.RaidMode;
 import tetris.feature.setting.GameAction;
+import tetris.feature.setting.ControlStyle;
 import tetris.feature.versus.api.BattleMode;
 import tetris.feature.versus.api.MatchConfig;
 import tetris.feature.versus.api.MatchPhase;
@@ -39,6 +40,7 @@ public final class MatchPayloads {
                 .put("difficulty", config.difficulty().name())
                 .put("timeLimitMillis", config.timeLimitMillis())
                 .put("controlStyle", config.controlStyle().name());
+        if (config.raidMode() != null) payload.put("raid", config.raidMode().name());
         return new Message(MessageType.CONFIG, null, configRevision, payload);
     }
 
@@ -49,7 +51,11 @@ public final class MatchPayloads {
         long timeLimit = longField(payload, "timeLimitMillis");
         ControlStyle style = payload.has("controlStyle") && !payload.get("controlStyle").isNull()
                 ? enumField(payload, "controlStyle", ControlStyle.class) : ControlStyle.MODERN;
-        return construct(() -> new MatchConfig(mode, difficulty, timeLimit, style));
+        RaidMode raid = payload.has("raid") && !payload.get("raid").isNull()
+                ? enumField(payload, "raid", RaidMode.class) : null;
+        return construct(() -> raid == null
+                ? new MatchConfig(mode, difficulty, timeLimit, style)
+                : new MatchConfig(mode, difficulty, timeLimit, style, raid));
     }
     //#endregion
 

@@ -48,6 +48,11 @@ public final class RaidScreenController implements AutoCloseable {
 
     public RaidScreenController(JRootPane root, RaidClient client, RaidPanel panel, KeyMap soloKeys, boolean solo,
                                 ControlStyle style, Runnable onMenu, Runnable onRetry) {
+        this(root, client, panel, soloKeys, solo, style, onMenu, onRetry, null);
+    }
+
+    private RaidScreenController(JRootPane root, RaidClient client, RaidPanel panel, KeyMap soloKeys, boolean solo,
+                                 ControlStyle style, Runnable onMenu, Runnable onRetry, PlayerId onlineViewer) {
         this.root = Objects.requireNonNull(root, "root");
         this.client = Objects.requireNonNull(client, "client");
         this.panel = Objects.requireNonNull(panel, "panel");
@@ -55,20 +60,35 @@ public final class RaidScreenController implements AutoCloseable {
         this.onMenu = Objects.requireNonNull(onMenu, "onMenu");
         this.onRetry = Objects.requireNonNull(onRetry, "onRetry");
         Objects.requireNonNull(style, "style");
-        panel.setGuide(guide(solo, soloKeys));
+        panel.setGuide(onlineViewer != null ? onlineGuide() : guide(solo, soloKeys));
         panel.setResultActions(this::goMenu, this::goRetry);
         panel.setConfirmAction(this::cancelConfirm);
         try {
-            if (solo) soloRouter = new SoloInputRouter(root, soloKeys, this::onCommand, this::accepts);
+            if (onlineViewer != null) {
+                battleRouter = new BattleInputRouter(root, BattleKeyMap.online(), this::onCommand, this::accepts);
+                install(KeyEvent.VK_R, () -> {
+                    if (!closed && !confirming && current != null && current.phase() == RaidPhase.PLAYING) {
+                        client.ultimate(onlineViewer);
+                    }
+                });
+            } else if (solo) soloRouter = new SoloInputRouter(root, soloKeys, this::onCommand, this::accepts);
             else battleRouter = new BattleInputRouter(root, new BattleKeyMap(), this::onCommand, this::accepts);
-            install(KeyEvent.VK_R, this::onUltimateP1);
-            install(KeyEvent.VK_ENTER, this::onEnter);
+            if (onlineViewer == null) {
+                install(KeyEvent.VK_R, this::onUltimateP1);
+                install(KeyEvent.VK_ENTER, this::onEnter);
+            }
             subscription = client.subscribe(this::onSnapshot);
         } catch (RuntimeException | Error failure) {
             close();
             try { client.close(); } catch (RuntimeException | Error cleanup) { failure.addSuppressed(cleanup); }
             throw failure;
         }
+    }
+
+    /** 온라인. 이 PC의 키는 BattleKeyMap.online()이고 필살은 R. 호스트는 P1, 클라이언트는 P2 */
+    public static RaidScreenController online(JRootPane root, RaidClient client, RaidPanel panel, PlayerId viewer,
+                                              ControlStyle style, Runnable onMenu, Runnable onRetry) {
+        return new RaidScreenController(root, client, panel, new KeyMap(), false, style, onMenu, onRetry, viewer);
     }
 
     /** 테스트·결과 버튼이 고른 카드를 본다 */
@@ -284,13 +304,19 @@ public final class RaidScreenController implements AutoCloseable {
         extra.clear();
     }
 
+    public static String raceGuide() {
+        BattleKeyMap battle = new BattleKeyMap();
+        return "P1 " + String.join("  ", battle.playerLines(PlayerId.ONE)) + "  R 필살\n"
+                + "P2 " + String.join("  ", battle.playerLines(PlayerId.TWO)) + "  Enter 필살\n"
+                + battle.sharedLine();
+    }
+
+    private static String onlineGuide() {
+        return BattleKeyMap.online().guide() + "\nR 필살";
+    }
+
     static String guide(boolean solo, KeyMap keys) {
-        if (!solo) {
-            BattleKeyMap battle = new BattleKeyMap();
-            return "P1 " + String.join("  ", battle.playerLines(PlayerId.ONE)) + "  R 필살\n"
-                    + "P2 " + String.join("  ", battle.playerLines(PlayerId.TWO)) + "  Enter 필살\n"
-                    + battle.sharedLine() + "  ·  카드는 좌우 후 하드 드롭";
-        }
+        if (!solo) return raceGuide() + "\n카드는 좌우 후 하드 드롭";
         KeyMap map = keys == null ? new KeyMap() : keys;
         return Messages.keyName(map, GameAction.MOVE_LEFT) + "/" + Messages.keyName(map, GameAction.MOVE_RIGHT) + " 이동"
                 + "  ·  " + Messages.keyName(map, GameAction.ROTATE) + "/" + Messages.keyName(map, GameAction.ROTATE_CCW) + " 회전"
