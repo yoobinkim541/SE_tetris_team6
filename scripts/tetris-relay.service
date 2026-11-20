@@ -1,0 +1,29 @@
+# challenge: 인터넷 대전 중계 서버 (tetris.relay.RelayServer). scripts/deploy-relay.ps1이 설치한다.
+[Unit]
+Description=SE Tetris relay server (challenge)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=tetris-relay
+Group=tetris-relay
+ExecStart=/opt/tetris-relay/jre/bin/java -Djava.awt.headless=true -Xms32m -Xmx128m -XX:+UseSerialGC -XX:MaxMetaspaceSize=64m -cp /opt/tetris-relay/relay.jar tetris.relay.RelayServer 47123
+Restart=on-failure
+RestartSec=2
+LimitNOFILE=4096
+MemoryMax=300M
+
+# 바이트만 넘기는 서버라 디스크 쓰기·권한 상승이 필요 없다
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target
