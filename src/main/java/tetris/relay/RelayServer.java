@@ -30,7 +30,7 @@ import java.util.function.LongSupplier;
  * <p>실행: {@code java -cp SE-Tetris.jar tetris.relay.RelayServer [port]} (기본 47123). IPv4 전용, 단일 프로세스.
  */
 public final class RelayServer implements Closeable {
-    static final int DEFAULT_PORT = 47123;
+    public static final int DEFAULT_PORT = 47123;
     private static final int PUMP_BUFFER_BYTES = 8 * 1024;
     private static final int ISSUED_CODE_HISTORY = 100_000;
     private static final long SECOND_NANOS = 1_000_000_000L;

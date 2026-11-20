@@ -1,5 +1,6 @@
 package tetris.feature.network.lobby;
 
+import java.net.InetSocketAddress;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -41,6 +42,7 @@ import tetris.feature.versus.api.BattleClient;
 import tetris.feature.versus.api.MatchClock;
 import tetris.feature.versus.api.MatchConfig;
 import tetris.feature.versus.api.MatchSnapshot;
+import tetris.relay.RelayEndpoint;
 
 /**
  * {@link PeerEstablisher}와 {@link PeerLink} 위에서 동작하는 소켓 {@link LobbyClient} 구현 (S8-C2, S10-C1).
@@ -101,6 +103,11 @@ public final class SocketLobbyClient implements LobbyClient {
     private int probeRemaining;
     private HostBattleClient hostBattle;
     private ClientBattleClient clientBattle;
+    /** challenge: 인터넷 방 중계 서버 주소, 지금 시도가 중계 경유인지, 대기 중 로비 코드 */
+    private final InetSocketAddress relayAddress;
+    private boolean attemptViaRelay;
+    private String roomCode;
+    private final OrderedListeners<Optional<String>> roomCodeSubscribers = new OrderedListeners<>();
 
     public SocketLobbyClient(Executor dispatcher) {
         this(dispatcher, new PeerEstablisher(dispatcher));
@@ -126,6 +133,13 @@ public final class SocketLobbyClient implements LobbyClient {
     public SocketLobbyClient(Executor dispatcher, PeerEstablisher establisher, Supplier<LocalMatchEngine> engines,
                              MatchClock clock, MatchPulse pulse, HeartbeatPolicy policy,
                              RecentPeers recentPeers, Executor io) {
+        this(dispatcher, establisher, engines, clock, pulse, policy, recentPeers, io, RelayEndpoint.configured());
+    }
+
+    /** challenge: 인터넷 방에 쓸 중계 서버 주소까지 주입한다 */
+    public SocketLobbyClient(Executor dispatcher, PeerEstablisher establisher, Supplier<LocalMatchEngine> engines,
+                             MatchClock clock, MatchPulse pulse, HeartbeatPolicy policy,
+                             RecentPeers recentPeers, Executor io, InetSocketAddress relayAddress) {
         this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
         this.establisher = Objects.requireNonNull(establisher, "establisher");
         this.engines = Objects.requireNonNull(engines, "engines");
@@ -134,6 +148,7 @@ public final class SocketLobbyClient implements LobbyClient {
         this.policy = Objects.requireNonNull(policy, "policy");
         this.recentPeers = Objects.requireNonNull(recentPeers, "recentPeers");
         this.io = Objects.requireNonNull(io, "io");
+        this.relayAddress = Objects.requireNonNull(relayAddress, "relayAddress");
     }
 
     /**
@@ -181,10 +196,7 @@ public final class SocketLobbyClient implements LobbyClient {
         CompletableFuture<Void> stage = new CompletableFuture<>();
         publish(new LobbySnapshot(Role.HOST, State.HOSTING, null, 0, false, false, null));
         PeerEstablisher.Attempt attempt = establisher.host(port);
-        this.activeAttempt = attempt;
-        this.pendingStage = stage;
-        this.boundPort = attempt.localPort();
-        attempt.result().whenComplete((link, error) -> onAttemptCompleted(attempt, stage, link, error));
+        beginAttempt(attempt, stage, false, attempt.localPort());
         return stage;
     }
 
@@ -194,12 +206,61 @@ public final class SocketLobbyClient implements LobbyClient {
         ensureInitial();
         CompletableFuture<Void> stage = new CompletableFuture<>();
         publish(new LobbySnapshot(Role.CLIENT, State.CONNECTING, null, 0, false, false, null));
-        PeerEstablisher.Attempt attempt = establisher.connect(address, port);
+        beginAttempt(establisher.connect(address, port), stage, false, -1);
+        return stage;
+    }
+
+    @Override
+    public CompletionStage<Void> hostOnline() {
+        ensureOpen();
+        ensureInitial();
+        CompletableFuture<Void> stage = new CompletableFuture<>();
+        publish(new LobbySnapshot(Role.HOST, State.HOSTING, null, 0, false, false, null));
+        PeerEstablisher.Attempt[] self = new PeerEstablisher.Attempt[1];
+        self[0] = establisher.hostRelay(relayAddress, code -> {
+            // 취소·실패한 옛 시도의 코드는 버린다 (dispatcher 스레드)
+            if (!closed && activeAttempt == self[0]) setRoomCode(code);
+        });
+        beginAttempt(self[0], stage, true, -1);
+        return stage;
+    }
+
+    @Override
+    public CompletionStage<Void> joinOnline(String code) {
+        ensureOpen();
+        ensureInitial();
+        CompletableFuture<Void> stage = new CompletableFuture<>();
+        publish(new LobbySnapshot(Role.CLIENT, State.CONNECTING, null, 0, false, false, null));
+        beginAttempt(establisher.joinRelay(relayAddress, code), stage, true, -1);
+        return stage;
+    }
+
+    @Override
+    public Optional<String> roomCode() {
+        return Optional.ofNullable(roomCode);
+    }
+
+    @Override
+    public Subscription subscribeRoomCode(Consumer<Optional<String>> listener) {
+        Objects.requireNonNull(listener, "listener");
+        ensureOpen();
+        return roomCodeSubscribers.add(listener, roomCode());
+    }
+
+    /** boundPort는 결과 콜백보다 먼저 정한다. 즉시 실패한 시도는 콜백이 다시 -1로 되돌린다 */
+    private void beginAttempt(PeerEstablisher.Attempt attempt, CompletableFuture<Void> stage, boolean viaRelay,
+                              int port) {
         this.activeAttempt = attempt;
         this.pendingStage = stage;
-        this.boundPort = -1;
+        this.boundPort = port;
+        this.attemptViaRelay = viaRelay;
         attempt.result().whenComplete((link, error) -> onAttemptCompleted(attempt, stage, link, error));
-        return stage;
+    }
+
+    private void setRoomCode(String code) {
+        if (Objects.equals(roomCode, code)) return;
+        roomCode = code;
+        roomCodeSubscribers.publish(Optional.ofNullable(code));
     }
 
     @Override
@@ -215,6 +276,8 @@ public final class SocketLobbyClient implements LobbyClient {
         activeAttempt = null;
         pendingStage = null;
         boundPort = -1;
+        attemptViaRelay = false;
+        setRoomCode(null);
         currentMatchId = null;
         attempt.cancel();
         if (stage != null) {
@@ -336,6 +399,7 @@ public final class SocketLobbyClient implements LobbyClient {
         subscribers.clear();
         healthSubscribers.clear();
         rttSubscribers.clear();
+        roomCodeSubscribers.clear();
         releaseActiveWork();
     }
 
@@ -352,6 +416,9 @@ public final class SocketLobbyClient implements LobbyClient {
         }
         activeAttempt = null;
         pendingStage = null;
+        setRoomCode(null);
+        boolean viaRelay = attemptViaRelay;
+        attemptViaRelay = false;
 
         if (error != null) {
             boundPort = -1;
@@ -372,7 +439,8 @@ public final class SocketLobbyClient implements LobbyClient {
         currentMatchId = null;
         startHeartbeat(link);
         Role lobbyRole = (link.role() == PeerRole.HOST) ? Role.HOST : Role.CLIENT;
-        if (lobbyRole == Role.CLIENT) {
+        // challenge: 인터넷 방은 IP가 아니라 일회용 코드라 최근 접속 IP 목록에 남기지 않는다
+        if (lobbyRole == Role.CLIENT && !viaRelay) {
             String peerAddress = link.peerAddress();
             try {
                 io.execute(() -> {
@@ -585,6 +653,8 @@ public final class SocketLobbyClient implements LobbyClient {
         pendingStage = null;
         activeLink = null;
         boundPort = -1;
+        attemptViaRelay = false;
+        setRoomCode(null);
         currentMatchId = null;
         closeBattle();
         if (attempt != null) {

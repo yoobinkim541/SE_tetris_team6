@@ -2,6 +2,7 @@ package tetris.feature.network.lobby;
 
 import java.util.Optional;
 import tetris.feature.network.tools.LatencySample;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.function.Consumer;
 import tetris.feature.versus.api.BattleClient;
@@ -16,6 +17,26 @@ public interface LobbyClient extends AutoCloseable {
     /** Completes on entering LOBBY; fails exceptionally on connection failure. */
     CompletionStage<Void> host(int port);
     CompletionStage<Void> connect(String address, int port);
+    /**
+     * challenge: 중계 서버에 인터넷 방을 만들고 HOSTING에서 친구를 기다린다. 받은 로비 코드는
+     * {@link #subscribeRoomCode}로 알린다. 친구가 들어오면 LOBBY로 완료된다.
+     */
+    default CompletionStage<Void> hostOnline() {
+        return CompletableFuture.failedFuture(new UnsupportedOperationException("internet lobby"));
+    }
+    /** challenge: 로비 코드로 인터넷 방에 들어간다. LOBBY에 들어가면 완료된다 */
+    default CompletionStage<Void> joinOnline(String code) {
+        return CompletableFuture.failedFuture(new UnsupportedOperationException("internet lobby"));
+    }
+    /** challenge: 인터넷 방을 만들고 친구를 기다리는 동안의 로비 코드. 그 밖에는 비어 있다 */
+    default Optional<String> roomCode() {
+        return Optional.empty();
+    }
+    /** challenge: 현재 로비 코드를 먼저 보내고, 코드가 생기거나 사라질 때마다 알린다 */
+    default Subscription subscribeRoomCode(Consumer<Optional<String>> listener) {
+        listener.accept(Optional.empty());
+        return () -> { };
+    }
     /** Idempotently cancels pending establishment and returns to INITIAL. */
     void cancel();
     /** Host-only in LOBBY; increments revision and clears both votes. */

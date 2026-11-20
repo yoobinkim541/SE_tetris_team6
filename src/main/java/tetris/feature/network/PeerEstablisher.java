@@ -146,10 +146,13 @@ public final class PeerEstablisher {
         return (int) Math.min(Integer.MAX_VALUE, Math.max(1L, timeout.toMillis()));
     }
 
-    /** 중계 서버 접속. 실패면 시도를 끝내고 false */
+    /** 중계 서버 접속. 호스트 이름은 여기(작업 스레드)에서 해석한다. 실패면 시도를 끝내고 false */
     private boolean connectRelay(AttemptState state, InetSocketAddress relay) {
         try {
-            state.rawSocket.connect(relay, timeoutMillis());
+            InetSocketAddress target = relay.isUnresolved()
+                    ? new InetSocketAddress(relay.getHostString(), relay.getPort())
+                    : relay;
+            state.rawSocket.connect(target, timeoutMillis());
             state.rawSocket.setSoTimeout(timeoutMillis());
             return true;
         } catch (IOException e) {
