@@ -86,6 +86,8 @@ public class GameSession {
     private SpawnBoundary spawnBoundary;
     private boolean spawnPending;
     private boolean attackApplied;
+    private int[] lastClearedRows = new int[0];
+    private java.util.List<Cell> lastPlacedCells = java.util.List.of();
 
     /** 일반 모드·NORMAL 난이도 */
     public GameSession(BlockGenerator generator, GameClock clock, GameListener listener) {
@@ -685,6 +687,7 @@ public class GameSession {
 
     /** L4~L6 후 Spawn */
     private void finishLock(ClearPlan plan) {
+        lastClearedRows = plan.rows().stream().filter(row -> row >= 0 && row < Board.HEIGHT).mapToInt(Integer::intValue).toArray();
         int clearedCells = applyClear(plan);          // L4
         awardClearScore(plan, clearedCells);          // L5
         updateCounters(plan);                         // L6
@@ -705,9 +708,17 @@ public class GameSession {
         if (!board.tryPlaceBlock(currentBlock))
             throw new IllegalStateException("current block is not at a placeable position");
 
-        Block placed = currentBlock;
+        java.util.ArrayList<Cell> placed = new java.util.ArrayList<>();
+        int[][] shape = currentBlock.getShape();
+        for (int r = 0; r < shape.length; r++) {
+            for (int c = 0; c < shape[r].length; c++) {
+                if (shape[r][c] != 0) placed.add(new Cell(currentBlock.getRow() + r, currentBlock.getCol() + c));
+            }
+        }
+        lastPlacedCells = java.util.List.copyOf(placed);
+        Block placedBlock = currentBlock;
         currentBlock = null; // 보드에 들어간 블록을 스냅샷이 두 번 그리지 않도록
-        return placed;
+        return placedBlock;
     }
 
     /**
@@ -799,5 +810,125 @@ public class GameSession {
         state = GameState.GAME_OVER;
         clock.stop();
         listener.onGameOver(snapshot());
+    }
+
+    // ── 레이드 훅. 싱글·대전은 호출하지 않는다 ──
+
+    /** 직전 Lock에서 지운 보이는 행. 지우지 않았으면 빈 배열 */
+    public int[] lastClearedRows() {
+        return lastClearedRows.clone();
+    }
+
+    /** 직전 Lock에서 보드에 기록한 칸. 숨은 줄 좌표가 포함될 수 있다 */
+    public java.util.List<Cell> lastPlacedCells() {
+        return lastPlacedCells;
+    }
+
+    /** 다음 Spawn 조각부터 강제 교체. 저주 블록이 S/Z를 넣을 때 쓴다 */
+    public void forceUpcoming(Block... pieces) {
+        if (nextQueue == null) throw new IllegalStateException("not started");
+        if (pieces == null) throw new IllegalArgumentException("pieces");
+        nextQueue.replaceFront(java.util.List.of(pieces));
+    }
+
+    /** index번째 대기 블록 종류. 큐 밖이면 null */
+    public tetris.component.block.BlockType peekUpcomingType(int index) {
+        if (nextQueue == null || index < 0) return null;
+        try {
+            return nextQueue.peek(index).getType();
+        } catch (IllegalArgumentException ex) {
+            return null;
+        }
+    }
+
+    /** NEXT 미리보기를 늘린다. 최대 cap */
+    public void expandPreview(int additional, int cap) {
+        if (nextQueue == null) return;
+        nextQueue.expandPreview(additional, cap);
+    }
+
+    public int previewCount() {
+        return nextQueue == null ? previewCount : nextQueue.previewCount();
+    }
+
+    /** 다음 Spawn의 낙하 배율. 1.0이면 기존과 같다 */
+    public void setGravityMultiplier(double multiplier) {
+        modifiers.setGravityMultiplier(multiplier);
+    }
+
+    public double gravityMultiplier() {
+        return modifiers.gravityMultiplier();
+    }
+
+    /**
+     * 빈 고정 칸에 값을 쓴다. 떨어지는 블록이 차지한 칸·벽·범위 밖은 무시한다.
+     * 기둥·덩어리 소환이 회색 칸(공격 칸 값)을 심을 때 쓴다.
+     */
+    public boolean writeFixedCell(int row, int col, int value) {
+        if (row < 0 || row >= Board.HEIGHT || col < 0 || col >= Board.WIDTH) return false;
+        if (value == Board.EMPTY) return false;
+        if (!board.isEmpty(row, col)) return false;
+        if (currentBlock != null && covers(currentBlock, row, col)) return false;
+        try {
+            var method = Board.class.getDeclaredMethod("setCell", int.class, int.class, int.class, ItemType.class);
+            method.setAccessible(true);
+            method.invoke(board, row, col, value, null);
+            return true;
+        } catch (ReflectiveOperationException ex) {
+            throw new IllegalStateException("고정 칸을 쓸 수 없습니다", ex);
+        }
+    }
+
+    /** 보이는 행을 지우고 위 칸을 내린다. 떨어지는 블록이 겹치면 위로 올린다 */
+    public void removeVisibleRows(int... rows) {
+        if (rows == null || rows.length == 0) return;
+        java.util.List<Integer> list = new java.util.ArrayList<>();
+        for (int row : rows) list.add(row);
+        board.removeRows(list);
+        liftCurrentIfColliding();
+    }
+
+    /**
+     * 상단 초과로 쓰러진 참가자를 빈 보드로 되돌리고 다음 조각을 꺼낸다.
+     * 점수·줄·생성기 순서는 유지한다. GAME_OVER가 아니면 무시한다.
+     */
+    public void reviveFromTopOut() {
+        if (state != GameState.GAME_OVER) return;
+        board.reset();
+        currentBlock = null;
+        quitPending = false;
+        spawnPending = false;
+        attackApplied = false;
+        pendingClear = null;
+        pausedDuringClearing = false;
+        crushing = false;
+        resetLockState();
+        held = null;
+        holdUsed = false;
+        clearInputBuffer();
+        lastTSpin = TSpinType.NONE;
+        lastClearedRows = new int[0];
+        lastPlacedCells = java.util.List.of();
+        modifiers = new GameModifiers();
+        state = GameState.PLAYING;
+        spawnNextBlock();
+        if (state == GameState.PLAYING) listener.onChanged(snapshot());
+    }
+
+    private static boolean covers(Block block, int row, int col) {
+        int[][] shape = block.getShape();
+        int localRow = row - block.getRow();
+        int localCol = col - block.getCol();
+        return localRow >= 0 && localRow < shape.length && localCol >= 0 && localCol < shape[localRow].length
+                && shape[localRow][localCol] != 0;
+    }
+
+    private void liftCurrentIfColliding() {
+        if (currentBlock == null) return;
+        int guard = 0;
+        while (guard++ < Board.HEIGHT + Board.MARGIN
+                && !board.canPlace(currentBlock, currentBlock.getRow(), currentBlock.getCol())) {
+            currentBlock.setPosition(currentBlock.getRow() - 1, currentBlock.getCol());
+        }
     }
 }

@@ -64,19 +64,28 @@ public record RaidSnapshot(String raidId, long revision, RaidMode mode, RaidPhas
     /**
      * 한 참가자.
      *
-     * @param board          보드·NEXT·홀드·고스트 (대전과 같은 모양)
-     * @param lucky          20x10. 럭키 블록 칸이면 1
-     * @param effects        걸려 있는 보스 효과
-     * @param reviveProgress 쓰러져 있으면 팀원이 지운 줄 수, 아니면 0
-     * @param reviveRequired 부활에 필요한 줄 수
-     * @param damageDealt    이번 판 누적 데미지
+     * @param board            보드·NEXT·홀드·고스트 (대전과 같은 모양). 미리보기는 최대 3개
+     * @param lucky            20x10. 럭키 블록 칸이면 1
+     * @param effects          걸려 있는 보스 효과
+     * @param reviveProgress   쓰러져 있으면 팀원이 지운 줄 수, 아니면 0
+     * @param reviveRequired   부활에 필요한 줄 수
+     * @param damageDealt      이번 판 누적 데미지
+     * @param extendedPreviews 망원경으로 NEXT가 4개 이상이 되면 4번째부터. 3개 이하면 빈 목록.
+     *                         화면은 {@code board.previews()} 뒤에 이어 붙인다
      */
     public record PlayerView(MatchSnapshot.PlayerView board, boolean alive, int[][] lucky, List<Effect> effects,
-                             int reviveProgress, int reviveRequired, long damageDealt) {
+                             int reviveProgress, int reviveRequired, long damageDealt, List<int[][]> extendedPreviews) {
+        /** 미리보기가 3개 이하일 때의 생성자. 기존 호출은 그대로 둔다 */
+        public PlayerView(MatchSnapshot.PlayerView board, boolean alive, int[][] lucky, List<Effect> effects,
+                          int reviveProgress, int reviveRequired, long damageDealt) {
+            this(board, alive, lucky, effects, reviveProgress, reviveRequired, damageDealt, List.of());
+        }
+
         public PlayerView {
             Objects.requireNonNull(board, "board");
             lucky = copy(lucky);
             effects = List.copyOf(effects);
+            extendedPreviews = copyShapes(extendedPreviews);
         }
 
         @Override
@@ -84,11 +93,28 @@ public record RaidSnapshot(String raidId, long revision, RaidMode mode, RaidPhas
             return copy(lucky);
         }
 
+        @Override
+        public List<int[][]> extendedPreviews() {
+            return copyShapes(extendedPreviews);
+        }
+
         private static int[][] copy(int[][] grid) {
             if (grid == null) return new int[20][10];
             int[][] out = new int[grid.length][];
             for (int r = 0; r < grid.length; r++) out[r] = grid[r].clone();
             return out;
+        }
+
+        private static List<int[][]> copyShapes(List<int[][]> shapes) {
+            if (shapes == null || shapes.isEmpty()) return List.of();
+            List<int[][]> out = new java.util.ArrayList<>();
+            for (int[][] shape : shapes) {
+                if (shape == null) throw new IllegalArgumentException("preview");
+                int[][] copy = new int[shape.length][];
+                for (int r = 0; r < shape.length; r++) copy[r] = shape[r].clone();
+                out.add(copy);
+            }
+            return List.copyOf(out);
         }
     }
 

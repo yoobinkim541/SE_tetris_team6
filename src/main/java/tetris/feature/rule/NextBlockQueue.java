@@ -7,7 +7,7 @@ import tetris.component.block.Block;
 /** Next 블록 큐 (NXT-1). 1차는 previewCount = 1, UI는 맨 앞 1개만 표시한다. */
 public class NextBlockQueue {
     private final BlockGenerator generator;
-    private final int previewCount;
+    private int previewCount;
     private final List<Block> queue = new ArrayList<>(); // index 0 = 다음 Spawn 블록
 
     public NextBlockQueue(BlockGenerator generator, int previewCount) {
@@ -44,5 +44,31 @@ public class NextBlockQueue {
 
     private void fill() {
         while (queue.size() < previewCount) queue.add(generator.next());
+    }
+
+    /**
+     * 맨 앞 조각을 주어진 블록으로 바꾼다. 큐보다 길면 뒤에 붙인다.
+     * 레이드 저주 블록이 다음 조각을 S/Z로 바꿀 때 쓴다. 생성기 순서는 그 다음부터 그대로다.
+     */
+    public void replaceFront(List<Block> pieces) {
+        if (pieces == null) throw new IllegalArgumentException("pieces cannot be null");
+        for (int i = 0; i < pieces.size(); i++) {
+            Block piece = pieces.get(i);
+            if (piece == null) throw new IllegalArgumentException("piece cannot be null");
+            if (i < queue.size()) queue.set(i, piece);
+            else queue.add(piece);
+        }
+    }
+
+    /**
+     * 미리보기 개수를 늘린다. cap을 넘기지 않고, 이미 더 길면 줄이지 않는다.
+     * 레이드 망원경 카드가 NEXT를 최대 5개까지 늘릴 때 쓴다.
+     */
+    public void expandPreview(int additional, int cap) {
+        if (additional < 0 || cap < 1) throw new IllegalArgumentException("preview");
+        int next = Math.min(cap, previewCount + additional);
+        if (next <= previewCount) return;
+        previewCount = next;
+        fill();
     }
 }
