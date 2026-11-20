@@ -6,3 +6,6 @@ out/
 bin/
 .vscode/
 debug.log
+relay/.venv/
+relay/__pycache__/
+relay/.pytest_cache/
