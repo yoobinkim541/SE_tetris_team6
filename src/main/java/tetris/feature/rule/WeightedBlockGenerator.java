@@ -21,7 +21,7 @@ import tetris.component.block.ZBlock;
  */
 public class WeightedBlockGenerator implements BlockGenerator {
     // 일반 블록 7종. 무게추처럼 이 생성기로 만들면 안 되는 종류가 BlockType에 추가돼도 여기서 막는다
-    private static final Set<BlockType> SUPPORTED = EnumSet.of(
+    static final Set<BlockType> SUPPORTED = EnumSet.of(
             BlockType.I, BlockType.J, BlockType.L, BlockType.O, BlockType.S, BlockType.T, BlockType.Z);
 
     private final WeightedRandom<BlockType> picker;
@@ -44,7 +44,8 @@ public class WeightedBlockGenerator implements BlockGenerator {
         return create(picker.next());
     }
 
-    private static Block create(BlockType type) {
+    /** 종류에 맞는 새 블록을 0° 상태로 만든다. BagBlockGenerator도 같은 생성 규칙을 쓴다 */
+    static Block create(BlockType type) {
         return switch (type) {
             case I -> new IBlock();
             case J -> new JBlock();

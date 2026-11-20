@@ -85,7 +85,7 @@
 ## 2. 블록 생성·Next·Spawn
 
 - **BLK-1** 7종(I, J, L, O, S, T, Z)을 구현하고, 0° 모양은 Reference Code(=현재 `*Block.java`의 `shape`)를 따른다. **[확정]**
-- **BLK-2** 각 블록은 독립적으로 1/7 확률로 선택한다. 7-bag은 쓰지 않는다. **[확정]**
+- **BLK-2** ~~각 블록은 독립적으로 1/7 확률로 선택한다. 7-bag은 쓰지 않는다.~~ → **[변경 2026-11-20]** 가중치 7-bag(`BagBlockGenerator`)으로 선택한다. NORMAL은 표준 7-bag, EASY/HARD는 bag 단위로 I 비율 ±20%를 정확히 지킨다.
 - **BLK-3** 선택 정책은 `BlockGenerator` 인터페이스 뒤에 두고, 테스트에서는 시드를 고정한 `Random` 또는 고정 순열을 주입한다. 통계 검정 대신 **주입으로 결정적 테스트**를 한다. **[확정]**
 - **NXT-1** Next는 큐 구조다. Spawn 때마다 큐 앞에서 1개를 꺼내고 즉시 새 블록을 뒤에 채워, 큐 길이가 항상 `previewCount` 이상이 되게 한다. **1차는 `previewCount = 1`**이고 UI는 맨 앞 1개만 그린다. **[확정]**
 - **SPN-1** Spawn 앵커: `col = floor((10 − n) / 2)`, `row = −(값 있는 첫 행렬 행)`, `rotation = 0`. 즉 **값 있는 가장 높은 칸이 보이는 맨 윗줄(row 0)**에 온다. 담당: `SpawnPolicy.getSpawnRow/getSpawnColumn`. **[확정]** (T2)

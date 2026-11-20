@@ -12,10 +12,10 @@ import tetris.feature.game.GameListener;
 import tetris.feature.game.GameMode;
 import tetris.feature.game.GameSession;
 import tetris.feature.game.GameSnapshot;
-import tetris.feature.rule.WeightedBlockGenerator;
+import tetris.feature.rule.BagBlockGenerator;
 
 /**
- * 실제 게임 세션이 분포 테스트를 통과한 WeightedBlockGenerator와 설정 난이도로 만들어지는지 검증한다.
+ * 실제 게임 세션이 분포 테스트를 통과한 BagBlockGenerator와 설정 난이도로 만들어지는지 검증한다.
  * MainFrame 자체는 화면 없는 환경에서 만들 수 없어서 세션을 만드는 함수만 확인한다.
  */
 public class MainFrameSessionTest {
@@ -56,10 +56,10 @@ public class MainFrameSessionTest {
     }
 
     @Test
-    void 세션의_블록은_같은_시드의_WeightedBlockGenerator와_같은_순서로_나온다() {
+    void 세션의_블록은_같은_시드의_BagBlockGenerator와_같은_순서로_나온다() {
         for (Difficulty difficulty : Difficulty.values()) {
             for (long seed = 0; seed < 30; seed++) {
-                WeightedBlockGenerator expected = new WeightedBlockGenerator(difficulty.weights(), new Random(seed));
+                BagBlockGenerator expected = new BagBlockGenerator(difficulty.weights(), new Random(seed));
                 BlockType[] actual = firstTwoBlocks(
                         MainFrame.newSession(GameMode.CLASSIC, difficulty, new Random(seed), NO_CLOCK, NO_LISTENER));
 

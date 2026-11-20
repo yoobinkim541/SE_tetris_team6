@@ -16,7 +16,7 @@ import tetris.feature.game.GameMode;
 import tetris.feature.game.GameSession;
 import tetris.feature.game.GameSnapshot;
 import tetris.feature.game.GameState;
-import tetris.feature.rule.WeightedBlockGenerator;
+import tetris.feature.rule.BagBlockGenerator;
 import tetris.feature.save.JsonScoreboardRepository;
 import tetris.feature.save.JsonSettingsRepository;
 import tetris.feature.score.Scoreboard;
@@ -108,8 +108,8 @@ class ProductionWiringAuditTest {
             assertAll(() -> assertEquals(GameState.PLAYING, session.snapshot().state()),
                     () -> assertEquals(GameMode.CLASSIC, session.snapshot().mode()),
                     () -> assertEquals(difficulty, session.snapshot().difficulty()),
-                    () -> assertInstanceOf(WeightedBlockGenerator.class, field(session, "generator"),
-                            "Production classic game must use the weighted generator"));
+                    () -> assertInstanceOf(BagBlockGenerator.class, field(session, "generator"),
+                            "Production classic game must use the weighted bag generator"));
         });
     }
 
