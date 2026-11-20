@@ -38,7 +38,7 @@ import tetris.ui.versus.FakeBattleClient;
 
 /** 화면 개편 검수용 오프스크린 캡처. 테스트 스위트에는 넣지 않는다 */
 public final class OverhaulCapture {
-    private static final Path OUT = Path.of("C:/Users/asus/Desktop/SE-tetris/assets-work/overhaul");
+    private static final Path OUT = Path.of(System.getProperty("tetris.capture.dir", "build/verification/overhaul"));
 
     private OverhaulCapture() {
     }
