@@ -313,6 +313,8 @@ class RelayServerTest {
         advance(Duration.ofSeconds(30));
         p[0].getOutputStream().write(1);
         assertEquals(1, p[1].getInputStream().read());
+        // 상대가 바이트를 받은 뒤에도 pump가 쓰기 표시를 지우기 전일 수 있다. 시계를 50초 넘기기 전에 기다린다
+        eventually(() -> server.stalledWrites() == 0, "write finished");
         advance(Duration.ofSeconds(50));
         assertEquals(1, server.pairedRooms(), "활동이 있었으므로 유지");
         advance(Duration.ofSeconds(61));

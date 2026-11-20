@@ -31,6 +31,7 @@ public final class P2pLobbyPanel extends JPanel {
         void host(String port);
         void connect(String address, String port);
         void selectMode(BattleMode mode);
+        void selectRaid(tetris.feature.raid.api.RaidMode mode);
         void toggleReady();
         void cancelOrBack();
         /** 인터넷 대전: 중계 서버에 방을 만들고 방 코드를 받는다 */
@@ -48,7 +49,10 @@ public final class P2pLobbyPanel extends JPanel {
     private final JTextField codeField = new JTextField("", 7);
     private final JButton joinInternetButton = new JButton("참가");
     private final JButton hostInternetButton = new JButton("방 만들기");
-    private final JComboBox<BattleMode> modeBox = new JComboBox<>(BattleMode.values());
+    private final JComboBox<Object> modeBox = new JComboBox<>(new Object[] {
+            BattleMode.CLASSIC, BattleMode.ITEM, BattleMode.TIMED,
+            tetris.feature.raid.api.RaidMode.COOP, tetris.feature.raid.api.RaidMode.RACE
+    });
     private final JLabel statusLabel = label("", 17, true);
     private final JLabel peerLabel = label("", 15, false);
     private final JLabel readyLabel = label("", 15, false);
@@ -72,7 +76,7 @@ public final class P2pLobbyPanel extends JPanel {
         setFocusable(true);
         setLayout(new GridBagLayout());
         modeBox.setRenderer((list, value, index, selected, focus) -> {
-            var cell = new JLabel(value == null ? "" : BattleModes.label(value));
+            var cell = new JLabel(modeLabel(value));
             cell.setOpaque(true);
             cell.setBackground(selected ? new Color(0x3A4250) : Color.WHITE);
             cell.setForeground(selected ? Color.WHITE : Color.BLACK);
@@ -120,7 +124,9 @@ public final class P2pLobbyPanel extends JPanel {
             }
         });
         modeBox.addActionListener(e -> {
-            if (!rendering && modeBox.getSelectedItem() instanceof BattleMode selected) actions.selectMode(selected);
+            if (rendering) return;
+            if (modeBox.getSelectedItem() instanceof BattleMode selected) actions.selectMode(selected);
+            else if (modeBox.getSelectedItem() instanceof tetris.feature.raid.api.RaidMode raid) actions.selectRaid(raid);
         });
         readyButton.addActionListener(e -> actions.toggleReady());
         backButton.addActionListener(e -> actions.cancelOrBack());
@@ -233,7 +239,8 @@ public final class P2pLobbyPanel extends JPanel {
             joinInternetButton.setEnabled(initial);
             hostInternetButton.setEnabled(initial);
             recentBox.setEnabled(initial && recentBox.getItemCount() > 0);
-            if (lobby.config() != null) modeBox.setSelectedItem(lobby.config().mode());
+            if (lobby.config() != null) modeBox.setSelectedItem(lobby.config().raid()
+                    ? lobby.config().raidMode() : lobby.config().mode());
             modeBox.setEnabled(inLobby && lobby.role() == Role.HOST);
             readyButton.setEnabled(inLobby && lobby.config() != null);
             readyButton.setText(lobby.localReady() ? "준비 취소" : "게임 시작");
@@ -252,7 +259,7 @@ public final class P2pLobbyPanel extends JPanel {
                     + (lobby.role() == Role.HOST ? "  (나: P1 왼쪽)" : "  (나: P2 오른쪽)"));
             ready = inLobby || lobby.state() == State.STARTING
                     ? "나: " + (lobby.localReady() ? "준비 완료" : "대기") + "   상대: " + (lobby.peerReady() ? "준비 완료" : "대기")
-                    + (lobby.config() == null ? "" : "   모드: " + BattleModes.label(lobby.config().mode()))
+                    + (lobby.config() == null ? "" : "   모드: " + configLabel(lobby.config()))
                     : "";
             readyLabel.setText(ready);
         } finally {
@@ -290,7 +297,18 @@ public final class P2pLobbyPanel extends JPanel {
     public JTextField codeField() { return codeField; }
     public JButton joinInternetButton() { return joinInternetButton; }
     public JButton hostInternetButton() { return hostInternetButton; }
-    public JComboBox<BattleMode> modeBox() { return modeBox; }
+    public JComboBox<Object> modeBox() { return modeBox; }
+
+    private static String modeLabel(Object value) {
+        if (value instanceof BattleMode mode) return BattleModes.label(mode);
+        if (value == tetris.feature.raid.api.RaidMode.COOP) return "협동 레이드";
+        if (value == tetris.feature.raid.api.RaidMode.RACE) return "레이스 레이드";
+        return "";
+    }
+
+    private static String configLabel(tetris.feature.versus.api.MatchConfig config) {
+        return config.raid() ? modeLabel(config.raidMode()) : BattleModes.label(config.mode());
+    }
     public JButton readyButton() { return readyButton; }
     public JButton backButton() { return backButton; }
 }

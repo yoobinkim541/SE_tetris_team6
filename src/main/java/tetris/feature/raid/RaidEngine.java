@@ -107,6 +107,9 @@ public final class RaidEngine {
     private long offerLeft;
     private List<CardId> offer;
     private RaidSnapshot.Result result;
+    private Lane[] lanes;
+    private int patternPlayer = -1;
+    private boolean raceAdvanced;
 
     public RaidEngine(RaidConfig config, MatchClock clock) {
         this(config, clock, null, null);
@@ -142,6 +145,7 @@ public final class RaidEngine {
             session.pause();
         }
         rollBoss(false);
+        if (config.mode() == RaidMode.RACE) initRaceLanes();
         phase = RaidPhase.COUNTDOWN;
         publish();
     }
@@ -167,7 +171,14 @@ public final class RaidEngine {
     public void ultimate(PlayerId player) {
         if (closed || phase != RaidPhase.PLAYING) return;
         int i = index(player);
-        if (i < 0 || !fighters[i].alive || gauge < RaidRules.GAUGE_MAX) return;
+        if (i < 0 || !fighters[i].alive) return;
+        if (config.mode() == RaidMode.RACE) {
+            if (lanes[i].gauge < RaidRules.GAUGE_MAX) return;
+            fireRaceUltimate(i);
+            if (phase != RaidPhase.FINISHED) bump();
+            return;
+        }
+        if (gauge < RaidRules.GAUGE_MAX) return;
         fighters[i].ultimateAt = playClock;
         tryFireUltimate();
         if (phase != RaidPhase.FINISHED) bump();
@@ -195,6 +206,14 @@ public final class RaidEngine {
                 offerLeft -= dt;
             }
         }
+        if (phase == RaidPhase.PLAYING && config.mode() == RaidMode.RACE && lanes != null && dt > 0
+                && phase != RaidPhase.PAUSED) {
+            for (Lane lane : lanes) if (lane.id == BossId.GOLDEN_TETRO) lane.fleeLeft -= dt;
+            if (elapsed >= RaidRules.RACE_LIMIT_MILLIS) {
+                finishRace(tiebreak());
+                return;
+            }
+        }
         if (phase == RaidPhase.COUNTDOWN && countdownLeft <= 0) {
             phase = RaidPhase.PLAYING;
             resumePlaying();
@@ -207,7 +226,9 @@ public final class RaidEngine {
             settleSpawns();
             noteDowns();
             if (phase == RaidPhase.FINISHED) return;
-            if (bossId == BossId.GOLDEN_TETRO && fleeLeft <= 0) flee();
+            if (config.mode() == RaidMode.RACE) {
+                if (lanes != null && lanes[0].id == BossId.GOLDEN_TETRO && lanes[0].fleeLeft <= 0) raceFlee();
+            } else if (bossId == BossId.GOLDEN_TETRO && fleeLeft <= 0) flee();
             tryFireUltimate();
         }
         if (phase != RaidPhase.FINISHED) bump();
@@ -361,8 +382,10 @@ public final class RaidEngine {
         } else {
             fighter.combo = 0;
         }
+        boolean coop = config.mode() == RaidMode.COOP;
+        boolean race = config.mode() == RaidMode.RACE;
         boolean sync = false;
-        if (count == 2 && lines > 0) {
+        if (coop && lines > 0) {
             long other = fighters[1 - player].lastClearAt;
             sync = other >= 0 && playClock - other <= RaidRules.SYNC_MILLIS;
         }
@@ -379,18 +402,29 @@ public final class RaidEngine {
             fighter.damageDealt += damage;
             totalDamage += damage;
             recentDamage.add(new long[] {playClock, player, damage});
-            hurt(player, damage);
-            gauge = Math.min(RaidRules.GAUGE_MAX, gauge + lines * RaidRules.GAUGE_PER_LINE);
+            if (race) {
+                lanes[player].gauge = Math.min(RaidRules.GAUGE_MAX,
+                        lanes[player].gauge + lines * RaidRules.GAUGE_PER_LINE);
+                hurtLane(player, damage);
+            } else {
+                hurt(player, damage);
+                gauge = Math.min(RaidRules.GAUGE_MAX, gauge + lines * RaidRules.GAUGE_PER_LINE);
+            }
         }
-        if (count == 2 && lines > 0) {
+        if (coop && lines > 0) {
             cleanse(player);
             noteBlock(player, lines);
             noteRevive(player, lines);
         }
-        if (chainActive && lines > 0) chainCleared[player] = true;
+        if (!race && chainActive && lines > 0) chainCleared[player] = true;
         decrementEffects(player);
-        tickChain();
+        if (!race) tickChain();
         if (phase != RaidPhase.PLAYING) return;
+        if (race) {
+            if (!raceAdvanced) tickRacePattern(player);
+            raceAdvanced = false;
+            return;
+        }
         if (target == player || target < 0) {
             piecesLeft--;
             if (piecesLeft <= 0) firePattern();
@@ -598,7 +632,7 @@ public final class RaidEngine {
     }
 
     private void tryFireUltimate() {
-        if (phase != RaidPhase.PLAYING || gauge < RaidRules.GAUGE_MAX) return;
+        if (config.mode() == RaidMode.RACE || phase != RaidPhase.PLAYING || gauge < RaidRules.GAUGE_MAX) return;
         if (count == 1) {
             if (fighters[0].ultimateAt < 0) return;
         } else {
@@ -721,6 +755,16 @@ public final class RaidEngine {
             fighters[i].pending.clear();
             events.add(new RaidEvent(RaidEvent.Type.PLAYER_DOWN, i, 0));
         }
+        if (config.mode() == RaidMode.RACE) {
+            int alive = 0;
+            int survivor = -1;
+            for (int i = 0; i < count; i++) if (fighters[i].alive) {
+                alive++;
+                survivor = i;
+            }
+            if (alive < count) finishRace(alive == 1 ? survivor : tiebreak());
+            return;
+        }
         if (aliveIndexes().isEmpty()) {
             finish();
             return;
@@ -734,7 +778,13 @@ public final class RaidEngine {
     private void finish() {
         phase = RaidPhase.FINISHED;
         offer = null;
-        result = new RaidSnapshot.Result(kills, totalDamage, elapsed);
+        if (result == null) {
+            if (config.mode() == RaidMode.RACE && lanes != null) {
+                result = new RaidSnapshot.Result(lanes[0].kills + lanes[1].kills, totalDamage, elapsed, null);
+            } else {
+                result = new RaidSnapshot.Result(kills, totalDamage, elapsed);
+            }
+        }
         commands.clear();
         for (Fighter fighter : fighters) {
             fighter.clock.stop();
@@ -787,9 +837,23 @@ public final class RaidEngine {
                 ? new RaidSnapshot.CardOffer(offer, chooser, Math.max(0, offerLeft)) : null;
         RaidPhase shown = phase;
         if (shown == RaidPhase.CARD_PICK && cardOffer == null) shown = RaidPhase.PLAYING;
-        return new RaidSnapshot(raidId, revision, config.mode(), shown, bossView(), players, kills, elapsed,
-                Math.min(RaidRules.GAUGE_MAX, Math.max(0, gauge)), cardOffer, List.copyOf(events),
-                shown == RaidPhase.FINISHED ? result : null);
+        RaidSnapshot.BossView boss = bossView();
+        int shownKills = kills;
+        int shownGauge = Math.min(RaidRules.GAUGE_MAX, Math.max(0, gauge));
+        List<RaidSnapshot.BossView> raceBosses = List.of();
+        int[] raceKills = new int[0];
+        int[] raceGauges = new int[0];
+        if (config.mode() == RaidMode.RACE && lanes != null) {
+            raceBosses = List.of(laneView(0), laneView(1));
+            raceKills = new int[] {lanes[0].kills, lanes[1].kills};
+            raceGauges = new int[] {lanes[0].gauge, lanes[1].gauge};
+            boss = raceBosses.get(0);
+            shownKills = raceKills[0] + raceKills[1];
+            shownGauge = 0;
+        }
+        return new RaidSnapshot(raidId, revision, config.mode(), shown, boss, players, shownKills, elapsed,
+                shownGauge, cardOffer, List.copyOf(events), shown == RaidPhase.FINISHED ? result : null,
+                raceBosses, raceKills, raceGauges);
     }
 
     private RaidSnapshot.BossView bossView() {
@@ -915,10 +979,12 @@ public final class RaidEngine {
         }
 
         public int level() { return level; }
-        public boolean coop() { return count == 2; }
+        public boolean coop() { return config.mode() == RaidMode.COOP; }
         public int target() { return patternTarget; }
         public int blockLines() { return weaken; }
-        public Random random() { return raidRandom; }
+        public Random random() {
+            return patternPlayer >= 0 ? lanes[patternPlayer].patternRandom : raidRandom;
+        }
         public int players() { return count; }
         public GameSession session(int player) { return sessions[player]; }
 
@@ -945,7 +1011,239 @@ public final class RaidEngine {
         }
 
         public void split() {
-            splitNow(false);
+            if (patternPlayer >= 0) splitLane(patternPlayer, false);
+            else splitNow(false);
+        }
+    }
+
+    private void initRaceLanes() {
+        long patternSeed = raidRandom.nextLong();
+        lanes = new Lane[] {new Lane(new Random(patternSeed)), new Lane(new Random(patternSeed))};
+        copySharedTo(lanes[0]);
+        copySharedTo(lanes[1]);
+    }
+
+    private void copySharedTo(Lane lane) {
+        lane.id = bossId;
+        lane.hp = bossHp;
+        lane.max = bossMax;
+        lane.next = nextPattern;
+        lane.previous = previousPattern;
+        lane.beforePrevious = beforePrevious;
+        lane.piecesLeft = piecesLeft;
+        lane.windowPieces = windowPieces;
+        lane.split = split;
+        lane.splitHp = splitHp.clone();
+        lane.fleeLeft = fleeLeft;
+        lane.openingUsed = openingUsed;
+        lane.openingBonus = openingBonus;
+    }
+
+    private void tickRacePattern(int player) {
+        Lane lane = lanes[player];
+        if (lane.id == BossId.GOLDEN_TETRO || lane.hp <= 0) return;
+        lane.piecesLeft--;
+        if (lane.piecesLeft <= 0) fireRacePattern(player);
+    }
+
+    private void fireRacePattern(int player) {
+        Lane lane = lanes[player];
+        PatternId firing = lane.next;
+        if (firing == null) {
+            telegraphLane(player);
+            return;
+        }
+        if (lane.ultimateCharges > 0) {
+            lane.ultimateCharges--;
+            events.add(new RaidEvent(RaidEvent.Type.SHIELDED, player, 0));
+            telegraphLane(player);
+            return;
+        }
+        patternPlayer = player;
+        try {
+            Patterns.of(firing).apply(new EngineContext(player, 0));
+        } finally {
+            patternPlayer = -1;
+        }
+        events.add(new RaidEvent(RaidEvent.Type.BOSS_ATTACK, player, firing.ordinal()));
+        telegraphLane(player);
+    }
+
+    private void telegraphLane(int player) {
+        Lane lane = lanes[player];
+        PatternId scripted = patternSource == null ? null
+                : patternSource.pick(lane.id, level, lane.previous, lane.beforePrevious, lane.patternRandom);
+        lane.next = scripted != null ? scripted
+                : PatternPicker.pick(lane.id, level, lane.split, lane.previous, lane.beforePrevious, lane.patternRandom);
+        lane.beforePrevious = lane.previous;
+        lane.previous = lane.next;
+        int pieces = RaidRules.countdown(level);
+        if (!lane.openingUsed) {
+            pieces += lane.openingBonus;
+            lane.openingBonus = 0;
+            lane.openingUsed = true;
+        }
+        lane.piecesLeft = pieces;
+        lane.windowPieces = pieces;
+    }
+
+    private void hurtLane(int player, int amount) {
+        Lane lane = lanes[player];
+        if (amount <= 0 || lane.hp <= 0 || phase != RaidPhase.PLAYING) return;
+        if (lane.split) {
+            if (lane.splitHp.length > 0) {
+                lane.splitHp[0] = Math.max(0, lane.splitHp[0] - amount);
+                lane.hp = Math.max(0, Math.min(lane.max, lane.splitHp[0]));
+            }
+            if (lane.hp == 0) raceKill(player);
+            return;
+        }
+        lane.hp = Math.max(0, lane.hp - amount);
+        if (lane.id == BossId.JELLY_KING && lane.hp > 0 && lane.hp * 2L <= lane.max) splitLane(player, true);
+        if (lane.hp == 0) raceKill(player);
+    }
+
+    private void splitLane(int player, boolean announce) {
+        Lane lane = lanes[player];
+        if (lane.split || lane.hp <= 0) return;
+        lane.split = true;
+        lane.splitHp = new int[] {lane.hp};
+        if (announce) events.add(new RaidEvent(RaidEvent.Type.BOSS_ATTACK, player, PatternId.SPLIT.ordinal()));
+    }
+
+    private void raceKill(int player) {
+        if (raceAdvanced || phase != RaidPhase.PLAYING) return;
+        raceAdvanced = true;
+        Lane killer = lanes[player];
+        killer.kills++;
+        events.add(new RaidEvent(RaidEvent.Type.BOSS_DEFEATED, player, killer.id.ordinal()));
+        int slower = 1 - player;
+        advanceRaceBosses();
+        fighters[slower].pending.append(Patterns.garbage(raidRandom, RaidRules.RACE_STEAL_ROWS));
+    }
+
+    private void raceFlee() {
+        if (phase != RaidPhase.PLAYING || raceAdvanced) return;
+        raceAdvanced = true;
+        events.add(new RaidEvent(RaidEvent.Type.BOSS_ESCAPED, -1, 0));
+        advanceRaceBosses();
+        raceAdvanced = false;
+    }
+
+    private void advanceRaceBosses() {
+        level++;
+        clearFightEffects();
+        for (Fighter fighter : fighters) fighter.pending.clear();
+        split = false;
+        splitHp = new int[0];
+        chainActive = false;
+        previousPattern = null;
+        beforePrevious = null;
+        openingUsed = false;
+        openingBonus = 0;
+        luckDoubled = false;
+        luckNext = false;
+        boolean golden = !goldenUsed && raidRandom.nextInt(100) < 5;
+        if (golden) {
+            goldenUsed = true;
+            bossId = BossId.GOLDEN_TETRO;
+            bossMax = RaidRules.goldenHp(RaidMode.RACE, level);
+            bossHp = bossMax;
+            nextPattern = null;
+            target = -1;
+            piecesLeft = 0;
+            fleeLeft = RaidRules.GOLDEN_FLEE_MILLIS;
+        } else {
+            if (bag.isEmpty()) refillBag();
+            bossId = bag.remove(0);
+            bossMax = RaidRules.hp(RaidMode.RACE, level);
+            bossHp = bossMax;
+            fleeLeft = -1;
+            nextPattern = null;
+            target = -1;
+            piecesLeft = 0;
+        }
+        long patternSeed = raidRandom.nextLong();
+        for (int i = 0; i < lanes.length; i++) {
+            lanes[i].patternRandom.setSeed(patternSeed);
+            lanes[i].ultimateCharges = 0;
+            copySharedTo(lanes[i]);
+            if (golden) {
+                lanes[i].next = null;
+                lanes[i].piecesLeft = 0;
+                lanes[i].fleeLeft = RaidRules.GOLDEN_FLEE_MILLIS;
+            } else {
+                telegraphLane(i);
+            }
+        }
+        events.add(new RaidEvent(RaidEvent.Type.BOSS_SPAWN, -1, bossId.ordinal()));
+    }
+
+    private void fireRaceUltimate(int player) {
+        Lane lane = lanes[player];
+        if (lane.gauge < RaidRules.GAUGE_MAX || !fighters[player].alive) return;
+        lane.gauge = 0;
+        lane.ultimateCharges++;
+        fighters[player].ultimateAt = -1;
+        events.add(new RaidEvent(RaidEvent.Type.ULTIMATE, player, RaidRules.ULTIMATE_DAMAGE));
+        totalDamage += RaidRules.ULTIMATE_DAMAGE;
+        fighters[player].damageDealt += RaidRules.ULTIMATE_DAMAGE;
+        hurtLane(player, RaidRules.ULTIMATE_DAMAGE);
+        raceAdvanced = false;
+    }
+
+    private void finishRace(Integer winner) {
+        if (phase == RaidPhase.FINISHED) return;
+        int shown = winner == null ? lanes[0].kills : lanes[winner].kills;
+        result = new RaidSnapshot.Result(shown, totalDamage, elapsed, winner);
+        finish();
+    }
+
+    private Integer tiebreak() {
+        int left = lanes[0].kills;
+        int right = lanes[1].kills;
+        if (left != right) return left > right ? 0 : 1;
+        long leftProgress = progress(lanes[0]);
+        long rightProgress = progress(lanes[1]);
+        if (leftProgress != rightProgress) return leftProgress > rightProgress ? 0 : 1;
+        return null;
+    }
+
+    private static long progress(Lane lane) {
+        int max = Math.max(1, lane.max);
+        int left = Math.max(0, Math.min(lane.hp, max));
+        return (long) (max - left) * 1_000_000L / max;
+    }
+
+    private RaidSnapshot.BossView laneView(int player) {
+        Lane lane = lanes[player];
+        long flee = lane.id == BossId.GOLDEN_TETRO ? Math.max(0, lane.fleeLeft) : -1;
+        int hp = Math.max(0, Math.min(lane.hp, Math.max(1, lane.max)));
+        return new RaidSnapshot.BossView(lane.id, Math.max(1, level), hp, Math.max(1, lane.max),
+                lane.next, player, Math.max(0, lane.piecesLeft), lane.splitHp, flee);
+    }
+
+    private static final class Lane {
+        final Random patternRandom;
+        BossId id = BossId.JELLY_KING;
+        int hp;
+        int max = 1;
+        PatternId next;
+        PatternId previous;
+        PatternId beforePrevious;
+        int piecesLeft;
+        int windowPieces;
+        boolean split;
+        int[] splitHp = new int[0];
+        long fleeLeft = -1;
+        int gauge;
+        int ultimateCharges;
+        int kills;
+        boolean openingUsed;
+        int openingBonus;
+
+        Lane(Random patternRandom) {
+            this.patternRandom = patternRandom;
         }
     }
 

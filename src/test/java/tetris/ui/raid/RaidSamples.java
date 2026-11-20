@@ -43,8 +43,8 @@ public final class RaidSamples {
                                         PatternId pattern, int target, int piecesLeft, int[] splitHp, long fleeMillis,
                                         int kills, long elapsed, int gauge, RaidSnapshot.CardOffer offer,
                                         List<RaidEvent> events, RaidSnapshot.Result result) {
-        boolean coop = mode == RaidMode.COOP;
-        var players = coop
+        boolean two = mode != RaidMode.SOLO;
+        var players = two
                 ? List.of(fighter(true), downed())
                 : List.of(fighter(true));
         return new RaidSnapshot("raid-preview", 1, mode, phase,

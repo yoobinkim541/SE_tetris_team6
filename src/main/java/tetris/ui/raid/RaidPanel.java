@@ -53,6 +53,9 @@ public final class RaidPanel extends JPanel {
     private int resultIndex;
     private boolean confirming;
     private boolean confirmYes;
+    private String menuLabel = "메뉴로";
+    private String retryLabel = "다시 하기";
+    private String connectionNotice = "";
     private Runnable onMenu = () -> { };
     private Runnable onRetry = () -> { };
     private Runnable onCancelConfirm = () -> setConfirm(false, false);
@@ -123,6 +126,16 @@ public final class RaidPanel extends JPanel {
     public void setConfirmAction(Runnable cancel) {
         onCancelConfirm = cancel == null ? () -> setConfirm(false, false) : cancel;
     }
+
+    public void setResultLabels(String menu, String retry) {
+        menuLabel = menu == null || menu.isBlank() ? "메뉴로" : menu;
+        retryLabel = retry == null || retry.isBlank() ? "다시 하기" : retry;
+    }
+
+    public void setConnectionNotice(String notice) {
+        connectionNotice = notice == null ? "" : notice;
+        repaint();
+    }
     public void moveResult(int delta) {
         resultIndex = Math.floorMod(resultIndex + delta, 2);
         repaint();
@@ -184,6 +197,10 @@ public final class RaidPanel extends JPanel {
     }
 
     private void paintScene(Graphics2D g) {
+        if (snapshot.mode() == RaidMode.RACE) {
+            paintRace(g);
+            return;
+        }
         boolean coop = snapshot.mode() == RaidMode.COOP;
         Slot left = coop ? coopSlot(6) : soloSlot();
         Slot right = coop ? coopSlot(VW - 6 - (22 * 10 + 12)) : null;
@@ -211,6 +228,143 @@ public final class RaidPanel extends JPanel {
         if (snapshot.phase() == RaidPhase.CARD_PICK && snapshot.offer() != null) paintCards(g);
         if (confirming) paintConfirm(g);
         if (snapshot.phase() == RaidPhase.FINISHED && snapshot.result() != null) paintResult(g);
+    }
+
+    private void paintRace(Graphics2D g) {
+        int margin = 6;
+        int centerW = 92;
+        int sideW = (VW - margin * 4 - centerW) / 2;
+        int cardH = 180;
+        int cell = 15;
+        int boardY = margin + cardH + 28;
+        Slot left = raceSlot(margin, sideW, cell, boardY);
+        Slot right = raceSlot(VW - margin - sideW, sideW, cell, boardY);
+        Rectangle leftCard = new Rectangle(margin, margin, sideW, cardH);
+        Rectangle rightCard = new Rectangle(VW - margin - sideW, margin, sideW, cardH);
+        paintRaceCard(g, 0, leftCard);
+        paintRaceCard(g, 1, rightCard);
+        paintPlayer(g, snapshot.players().get(0), 0, left);
+        paintPlayer(g, snapshot.players().get(1), 1, right);
+        int centerH = Math.min(boardY + cell * 20 - margin, VH - 56);
+        paintRaceCenter(g, margin + sideW + margin, margin, centerW, centerH);
+        bossBounds.setBounds(originX + (int) (leftCard.x * scale), originY + (int) (leftCard.y * scale),
+                Math.max(1, (int) (leftCard.width * scale)), Math.max(1, (int) (leftCard.height * scale)));
+        int[] centers = {left.boardX + left.cell * 5, right.boardX + right.cell * 5};
+        int[] mids = {left.boardY + left.cell * 10, right.boardY + right.cell * 10};
+        fx.placeSparks(centers, mids);
+        fx.paintSparks(g);
+        fx.paintNumbers(g, centers, left.boardY);
+        fx.paintBanner(g, VW / 2, 360);
+        paintGuide(g);
+        paintNotice(g);
+        if (snapshot.phase() == RaidPhase.COUNTDOWN) paintCenter(g, String.valueOf(countdownDigit()), "곧 시작합니다");
+        if (snapshot.phase() == RaidPhase.PAUSED && !confirming) paintCenter(g, "일시정지", "일시정지 키로 다시 시작합니다");
+        if (confirming) paintConfirm(g);
+        if (snapshot.phase() == RaidPhase.FINISHED && snapshot.result() != null) paintResult(g);
+    }
+
+    private static Slot raceSlot(int x, int width, int cell, int boardY) {
+        int boardX = x + Math.max(4, (width - cell * 10) / 2);
+        int h = 22 + cell * 20 + 148;
+        return new Slot(x, boardY - 20, width, h, boardX, boardY, cell, boardX);
+    }
+
+    private void paintRaceCard(Graphics2D g, int index, Rectangle area) {
+        RaidSnapshot.BossView boss = snapshot.bossFor(index);
+        g.setColor(PANEL);
+        g.fillRoundRect(area.x, area.y, area.width, area.height, 14, 14);
+        Color who = index == 0 ? tetris.ui.fx.A11yColors.mine(colorBlind) : tetris.ui.fx.A11yColors.SKY;
+        g.setColor(who);
+        g.setStroke(new BasicStroke(colorBlind ? 3f : 1.5f));
+        g.drawRoundRect(area.x, area.y, area.width, area.height, 14, 14);
+        g.setStroke(new BasicStroke(1f));
+        int art = 52;
+        int artX = area.x + (area.width - art) / 2;
+        int artY = area.y + 6;
+        BufferedImage image = assets.boss(boss.id(), boss.level(), art);
+        if (image != null) g.drawImage(image, artX, artY, null);
+        else paintBossFallback(g, boss.id(), artX, artY, art);
+        int textX = area.x + 8;
+        int textW = area.width - 16;
+        int y = artY + art + 4;
+        String title = playerMark(index) + "  " + boss.id().displayName() + " Lv." + boss.level();
+        int titleSize = fittedSize(g, title, textW, 13, 9, true);
+        g.setColor(TEXT);
+        g.setFont(font(titleSize, true));
+        int titleBase = y + g.getFontMetrics().getAscent();
+        g.drawString(title, textX, titleBase);
+        y = titleBase + g.getFontMetrics().getDescent() + 4;
+        paintBar(g, textX, y, textW, 8, boss.hp() / (double) Math.max(1, boss.maxHp()),
+                tetris.ui.fx.A11yColors.hp(colorBlind));
+        y += 12;
+        g.setFont(font(11, true));
+        g.setColor(TEXT);
+        int hpBase = y + g.getFontMetrics().getAscent();
+        g.drawString(boss.hp() + "/" + boss.maxHp(), textX, hpBase);
+        y = hpBase + g.getFontMetrics().getDescent() + 8;
+        PatternId pattern = boss.nextPattern();
+        String next = pattern == null ? "패턴 없음" : pattern.displayName();
+        String pieces = boss.fleeMillis() >= 0 ? "도망 " + Math.max(0, boss.fleeMillis() / 1000) + "초"
+                : "조각 " + Math.max(0, boss.piecesLeft());
+        int nextSize = fittedSize(g, next + "  " + pieces, textW, 12, 8, false);
+        g.setFont(font(nextSize, false));
+        g.setColor(colorBlind ? tetris.ui.fx.A11yColors.SKY : CYAN);
+        int nextBase = y + g.getFontMetrics().getAscent();
+        g.drawString(next + "  " + pieces, textX, nextBase);
+        y = nextBase + g.getFontMetrics().getDescent() + 6;
+        int gauge = snapshot.gaugeFor(index);
+        g.setColor(DIM);
+        g.setFont(font(11, false));
+        g.drawString("필살 " + gauge, textX, y + g.getFontMetrics().getAscent());
+        paintBar(g, textX + 48, y + 2, Math.max(20, textW - 48), 8, gauge / 100.0,
+                tetris.ui.fx.A11yColors.gauge(colorBlind));
+    }
+
+    private void paintRaceCenter(Graphics2D g, int x, int y, int width, int height) {
+        g.setColor(PANEL);
+        g.fillRoundRect(x, y, width, height, 14, 14);
+        int[] kills = snapshot.raceKills().length == 2 ? snapshot.raceKills() : new int[] {0, 0};
+        g.setColor(TEXT);
+        g.setFont(font(13, true));
+        drawCentered(g, "레이스", x + width / 2, y + 22);
+        g.setColor(tetris.ui.fx.A11yColors.mine(colorBlind));
+        g.setFont(font(12, true));
+        drawCentered(g, playerMark(0), x + width / 2, y + 48);
+        g.setColor(TEXT);
+        g.setFont(font(28, true));
+        drawCentered(g, String.valueOf(kills[0]), x + width / 2, y + 80);
+        g.setColor(DIM);
+        g.setFont(font(12, false));
+        drawCentered(g, "대", x + width / 2, y + 102);
+        g.setColor(tetris.ui.fx.A11yColors.SKY);
+        g.setFont(font(12, true));
+        drawCentered(g, playerMark(1), x + width / 2, y + 124);
+        g.setColor(TEXT);
+        g.setFont(font(28, true));
+        drawCentered(g, String.valueOf(kills[1]), x + width / 2, y + 156);
+        g.setColor(colorBlind ? tetris.ui.fx.A11yColors.YELLOW : GOLD);
+        g.setFont(font(16, true));
+        drawCentered(g, clock(snapshot.elapsedMillis()), x + width / 2, y + 196);
+        long left = Math.max(0, tetris.feature.raid.RaidRules.RACE_LIMIT_MILLIS - snapshot.elapsedMillis());
+        g.setColor(DIM);
+        g.setFont(font(11, false));
+        drawCentered(g, "남음 " + clock(left), x + width / 2, y + 216);
+    }
+
+    private void paintNotice(Graphics2D g) {
+        if (connectionNotice.isEmpty()) return;
+        g.setFont(font(11, true));
+        g.setColor(colorBlind ? tetris.ui.fx.A11yColors.VERMILION : new Color(0xFF8A65));
+        drawCentered(g, connectionNotice, VW / 2, 18);
+    }
+
+    private static String playerMark(int index) {
+        return index == 0 ? "■ P1" : "● P2";
+    }
+
+    private String raceWinner(RaidSnapshot.Result result) {
+        if (result.winner() == null) return "무승부";
+        return result.winner() == 0 ? "■ P1 승" : "● P2 승";
     }
 
     private static Slot soloSlot() {
@@ -260,6 +414,7 @@ public final class RaidPanel extends JPanel {
     }
 
     private boolean isTarget(int index) {
+        if (snapshot.mode() == RaidMode.RACE) return false;
         if (snapshot.phase() != RaidPhase.PLAYING && snapshot.phase() != RaidPhase.COUNTDOWN) return false;
         int target = snapshot.boss().target();
         return target < 0 || target == index;
@@ -336,7 +491,7 @@ public final class RaidPanel extends JPanel {
         g.setFont(font(11, false));
         int ascent = g.getFontMetrics().getAscent();
         int labelH = g.getFontMetrics().getHeight();
-        int gap = 6;
+        int gap = stacked ? 10 : 6;
         g.setColor(TEXT);
         g.drawString("홀드", x, top + ascent);
         int holdY = top + labelH + gap;
@@ -695,15 +850,21 @@ public final class RaidPanel extends JPanel {
         g.drawRoundRect(boxX, boxY, boxW, boxH, 20, 20);
         g.setColor(TEXT);
         g.setFont(font(26, true));
-        drawCentered(g, "레이드 종료", VW / 2, 210);
+        drawCentered(g, snapshot.mode() == RaidMode.RACE ? raceWinner(snapshot.result()) : "레이드 종료", VW / 2, 210);
         g.setFont(font(18, false));
-        drawCentered(g, "처치  " + result.kills(), VW / 2, 260);
-        drawCentered(g, "총 데미지  " + result.totalDamage(), VW / 2, 298);
-        drawCentered(g, "시간  " + clock(result.survivedMillis()), VW / 2, 336);
+        int textY = 248;
+        if (snapshot.mode() == RaidMode.RACE && snapshot.raceKills().length == 2) {
+            int[] kills = snapshot.raceKills();
+            drawCentered(g, playerMark(0) + " " + kills[0] + "  :  " + kills[1] + " " + playerMark(1), VW / 2, textY);
+            textY += 32;
+        }
+        drawCentered(g, "처치  " + result.kills(), VW / 2, textY);
+        drawCentered(g, "총 데미지  " + result.totalDamage(), VW / 2, textY + 34);
+        drawCentered(g, "시간  " + clock(result.survivedMillis()), VW / 2, textY + 68);
         menuButton = new Rectangle(boxX + 24, 390, boxW / 2 - 36, 44);
         retryButton = new Rectangle(VW / 2 + 12, 390, boxW / 2 - 36, 44);
-        paintChoice(g, menuButton, "메뉴로", resultIndex == 0);
-        paintChoice(g, retryButton, "다시 하기", resultIndex == 1);
+        paintChoice(g, menuButton, menuLabel, resultIndex == 0);
+        paintChoice(g, retryButton, retryLabel, resultIndex == 1);
         g.setFont(font(13, false));
         g.setColor(DIM);
         drawCentered(g, "←/→ 선택   Enter 확인", VW / 2, 470);

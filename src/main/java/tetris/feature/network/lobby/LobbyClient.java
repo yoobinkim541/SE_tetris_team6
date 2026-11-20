@@ -36,7 +36,10 @@ public interface LobbyClient extends AutoCloseable {
      * the client's receiver already exists. Empty outside STARTING/PLAYING/RESULT.
      */
     Optional<BattleClient> battleClient();
-    /** RESULT -> LOBBY on the same connection (F-07). Keeps config and the peer's vote; clears the local vote. */
+    /** 레이드 CONFIG면 호스트 엔진 또는 클라이언트 수신기. 대전이면 비어 있다 */
+    default Optional<tetris.feature.raid.api.RaidClient> raidClient() {
+        return Optional.empty();
+    }
     void returnToLobby();
     /** Delivers the current snapshot first, then ordered updates until unsubscribed. */
     Subscription subscribe(Consumer<LobbySnapshot> listener);

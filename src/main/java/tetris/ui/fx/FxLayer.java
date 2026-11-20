@@ -128,6 +128,7 @@ public final class FxLayer {
                 burst(1, 0x7EE7FF);
             }
             case BOSS_ATTACK -> flash = Math.max(flash, 70);
+            case BOSS_DEFEATED -> { if (event.player() >= 0) banner("선수를 빼앗김", 0xFFC94D); }
             default -> {
             }
         }

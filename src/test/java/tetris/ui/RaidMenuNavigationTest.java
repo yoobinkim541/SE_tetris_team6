@@ -47,9 +47,9 @@ class RaidMenuNavigationTest {
 
         List<MenuItem> multi = MainFrame.multiMenuItems(
                 () -> log.add("local"), () -> log.add("item-battle"), () -> log.add("timed"),
-                () -> log.add("online"), () -> log.add("coop"), () -> log.add("multi-back"));
+                () -> log.add("online"), () -> log.add("coop"), () -> log.add("race"), () -> log.add("multi-back"));
         assertEquals(List.of("로컬 일반 대전", "로컬 아이템 대전", "로컬 시간제한 대전",
-                "온라인 대전 (LAN·인터넷)", "협동 레이드 (2인)", "메인 메뉴"),
+                "온라인 대전 (LAN·인터넷)", "협동 레이드 (2인)", "레이스 레이드 (1v1)", "메인 메뉴"),
                 multi.stream().map(MenuItem::label).toList());
         MainMenuPanel multiPanel = new MainMenuPanel(multi, () -> log.add("esc-multi"), "멀티플레이", () -> false);
         choose(multiPanel, 4);

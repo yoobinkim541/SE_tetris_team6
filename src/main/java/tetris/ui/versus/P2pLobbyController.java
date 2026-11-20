@@ -43,6 +43,9 @@ public final class P2pLobbyController implements P2pLobbyPanel.Actions, AutoClos
     public interface Navigation {
         /** 경기 시작. local은 이 PC가 조작하는 쪽 설명(P1/P2) */
         void startMatch(BattleClient client, MatchConfig config, Role role);
+        /** 레이드 시작. 호스트는 왼쪽, 클라이언트는 오른쪽 */
+        default void startRaid(tetris.feature.raid.api.RaidClient client, MatchConfig config, Role role) {
+        }
         /** 경기 중 연결이 끊겼다. 경기 화면을 닫고 로비 화면을 보여 줘야 한다 */
         void connectionLost();
         /** INITIAL에서 뒤로: P2P 화면을 떠난다 */
@@ -74,6 +77,7 @@ public final class P2pLobbyController implements P2pLobbyPanel.Actions, AutoClos
     private boolean error;
     private LobbySnapshot current;
     private BattleMode selectedMode = BattleMode.CLASSIC;
+    private tetris.feature.raid.api.RaidMode selectedRaid;
     private ControlStyle controlStyle = ControlStyle.MODERN;
     private String message = "";
     private long attempt;
@@ -174,9 +178,18 @@ public final class P2pLobbyController implements P2pLobbyPanel.Actions, AutoClos
     @Override
     public void selectMode(BattleMode mode) {
         selectedMode = Objects.requireNonNull(mode);
+        selectedRaid = null;
         if (closed || current.role() != Role.HOST || current.state() != State.LOBBY) return;
-        if (current.config() != null && current.config().mode() == mode) return;
+        if (current.config() != null && !current.config().raid() && current.config().mode() == mode) return;
         lobby.selectConfig(configFor(mode));
+    }
+
+    @Override
+    public void selectRaid(tetris.feature.raid.api.RaidMode mode) {
+        selectedRaid = Objects.requireNonNull(mode);
+        if (closed || current.role() != Role.HOST || current.state() != State.LOBBY) return;
+        if (current.config() != null && current.config().raidMode() == mode) return;
+        lobby.selectConfig(MatchConfig.raid(mode, controlStyle));
     }
 
     @Override
@@ -345,11 +358,20 @@ public final class P2pLobbyController implements P2pLobbyPanel.Actions, AutoClos
             return; // 설정이 들어간 스냅샷이 곧 다시 온다
         }
         if ((state == State.STARTING || state == State.PLAYING) && !inMatch) {
-            var battle = lobby.battleClient();
-            if (battle.isPresent() && !inMatch) {
-                inMatch = true;
-                message = "";
-                navigation.startMatch(battle.get(), snapshot.config(), snapshot.role());
+            if (snapshot.config() != null && snapshot.config().raid()) {
+                var raid = lobby.raidClient();
+                if (raid.isPresent()) {
+                    inMatch = true;
+                    message = "";
+                    navigation.startRaid(raid.get(), snapshot.config(), snapshot.role());
+                }
+            } else {
+                var battle = lobby.battleClient();
+                if (battle.isPresent()) {
+                    inMatch = true;
+                    message = "";
+                    navigation.startMatch(battle.get(), snapshot.config(), snapshot.role());
+                }
             }
         }
         if (inMatch && state == State.INITIAL) {
@@ -372,7 +394,8 @@ public final class P2pLobbyController implements P2pLobbyPanel.Actions, AutoClos
     public void useControlStyle(ControlStyle style) {
         controlStyle = style == null ? ControlStyle.MODERN : style;
         if (!closed && current != null && current.role() == Role.HOST && current.state() == State.LOBBY) {
-            lobby.selectConfig(configFor(selectedMode));
+            lobby.selectConfig(selectedRaid == null ? configFor(selectedMode)
+                    : tetris.feature.versus.api.MatchConfig.raid(selectedRaid, controlStyle));
         }
     }
 
