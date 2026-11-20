@@ -19,7 +19,7 @@ import tetris.feature.game.GameListener;
 import tetris.feature.game.GameSession;
 import tetris.feature.game.GameSnapshot;
 import tetris.feature.game.GameState;
-import tetris.feature.rule.WeightedBlockGenerator;
+import tetris.feature.rule.BagBlockGenerator;
 import tetris.feature.game.GameMode;
 import tetris.feature.game.Difficulty;
 import java.util.Random;
@@ -229,13 +229,13 @@ public class MainFrame extends JFrame {
     }
 
     /**
-     * 한 판을 진행할 세션을 만든다. 블록은 난이도 가중치를 쓰는 WeightedBlockGenerator로 만들어,
+     * 한 판을 진행할 세션을 만든다. 블록은 난이도 가중치를 bag 단위로 지키는 BagBlockGenerator로 만들어,
      * 분포 테스트를 통과한 생성기가 실제 게임에서도 그대로 쓰이게 한다.
      * 아이템 모드는 항상 NORMAL 규칙이라 가중치도 NORMAL로 맞춘다.
      */
     static GameSession newSession(GameMode mode, Difficulty difficulty, Random random, GameClock clock, GameListener listener) {
         Difficulty effective = mode == GameMode.ITEM ? Difficulty.NORMAL : difficulty;
-        return new GameSession(mode, effective, new WeightedBlockGenerator(effective.weights(), random), clock, listener);
+        return new GameSession(mode, effective, new BagBlockGenerator(effective.weights(), random), clock, listener);
     }
 
     private void startGame(GameMode mode) {
