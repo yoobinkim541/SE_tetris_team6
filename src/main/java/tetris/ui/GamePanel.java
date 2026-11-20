@@ -13,6 +13,7 @@ import tetris.feature.data.Board;
 import tetris.feature.game.GameListener;
 import tetris.feature.game.GameSnapshot;
 import tetris.feature.game.GameState;
+import tetris.feature.rule.TSpinType;
 import tetris.feature.setting.Settings;
 
 /**
@@ -187,7 +188,7 @@ public class GamePanel extends JPanel implements GameListener {
     // 가장 최근 Lock이 T-스핀이면 보드 위쪽에 표시한다 (TSP-4). 다음 Lock에서 판정이 바뀌면 사라진다
     private void drawTSpin(Graphics2D g, int x, int y) {
         if (snapshot == null || !snapshot.lastTSpin().isTSpin()) return;
-        String text = snapshot.lastTSpin() == tetris.feature.rule.TSpinType.MINI ? "T-SPIN MINI" : "T-SPIN!";
+        String text = snapshot.lastTSpin() == TSpinType.MINI ? "T-SPIN MINI" : "T-SPIN!";
         int fontSize = Math.max(10, cellSize * 4 / 5);
         g.setFont(Theme.text(fontSize, true));
         int boardWidth = cellSize * Board.WIDTH;

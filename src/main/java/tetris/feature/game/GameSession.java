@@ -186,7 +186,7 @@ public class GameSession {
         lastActionIsRotate = true;
         lastKickIndex = kick;
         onMovedOrRotated();
-        listener.onChanged(snapshot());
+        if (state == GameState.PLAYING) listener.onChanged(snapshot()); // 다 쓴 블록은 다시 닿는 순간 Lock될 수 있다
     }
 
     /** 내려갈 수 있는 만큼 한 번에 내리고 +칸수 x Level (SCR-2) 후 즉시 Lock. 점수는 Level이 바뀔 수 있는 Lock 전에 더한다 */
@@ -362,7 +362,7 @@ public class GameSession {
         currentBlock.setPosition(row, col);
         lastActionIsRotate = false;
         onMovedOrRotated();
-        listener.onChanged(snapshot());
+        if (state == GameState.PLAYING) listener.onChanged(snapshot()); // 다 쓴 블록은 다시 닿는 순간 Lock될 수 있다
     }
 
     /**
@@ -377,9 +377,9 @@ public class GameSession {
         if (!usesLockDelay()) {
             if (!descended) lockCurrentBlock();
         } else if (descended) {
-            if (isGrounded()) startLockDelay(); // 방금 바닥에 닿았다
+            if (isGrounded()) onGrounded();     // 방금 바닥에 닿았다
         } else if (!lockDelayActive) {
-            startLockDelay();                   // 닿아 있었지만 유예가 아직 시작되지 않았다 (예: 닿은 채로 Spawn)
+            onGrounded();                       // 닿아 있었지만 유예가 아직 시작되지 않았다
         } else if (timerFired) {
             lockCurrentBlock();                 // 유예 시간이 다 지났다
         }
@@ -401,14 +401,24 @@ public class GameSession {
     }
 
     /**
+     * 바닥에서 떨어져 있던 블록이 다시 닿았다 (LCK-6). 바닥을 벗어날 때도 초기화 1회를 쓰므로,
+     * 블록당 횟수를 다 썼으면 새 유예 없이 바로 Lock한다. 이렇게 하지 않으면 바닥 가장자리에서
+     * 좌우로 오가거나 위로 킥되는 회전을 반복해 Lock을 끝없이 미룰 수 있다.
+     */
+    private void onGrounded() {
+        if (lockResets > 0 && lockResets >= lockPolicy.maxResets()) lockCurrentBlock();
+        else startLockDelay();
+    }
+
+    /**
      * 좌우 이동·회전 성공 직후 (LCK-6). 유예 중이면 남은 횟수가 있을 때만 타이머를 처음부터 다시 센다.
-     * 이동·회전으로 바닥에서 벗어나면 유예를 끝내고 낙하 타이머로 돌아가며, 공중에서 움직여 바닥에 닿으면 유예를 시작한다.
+     * 이동·회전으로 바닥에서 벗어나면 초기화 1회를 쓰고 낙하 타이머로 돌아가며, 공중에서 움직여 바닥에 닿으면 onGrounded로 넘긴다.
      */
     private void onMovedOrRotated() {
         if (!usesLockDelay()) return;
         boolean grounded = isGrounded();
         if (!lockDelayActive) {
-            if (grounded) startLockDelay();
+            if (grounded) onGrounded();
             return;
         }
         if (!grounded) {
