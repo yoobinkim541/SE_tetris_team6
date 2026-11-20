@@ -38,6 +38,7 @@ public class Messages {
         TEXT.put("game.lines", "LINES");
         TEXT.put("game.state", "STATE");
         TEXT.put("game.keys", "KEYS");
+        TEXT.put("game.time", "TIME");
         TEXT.put("game.effects", "지속 효과");
         TEXT.put("effect.DOUBLE_SCORE.tag", "x2");
         TEXT.put("effect.DOUBLE_SCORE.desc", "점수 2배");
@@ -141,6 +142,11 @@ public class Messages {
         String text = TEXT.get(key);
         if (text == null) throw new IllegalArgumentException("unknown message key: " + key);
         return text;
+    }
+
+    /** 글꼴이 안내 문구를 모두 그릴 수 있는지 테스트가 확인한다 */
+    public static java.util.Collection<String> allTexts() {
+        return java.util.List.copyOf(TEXT.values());
     }
 
     public static String format(String key, Object... args) {

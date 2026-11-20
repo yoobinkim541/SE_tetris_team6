@@ -23,7 +23,7 @@ public class NameInputPanel extends JPanel {
     static final int MAX_LENGTH = 10; // NAM-2
 
     private final Consumer<String> onSubmit;
-    private final JTextField field = new JTextField(MAX_LENGTH + 2);
+    private final JTextField field = new CapsuleField();
     private final JLabel scoreLabel = label("", 28, true, Theme.TEXT);
     private final JLabel hintLabel = label(" ", 14, false, Theme.WARNING);
 
@@ -31,17 +31,18 @@ public class NameInputPanel extends JPanel {
     public NameInputPanel(Consumer<String> onSubmit) {
         if (onSubmit == null) throw new IllegalArgumentException("onSubmit cannot be null");
         this.onSubmit = onSubmit;
-        setBackground(Theme.BACKGROUND);
+        setOpaque(false);
         setLayout(new GridBagLayout());
 
         ((AbstractDocument) field.getDocument()).setDocumentFilter(createNameFilter());
-        field.setFont(Theme.text(22, true));
+        field.setFont(Theme.font("이름", 22, false));
         field.setHorizontalAlignment(SwingConstants.CENTER);
-        field.setBackground(Theme.PANEL);
-        field.setForeground(Theme.TEXT);
-        field.setCaretColor(Theme.ACCENT);
-        field.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(Theme.ACCENT), BorderFactory.createEmptyBorder(6, 8, 6, 8)));
+        field.setForeground(Color.WHITE);
+        field.setCaretColor(tetris.ui.theme.UiKit.CYAN);
+        field.setOpaque(false);
+        field.setBorder(BorderFactory.createEmptyBorder(10, 28, 10, 28));
+        field.setPreferredSize(new java.awt.Dimension(320, 48));
+        field.setMinimumSize(new java.awt.Dimension(240, 44));
         field.addActionListener(e -> submit());
 
         addRow(label(Messages.get("name.title"), 34, true, Theme.ACCENT), 0, 24);
@@ -64,6 +65,11 @@ public class NameInputPanel extends JPanel {
         field.requestFocusInWindow();
     }
 
+    @Override
+    protected void paintComponent(java.awt.Graphics g) {
+        tetris.ui.theme.UiKit.paintScene((java.awt.Graphics2D) g, getWidth(), getHeight());
+    }
+
     private void submit() {
         String name = field.getText();
         if (!ScoreEntry.isValidName(name)) { // NAM-3: 빈 이름·공백만 있는 이름은 저장하지 않고 안내
@@ -82,9 +88,41 @@ public class NameInputPanel extends JPanel {
 
     private static JLabel label(String text, int size, boolean bold, Color color) {
         JLabel label = new JLabel(text, SwingConstants.CENTER);
-        label.setFont(Theme.text(size, bold));
+        label.setFont(Theme.font(text, size, bold));
         label.setForeground(color);
         return label;
+    }
+
+    private static final class CapsuleField extends JTextField {
+        private CapsuleField() {
+            super(MAX_LENGTH + 2);
+            setOpaque(false);
+            setPreferredSize(new java.awt.Dimension(320, 48));
+        }
+
+        @Override
+        public java.awt.Dimension getPreferredSize() {
+            return new java.awt.Dimension(320, 48);
+        }
+
+        @Override
+        public java.awt.Dimension getMinimumSize() {
+            return getPreferredSize();
+        }
+
+        @Override
+        protected void paintComponent(java.awt.Graphics g) {
+            java.awt.Graphics2D g2 = Theme.smooth(g);
+            tetris.ui.theme.UiKit.paintCapsule(g2, 0, 0, getWidth(), getHeight());
+            super.paintComponent(g);
+            if (isFocusOwner()) return;
+            java.awt.FontMetrics metrics = g2.getFontMetrics(getFont());
+            int textWidth = metrics.stringWidth(getText());
+            int caretX = (getWidth() - textWidth) / 2 + textWidth + 2;
+            int caretY = (getHeight() - metrics.getAscent()) / 2;
+            g2.setColor(tetris.ui.theme.UiKit.CYAN);
+            g2.fillRect(caretX, caretY, 2, Math.max(12, metrics.getAscent()));
+        }
     }
 
     /**

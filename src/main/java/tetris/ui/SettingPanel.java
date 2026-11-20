@@ -1,5 +1,6 @@
 package tetris.ui;
 
+import java.awt.Color;
 import java.awt.Component;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
@@ -313,15 +314,15 @@ public class SettingPanel extends JPanel {
     // ── 그리기 ───────────────────────────────
     @Override
     protected void paintComponent(Graphics g) {
-        super.paintComponent(g);
         Graphics2D g2 = Theme.smooth(g);
         int w = getWidth();
         int h = getHeight();
+        tetris.ui.theme.UiKit.paintScene(g2, w, h);
         int unit = Theme.unit(h);
 
         String title = inControlKeys ? Messages.get("settings.controlKeys") : Messages.get("settings.title");
         g2.setFont(Theme.text(unit * 2, true));
-        g2.setColor(Theme.ACCENT);
+        g2.setColor(tetris.ui.theme.UiKit.CYAN);
         Theme.drawCentered(g2, title, w / 2, unit * 4);
 
         List<String[]> rows = inControlKeys ? keyRows() : settingRows();
@@ -329,18 +330,27 @@ public class SettingPanel extends JPanel {
         int y = unit * 7;
         int labelX = w / 8;
         int valueRight = w * 7 / 8;
+        boolean colorBlind = settings.isColorBlindMode();
         for (int i = 0; i < rows.size(); i++) {
             boolean isSelected = i == selected;
-            g2.setFont(Theme.text(unit, isSelected));
-            g2.setColor(isSelected ? Theme.ACCENT : Theme.TEXT);
-            g2.drawString((isSelected ? "▶ " : "   ") + rows.get(i)[0], labelX, y);
-            Theme.drawRight(g2, rows.get(i)[1], valueRight, y);
+            int inset = isSelected ? Math.max(unit, 16) : 0;
+            if (isSelected) {
+                tetris.ui.theme.UiKit.paintButton(g2, true, labelX - unit, y - unit, valueRight - labelX + unit * 2,
+                        lineHeight - 2, colorBlind, tetris.ui.theme.UiKit.pulse());
+                tetris.ui.theme.UiKit.paintArrow(g2, labelX - unit * 2, y - unit / 3, Math.max(8, unit / 2),
+                        colorBlind, tetris.ui.theme.UiKit.pulse());
+            }
+            g2.setFont(Theme.font(rows.get(i)[0], unit, false));
+            g2.setColor(isSelected ? Color.WHITE : Theme.TEXT);
+            g2.drawString(rows.get(i)[0], labelX + inset, y);
+            g2.setFont(Theme.font(rows.get(i)[1], unit, false));
+            Theme.drawRight(g2, rows.get(i)[1], valueRight - inset, y);
             y += lineHeight;
         }
 
         if (!notice.isEmpty()) {
             g2.setFont(Theme.text(Math.max(10, unit * 4 / 5), true));
-            g2.setColor(noticeIsError ? Theme.WARNING : Theme.ACCENT);
+            g2.setColor(noticeIsError ? Theme.WARNING : tetris.ui.theme.UiKit.CYAN);
             Theme.drawCentered(g2, notice, w / 2, y + unit);
         }
 
@@ -356,9 +366,9 @@ public class SettingPanel extends JPanel {
                         "◀ " + Messages.get("size." + settings.getScreenSize().name()) + " ▶"};
                 case DIFFICULTY -> new String[] {Messages.get("settings.difficulty"),
                         "◀ " + Messages.difficultyName(settings.getDifficulty()) + " ▶"};
-                case CONTROL_KEYS -> new String[] {Messages.get("settings.controlKeys"), "›"};
+                case CONTROL_KEYS -> new String[] {Messages.get("settings.controlKeys"), "설정 ▶"};
                 case COLOR_BLIND -> new String[] {Messages.get("settings.colorBlind"),
-                        Messages.get(settings.isColorBlindMode() ? "settings.on" : "settings.off")};
+                        settings.isColorBlindMode() ? "켬" : "끔"};
                 case CONTROL_STYLE -> new String[] {Messages.get("settings.controlStyle"),
                         "◀ " + Messages.get("style." + settings.getControlStyle().name()) + " ▶"};
                 case EFFECTS -> new String[] {Messages.get("settings.effects"),

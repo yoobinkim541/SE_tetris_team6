@@ -65,10 +65,10 @@ class OrdinaryGlyphAuditTest {
         Color foreground = palette.textColor(palette.color(type, colorBlind));
         BitSet mask = new BitSet(CELL * CELL);
         // Exclude the cell outline and grid; only opaque glyph foreground belongs in the mask.
+        java.awt.Rectangle cell = panel.boardCellBounds(ROW, COLUMN);
         for (int y = 2; y < CELL - 2; y++) {
             for (int x = 2; x < CELL - 2; x++) {
-                if (image.getRGB(PADDING + COLUMN * CELL + x, PADDING + ROW * CELL + y)
-                        == foreground.getRGB()) mask.set(y * CELL + x);
+                if (image.getRGB(cell.x + x, cell.y + y) == foreground.getRGB()) mask.set(y * CELL + x);
             }
         }
         return mask;

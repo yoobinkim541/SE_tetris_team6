@@ -79,8 +79,13 @@ public class ConfirmDialog extends JPanel {
     }
 
     private static void drawOption(Graphics2D g, String label, int centerX, int baselineY, boolean isSelected, int unit) {
-        g.setFont(Theme.text(unit + unit / 4, isSelected));
-        g.setColor(isSelected ? Theme.ACCENT : Theme.TEXT);
-        Theme.drawCentered(g, isSelected ? "[ " + label + " ]" : label, centerX, baselineY);
+        int width = unit * 5;
+        int height = unit + unit / 2;
+        int x = centerX - width / 2;
+        int y = baselineY - height + unit / 4;
+        tetris.ui.theme.UiKit.paintButton(g, isSelected, x, y, width, height, false, tetris.ui.theme.UiKit.pulse());
+        g.setFont(Theme.text(unit, true));
+        g.setColor(isSelected ? java.awt.Color.WHITE : Theme.TEXT);
+        Theme.drawCentered(g, label, centerX, y + height / 2 + g.getFontMetrics().getAscent() / 2 - 1);
     }
 }

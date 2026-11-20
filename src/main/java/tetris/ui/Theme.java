@@ -7,6 +7,8 @@ import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.util.List;
+import tetris.ui.theme.GameTheme;
+import tetris.ui.theme.UiKit;
 
 /** 화면 공통 색·글꼴과 그리기 도우미. 모든 패널이 같은 모양의 제목·메뉴·안내 문구를 쓰도록 한 곳에 둔다. */
 final class Theme {
@@ -20,14 +22,17 @@ final class Theme {
     static final Color WARNING = new Color(0xFF8A65);
     static final Color OVERLAY = new Color(0, 0, 0, 170);
 
-    private static final String SELECTED_MARK = "▶ ";
-
     private Theme() {
     }
 
-    /** 한글이 나오는 글자. 논리 글꼴 Dialog는 한글 Windows에서 맑은 고딕으로 연결된다 */
+    /** 한글이 나오는 글자. Do Hyeon, 실패하면 Dialog */
     static Font text(int size, boolean bold) {
-        return new Font(Font.DIALOG, bold ? Font.BOLD : Font.PLAIN, size);
+        return GameTheme.text(size, bold);
+    }
+
+    /** 문자열 전체를 그릴 수 있는 글꼴. 숫자만 Orbitron */
+    static Font font(String value, int size, boolean preferDigits) {
+        return GameTheme.fontFor(value, size, preferDigits);
     }
 
     /** 블록 문자용 굵은 고정폭 글꼴 (RND-5) */
@@ -56,37 +61,55 @@ final class Theme {
         g.drawString(text, rightX - g.getFontMetrics().stringWidth(text), baselineY);
     }
 
-    /** 세로 메뉴. 선택 항목은 강조색과 표시 기호로 그린다. 반환: 마지막 항목 아래 y */
+    /** 세로 메뉴. 선택 항목은 강조색과 화살로 그린다. 반환: 마지막 항목 아래 y */
     static int drawMenu(Graphics2D g, List<String> items, int selected, int centerX, int topY, int fontSize) {
         return drawMenu(g, items, selected, centerX, topY, fontSize, false);
     }
 
     static int drawMenu(Graphics2D g, List<String> items, int selected, int centerX, int topY, int fontSize,
                         boolean colorBlind) {
-        int lineHeight = fontSize * 2;
+        int widest = 0;
+        g.setFont(text(fontSize, true));
+        for (String item : items) widest = Math.max(widest, g.getFontMetrics().stringWidth(item));
+        return drawPills(g, items, selected, centerX, topY, fontSize, widest + fontSize * 3, colorBlind);
+    }
+
+    /** 가로 알약 메뉴. 선택된 항목은 빛과 화살. 반환: 마지막 항목 아래 y */
+    static int drawPills(Graphics2D g, List<String> items, int selected, int centerX, int topY, int fontSize,
+                         int buttonWidth, boolean colorBlind) {
+        int buttonHeight = fontSize + fontSize / 2;
+        int gap = Math.max(6, fontSize / 3);
         int y = topY;
-        java.awt.Color accent = tetris.ui.fx.A11yColors.accent(colorBlind);
+        float pulse = UiKit.pulse();
         for (int i = 0; i < items.size(); i++) {
             boolean isSelected = i == selected;
-            g.setFont(text(fontSize, isSelected));
-            g.setColor(isSelected ? accent : TEXT);
-            String label = isSelected ? SELECTED_MARK + items.get(i) : items.get(i);
-            if (colorBlind && isSelected) {
-                int width = g.getFontMetrics().stringWidth(label) + fontSize;
-                g.drawRoundRect(centerX - width / 2, y + 2, width, fontSize + 4, 8, 8);
+            int x = centerX - buttonWidth / 2;
+            UiKit.paintButton(g, isSelected, x, y, buttonWidth, buttonHeight, colorBlind, pulse);
+            if (isSelected) {
+                UiKit.paintArrow(g, x - fontSize, y + buttonHeight / 2, Math.max(8, fontSize / 2), colorBlind, pulse);
             }
-            drawCentered(g, label, centerX, y + fontSize);
-            y += lineHeight;
+            g.setFont(font(items.get(i), fontSize, false));
+            g.setColor(isSelected ? Color.WHITE : TEXT);
+            drawCentered(g, items.get(i), centerX, y + buttonHeight / 2 + g.getFontMetrics().getAscent() / 2 - 1);
+            y += buttonHeight + gap;
         }
         return y;
     }
 
-    /** 화면 맨 아래 Key Guide 한 줄 */
+    /** 화면 맨 아래 Key Guide 한 줄. 한글이 있으면 Do Hyeon, 숫자만 Orbitron */
     static void drawGuide(Graphics2D g, String guide, int width, int height) {
         int size = Math.max(10, unit(height) * 3 / 4);
-        g.setFont(text(size, false));
-        g.setColor(DIM_TEXT);
-        drawCentered(g, guide, width / 2, height - size);
+        g.setFont(font(guide, size, false));
+        int barWidth = Math.min(width - size * 2, Math.max(size * 8, width * 3 / 4));
+        while (g.getFontMetrics().stringWidth(guide) > barWidth - size && size > 8) {
+            g.setFont(font(guide, --size, false));
+        }
+        int barHeight = size + size / 2;
+        int x = (width - barWidth) / 2;
+        int y = height - barHeight - size / 3;
+        UiKit.paintCapsule(g, x, y, barWidth, barHeight);
+        g.setColor(TEXT);
+        drawCentered(g, guide, width / 2, y + barHeight / 2 + g.getFontMetrics().getAscent() / 2 - 1);
     }
 
     /** 확인창·Pause용 반투명 배경과 가운데 상자. 반환: 상자 {x, y, w, h} */
@@ -95,10 +118,9 @@ final class Theme {
         g.fillRect(0, 0, width, height);
         int x = (width - boxWidth) / 2;
         int y = (height - boxHeight) / 2;
-        g.setColor(PANEL);
-        g.fillRoundRect(x, y, boxWidth, boxHeight, 16, 16);
-        g.setColor(ACCENT);
-        g.drawRoundRect(x, y, boxWidth, boxHeight, 16, 16);
+        g.setColor(new Color(10, 14, 28, 210));
+        g.fillRoundRect(x, y, boxWidth, boxHeight, 18, 18);
+        UiKit.paintFrame(g, UiKit.Tone.VIOLET, x, y, boxWidth, boxHeight);
         return new int[] {x, y, boxWidth, boxHeight};
     }
 

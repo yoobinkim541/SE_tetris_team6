@@ -63,8 +63,9 @@ public class RenderingTest {
     }
 
     /** 보드 칸 (row, col)의 왼쪽 위 모서리 근처 픽셀. 가운데의 글자와 1px 테두리를 피한다 */
-    private static Color boardCell(BufferedImage image, int row, int col) {
-        return pixel(image, PADDING + col * CELL + 4, PADDING + row * CELL + 4);
+    private static Color boardCell(GamePanel panel, BufferedImage image, int row, int col) {
+        java.awt.Rectangle cell = panel.boardCellBounds(row, col);
+        return pixel(image, cell.x + 4, cell.y + 4);
     }
 
     private static boolean contains(BufferedImage image, Color color, int x0, int y0, int x1, int y1) {
@@ -120,9 +121,9 @@ public class RenderingTest {
         panel.onChanged(snapshot(cells, null, null, GameState.PLAYING));
 
         BufferedImage image = render(panel, screen());
-        assertEquals(palette.color(BlockType.I, false), boardCell(image, 19, 0));
-        assertEquals(palette.color(BlockType.Z, false), boardCell(image, 19, 9));
-        assertEquals(Theme.PANEL, boardCell(image, 0, 0));
+        assertEquals(palette.color(BlockType.I, false), boardCell(panel, image, 19, 0));
+        assertEquals(palette.color(BlockType.Z, false), boardCell(panel, image, 19, 9));
+        assertEquals(GamePanel.BOARD_BG, boardCell(panel, image, 0, 0));
     }
 
     @Test
@@ -134,7 +135,7 @@ public class RenderingTest {
         GamePanel panel = gamePanel(settings);
         panel.onChanged(snapshot(cells, null, null, GameState.PLAYING));
 
-        Color drawn = boardCell(render(panel, screen()), 19, 4);
+        Color drawn = boardCell(panel, render(panel, screen()), 19, 4);
         assertEquals(palette.color(BlockType.L, true), drawn);
         assertNotEquals(palette.color(BlockType.L, false), drawn);
     }
@@ -149,9 +150,9 @@ public class RenderingTest {
         panel.onChanged(snapshot(emptyCells(), current, new OBlock(), GameState.PLAYING));
         BufferedImage image = render(panel, screen());
 
-        assertEquals(palette.color(BlockType.T, false), boardCell(image, 5, 4));
-        int infoX = PADDING * 2 + CELL * Board.WIDTH;
-        assertTrue(contains(image, palette.color(BlockType.O, false), infoX, 0, image.getWidth(), CELL * 6),
+        assertEquals(palette.color(BlockType.T, false), boardCell(panel, image, 5, 4));
+        java.awt.Rectangle next = panel.nextBounds();
+        assertTrue(contains(image, palette.color(BlockType.O, false), next.x, next.y, next.x + next.width, next.y + next.height),
                 "Next 상자에 O 블록 색이 있어야 한다");
 
         panel.onChanged(snapshot(emptyCells(), hidden, null, GameState.PLAYING));
@@ -166,7 +167,7 @@ public class RenderingTest {
         GamePanel panel = gamePanel(new Settings());
         panel.onChanged(snapshot(cells, null, null, GameState.PAUSED));
         BufferedImage paused = render(panel, screen());
-        assertNotEquals(palette.color(BlockType.S, false), boardCell(paused, 10, 5), "Pause 오버레이가 보드를 덮는다");
+        assertNotEquals(palette.color(BlockType.S, false), boardCell(panel, paused, 10, 5), "Pause 오버레이가 보드를 덮는다");
 
         panel.showConfirm(new ConfirmDialog("정말?\n두 줄", () -> calls.add("yes"), () -> calls.add("no")));
         assertTrue(panel.isConfirmShowing());
@@ -177,7 +178,7 @@ public class RenderingTest {
         panel.showConfirm(new ConfirmDialog("?", () -> { }, () -> { }));
         panel.onChanged(snapshot(cells, null, null, GameState.PLAYING)); // 게임이 다시 돌면 확인창도 닫힌다
         assertFalse(panel.isConfirmShowing());
-        assertEquals(palette.color(BlockType.S, false), boardCell(render(panel, screen()), 10, 5));
+        assertEquals(palette.color(BlockType.S, false), boardCell(panel, render(panel, screen()), 10, 5));
     }
 
     @Test
@@ -195,7 +196,7 @@ public class RenderingTest {
         GamePanel panel = gamePanel(settings);
         panel.applySettings(settings);
         BufferedImage image = render(panel, screen()); // snapshot 없이도 그려진다
-        assertEquals(Theme.PANEL, boardCell(image, 10, 5));
+        assertEquals(GamePanel.BOARD_BG, boardCell(panel, image, 10, 5));
     }
 
     // ── 다른 화면 ─────────────────────────────

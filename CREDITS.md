@@ -43,6 +43,22 @@
 | `card/sweep.png` | gpt-image-2, Codex CLI 내장 | 2026-11-20 | 장식 카드 프레임, 수정 빗자루. 글자 없음 | 384×576 맞춤, PNG |
 | `card/back.png` | gpt-image-2, Codex CLI 내장 | 2026-11-20 | 같은 카드의 뒷면, 대칭 수정 문양. 글자 없음 | 384×576 맞춤, PNG |
 | `ui/logo.png` | gpt-image-2, Codex CLI 내장 | 2026-11-20 | 빛나는 수정 블록으로 만든 SE TETRIS 로고, 투명 배경 | 1200×450 맞춤, PNG |
+| `ui/board-crown.png` | gpt-image-2, Codex CLI 내장 | 2026-11-21 | 보드 위에 앉는 수정 산맥과 작은 성. 글자 없음 | 1200×320, #00FF00 크로마키·디스필, PNG |
+| `ui/gem-tile.png` | gpt-image-2, Codex CLI 내장 | 2026-11-21 | 무채색 다면 보석 타일. 팔레트 곱색용, 글자 없음 | 128×128, 채도 0, PNG |
+| `ui/frame-cyan.png` | gpt-image-2, Codex CLI 내장 | 2026-11-21 | 청록 수정 네온 프레임. 모서리 장식, 곧은 레일, 글자 없음 | 256×256, 9슬라이스 64px, 가운데 투명 |
+| `ui/frame-magenta.png` | gpt-image-2, Codex CLI 내장 | 2026-11-21 | 자홍 수정 네온 프레임. 글자 없음 | 256×256, 9슬라이스 64px, 가운데 투명 |
+| `ui/frame-violet.png` | gpt-image-2 후처리 (청록 프레임 색상 이동) | 2026-11-21 | 보라 수정 네온 프레임. 청록 프레임과 같은 모서리 | 256×256, 9슬라이스 64px, 가운데 투명 |
+| `ui/tab-cyan.png` | gpt-image-2 후처리 (청록 프레임에 유리 채움) | 2026-11-21 | 청록 사이드 탭. 어두운 유리 가운데, 글자 없음 | 192×192, 9슬라이스 48px |
+| `ui/tab-magenta.png` | gpt-image-2 후처리 (자홍 프레임에 유리 채움) | 2026-11-21 | 자홍 사이드 탭. 어두운 유리 가운데, 글자 없음 | 192×192, 9슬라이스 48px |
+| `ui/button.png` | gpt-image-2, Codex CLI 내장 | 2026-11-21 | 청록 수정 알약 버튼. 글자 없음 | 512×128, 3슬라이스 64px |
+| `ui/button-selected.png` | gpt-image-2, Codex CLI 내장 | 2026-11-21 | 더 밝은 선택 상태 알약 버튼. 글자 없음 | 512×128, 3슬라이스 64px |
+| `ui/capsule.png` | gpt-image-2, Codex CLI 내장 | 2026-11-21 | HUD 캡슐. 수정 끝, 어두운 유리, 글자 없음 | 256×96, 3슬라이스 48px |
+| `ui/badge-p1.png` | gpt-image-2, Codex CLI 내장 | 2026-11-21 | 청록 다이아몬드 배지. 글자 없음 | 160×160, PNG |
+| `ui/badge-p2.png` | gpt-image-2, Codex CLI 내장 | 2026-11-21 | 자홍 별 배지. 글자 없음 | 160×160, PNG |
+| `ui/banner-warning.png` | gpt-image-2, Codex CLI 내장 | 2026-11-21 | 분홍 경고 리본. 글자·기호 없음 | 900×160, PNG |
+| `ui/island-1.png` | gpt-image-2, Codex CLI 내장 | 2026-11-21 | 떠 있는 수정 섬, 청록 폭포 | 400×400, PNG |
+| `ui/island-2.png` | gpt-image-2, Codex CLI 내장 | 2026-11-21 | 다른 실루엣의 수정 섬, 자홍 군집 | 400×400, PNG |
+| `ui/moon.png` | gpt-image-2, Codex CLI 내장 | 2026-11-21 | 창백한 보름달. 하늘 없음 | 256×256, PNG |
 
 ## Sounds
 
@@ -80,3 +96,12 @@
 | `sfx/menu_select.wav` | 0.195초 | 메뉴 결정 |
 | `sfx/bgm_raid.wav` | 36.571초 | 레이드 배경음. 신스웨이브 아르페지오 루프 |
 | `sfx/bgm_menu.wav` | 40.000초 | 메뉴 배경음. 잔잔한 루프 |
+
+## Fonts
+
+메뉴·제목·라벨은 Do Hyeon, 점수·시간 숫자는 Orbitron이다. 둘 다 SIL Open Font License 1.1이라 앱에 넣어 배포한다. 라이선스 전문은 `src/main/resources/fonts/DoHyeon-OFL.txt`, `src/main/resources/fonts/Orbitron-OFL.txt`이다. Orbitron은 가변 글꼴이라 Java가 기본 굵기만 열 수 있어, 배포 파일은 굵기 500으로 뽑은 정적 글꼴이다.
+
+| 파일 | 저작권 | 라이선스 | 출처 |
+|---|---|---|---|
+| `fonts/DoHyeon-Regular.ttf` | Copyright 2018 The Do Hyeon Project Authors | SIL OFL 1.1 | https://fonts.google.com/specimen/Do+Hyeon |
+| `fonts/Orbitron.ttf` | Copyright 2018 The Orbitron Project Authors, Reserved Font Name "Orbitron" | SIL OFL 1.1 | https://github.com/theleagueof/orbitron |

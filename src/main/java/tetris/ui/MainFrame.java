@@ -89,7 +89,7 @@ public class MainFrame extends JFrame {
     private final SettingPanel settingPanel;
     private final KeyBindingManager keyBindings;
     private GameSession session;
-
+    private final tetris.ui.theme.ScreenFade screenFade = new tetris.ui.theme.ScreenFade();
     private Screen currentScreen;
     private ScreenSize appliedScreenSize;
     private GameSnapshot finalResult; // 방금 끝난 게임의 마지막 상태 (Name 입력·스코어보드 등록용)
@@ -234,6 +234,7 @@ public class MainFrame extends JFrame {
             @Override public void windowClosing(WindowEvent e) { closeBattle(); closeP2p(); closeRaid(); }
         });
         applyScreenSize(settings.getScreenSize());
+        setGlassPane(screenFade);
         updateTitle();
     }
 
@@ -252,6 +253,7 @@ public class MainFrame extends JFrame {
                 && !(screen == Screen.BATTLE && battleOnline)) closeP2p();
         currentScreen = screen;
         cards.show(root, screen.name());
+        screenFade.play();
         syncMusic(screen);
         if (screen == Screen.NAME_INPUT) nameInputPanel.focusField();
         else screens.get(screen).requestFocusInWindow();

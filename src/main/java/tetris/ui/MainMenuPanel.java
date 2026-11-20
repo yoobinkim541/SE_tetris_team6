@@ -11,6 +11,7 @@ import javax.swing.JPanel;
 import tetris.ui.fx.AssetStore;
 import tetris.ui.fx.GameSounds;
 import tetris.ui.fx.StarfieldBackground;
+import tetris.ui.theme.UiKit;
 
 /** 시작 메뉴: SE Tetris 제목 + 메뉴 항목 (게임 시작 / 설정 / 스코어보드 / 게임 종료). 기존 LandingScreen + MenuScreen 통합. */
 public class MainMenuPanel extends JPanel {
@@ -82,42 +83,50 @@ public class MainMenuPanel extends JPanel {
         int h = getHeight();
         int unit = Theme.unit(h);
         stars.paint(g2, w, h);
+        UiKit.paintMoon(g2, w - unit * 5, unit, unit * 4);
+        UiKit.paintIsland(g2, 0, unit / 2, h / 3, unit * 4);
+        UiKit.paintIsland(g2, 1, w - unit * 5, h * 3 / 5, unit * 4);
 
-        BufferedImage logo = AssetStore.SHARED.fit(AssetStore.LOGO, (int) (w * 0.62), Math.max(unit * 4, h / 5));
+        BufferedImage logo = AssetStore.SHARED.fit(AssetStore.LOGO, (int) (w * 0.72), Math.max(unit * 4, h / 5));
+        int menuTop;
         if (logo != null) {
-            g2.drawImage(logo, (w - logo.getWidth()) / 2, Math.max(unit, h / 10), null);
+            int logoY = Math.max(unit / 2, h / 14);
+            g2.drawImage(logo, (w - logo.getWidth()) / 2, logoY, null);
+            menuTop = logoY + logo.getHeight() + unit;
         } else {
             g2.setFont(Theme.text(unit * 3, true));
-            g2.setColor(Theme.ACCENT);
-            Theme.drawCentered(g2, Messages.get("app.title"), w / 2, h / 4);
+            g2.setColor(UiKit.CYAN);
+            Theme.drawCentered(g2, Messages.get("app.title"), w / 2, h / 5);
+            menuTop = h / 4;
         }
 
         List<String> labels = items.stream().map(MenuItem::label).toList();
-        int fontSize = unit + unit / 3;
-        int menuTop = h * 2 / 5 - fontSize;
-        if (title != null) menuTop += fontSize;
-        int menuHeight = labels.size() * fontSize * 2 + fontSize;
+        int fontSize = unit + unit / 4;
+        int buttonWidth = Math.min(w - unit * 4, (int) (w * 0.62));
+        int buttonHeight = fontSize + fontSize / 2;
+        int gap = Math.max(6, fontSize / 3);
+        int menuHeight = labels.size() * (buttonHeight + gap) + (title == null ? 0 : fontSize * 2);
         int limit = h - unit * 4 - menuTop;
-        while (menuHeight > limit && fontSize > 12) {
+        while (menuHeight > limit && fontSize > 11) {
             fontSize--;
-            menuHeight = labels.size() * fontSize * 2 + fontSize;
+            buttonHeight = fontSize + fontSize / 2;
+            gap = Math.max(4, fontSize / 3);
+            menuHeight = labels.size() * (buttonHeight + gap) + (title == null ? 0 : fontSize * 2);
         }
-        g2.setColor(new java.awt.Color(8, 10, 24, 150));
-        g2.fillRoundRect(w / 5, menuTop - fontSize, w * 3 / 5, menuHeight + fontSize, 18, 18);
         if (title != null) {
-            g2.setFont(Theme.text(fontSize, true));
+            g2.setFont(Theme.text(fontSize + 2, true));
             g2.setColor(tetris.ui.fx.A11yColors.accent(colorBlind.getAsBoolean()));
-            Theme.drawCentered(g2, title, w / 2, menuTop - fontSize / 2);
+            Theme.drawCentered(g2, title, w / 2, menuTop + fontSize);
+            menuTop += fontSize * 2;
         }
-        Theme.drawMenu(g2, labels, selected, w / 2, h * 2 / 5 + (title == null ? 0 : fontSize), fontSize,
-                colorBlind.getAsBoolean());
+        Theme.drawPills(g2, labels, selected, w / 2, menuTop, fontSize, buttonWidth, colorBlind.getAsBoolean());
 
         g2.setFont(Theme.text(Math.max(10, unit * 3 / 4), false));
         g2.setColor(Theme.WARNING);
-        int y = h - unit * 3 - warnings.size() * unit * 3 / 2;
+        int y = h - unit * 4 - warnings.size() * unit;
         for (String warning : warnings) {
             Theme.drawCentered(g2, warning, w / 2, y);
-            y += unit * 3 / 2;
+            y += unit;
         }
 
         Theme.drawGuide(g2, Messages.keyGuide(submenu ? MainFrame.Screen.SOLO_MENU : MainFrame.Screen.MAIN_MENU, null), w, h);

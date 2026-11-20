@@ -36,10 +36,12 @@ class ScoreboardNavigationTest {
     private static void assertOnlyRecordVisible(ScoreBoardPanel panel, ScoreEntry expected) {
         ScoreBoardPanel reference = new ScoreBoardPanel(() -> {}, () -> {});
         reference.show(List.of(expected), -1, false, expected.mode(), expected.difficulty());
+        panel.setSize(525, 630);
+        reference.setSize(525, 630);
+        java.awt.Rectangle table = panel.tableBounds();
         BufferedImage actual = render(panel), wanted = render(reference);
-        // 제목만 바뀌고 실제 기록이 다른 분류에 남는 결함도 잡는다.
-        assertArrayEquals(wanted.getRGB(0, 110, 525, 320, null, 0, 525),
-                actual.getRGB(0, 110, 525, 320, null, 0, 525));
+        assertArrayEquals(wanted.getRGB(table.x, table.y, table.width, table.height, null, 0, table.width),
+                actual.getRGB(table.x, table.y, table.width, table.height, null, 0, table.width));
     }
 
     @Test
@@ -66,14 +68,17 @@ class ScoreboardNavigationTest {
         SwingUtilities.invokeAndWait(() -> {
             ScoreBoardPanel panel = new ScoreBoardPanel(() -> {}, () -> {});
             panel.show(RECORDS, 0, true, GameMode.ITEM, Difficulty.NORMAL);
-            assertEquals(Theme.HIGHLIGHT_ROW.getRGB(), render(panel).getRGB(20, 125));
+            panel.setSize(525, 630);
+            java.awt.Rectangle row = panel.rowBounds(0);
+            java.awt.Point sample = new java.awt.Point(row.x + row.width - 24, row.y + 4);
+            assertEquals(Theme.HIGHLIGHT_ROW.getRGB(), render(panel).getRGB(sample.x, sample.y));
             key(panel, KeyEvent.VK_LEFT);
-            assertNotEquals(Theme.HIGHLIGHT_ROW.getRGB(), render(panel).getRGB(20, 125));
+            assertNotEquals(Theme.HIGHLIGHT_ROW.getRGB(), render(panel).getRGB(sample.x, sample.y));
             key(panel, KeyEvent.VK_RIGHT);
-            assertEquals(Theme.HIGHLIGHT_ROW.getRGB(), render(panel).getRGB(20, 125));
+            assertEquals(Theme.HIGHLIGHT_ROW.getRGB(), render(panel).getRGB(sample.x, sample.y));
             panel.show(RECORDS, -1);
             assertOnlyRecordVisible(panel, RECORDS.get(1));
-            assertNotEquals(Theme.HIGHLIGHT_ROW.getRGB(), render(panel).getRGB(20, 125));
+            assertNotEquals(Theme.HIGHLIGHT_ROW.getRGB(), render(panel).getRGB(sample.x, sample.y));
         });
     }
 

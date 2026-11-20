@@ -21,6 +21,29 @@ public final class BoardRenderer {
                 paintCell(board,cells[r][c],x+c*size,y+r*size,size);
         } finally { board.dispose(); }
     }
+    /** 보드 칸. 빈 칸은 짙은 남색과 점이고, 대기열은 {@link #paint}를 그대로 쓴다 */
+    public void paintPlayfield(Graphics2D g, int[][] cells, int[][] items, int x, int y, int size) {
+        if (cells.length == 0 || size <= 0) return;
+        int cols = cells[0].length;
+        g.setColor(new Color(0x0B1024));
+        g.fillRect(x, y, cols * size, cells.length * size);
+        g.setColor(new Color(0x8FB7D8));
+        int dot = Math.max(1, size / 16);
+        for (int r = 0; r < cells.length; r++) for (int c = 0; c < cells[r].length; c++) {
+            if (cells[r][c] != 0) continue;
+            g.fillRect(x + c * size + size / 2 - dot / 2, y + r * size + size / 2 - dot / 2, dot, dot);
+        }
+        for (int r = 0; r < cells.length; r++) for (int c = 0; c < cells[r].length; c++) {
+            if (cells[r][c] == 0) continue;
+            paintCell(g, cells[r][c], x + c * size, y + r * size, size);
+        }
+        if (items == null) return;
+        for (int r = 0; r < items.length && r < cells.length; r++) {
+            for (int c = 0; c < items[r].length && c < cols; c++) {
+                if (items[r][c] != 0) paintItem(g, (char) items[r][c], x + c * size, y + r * size, size);
+            }
+        }
+    }
     /** 착지 미리보기. 색맹 모드는 윤곽만 그린다 (GST-2) */
     public void paintGhost(Graphics2D g, int[][] ghost, int x, int y, int size) {
         if (ghost == null || size <= 0) return;
@@ -64,6 +87,7 @@ public final class BoardRenderer {
             : palette.color(BlockType.values()[value-1],colorBlind);
         g.setColor(fill); g.fillRect(x,y,size,size);
         g.setColor(new Color(0x323744)); g.drawRect(x,y,size-1,size-1);
+        if (!attack && value != 0 && size >= 11) paintSheen(g, x, y, size, fill);
         if (attack) {
             g.setColor(Color.BLACK);
             // A cross remains visible at small sizes and distinguishes gray W without color.
@@ -75,5 +99,15 @@ public final class BoardRenderer {
             String letter = BlockType.values()[value-1].name();
             g.drawString(letter,x+(size-g.getFontMetrics().stringWidth(letter))/2,y+(size+g.getFontMetrics().getAscent())/2-2);
         }
+    }
+
+    /** 가장자리 2px는 그대로 두고 윗면에만 빛을 얹는다. 대기열 표본 픽셀을 바꾸지 않는다 */
+    private static void paintSheen(Graphics2D g, int x, int y, int size, Color fill) {
+        int inset = 3;
+        g.setColor(new Color(
+                Math.min(254, fill.getRed() + 36),
+                Math.min(254, fill.getGreen() + 36),
+                Math.max(1, Math.min(254, fill.getBlue() + 16))));
+        g.drawLine(x + inset, y + inset, x + size - inset - 1, y + inset);
     }
 }
