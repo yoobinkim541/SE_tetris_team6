@@ -101,8 +101,9 @@ class PatternEffectTest {
     }
 
     private static void assertCurse(Harness harness) {
-        assertTrue(harness.session.peekUpcomingType(0) == BlockType.S || harness.session.peekUpcomingType(0) == BlockType.Z);
+        assertEquals(BlockType.O, harness.session.peekUpcomingType(0), "보여 준 바로 다음은 그대로다");
         assertTrue(harness.session.peekUpcomingType(1) == BlockType.S || harness.session.peekUpcomingType(1) == BlockType.Z);
+        assertTrue(harness.session.peekUpcomingType(2) == BlockType.S || harness.session.peekUpcomingType(2) == BlockType.Z);
     }
 
     private static Harness apply(PatternId id, int level, int blockLines, boolean coop) {

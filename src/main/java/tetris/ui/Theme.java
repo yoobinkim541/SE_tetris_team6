@@ -58,13 +58,24 @@ final class Theme {
 
     /** 세로 메뉴. 선택 항목은 강조색과 표시 기호로 그린다. 반환: 마지막 항목 아래 y */
     static int drawMenu(Graphics2D g, List<String> items, int selected, int centerX, int topY, int fontSize) {
+        return drawMenu(g, items, selected, centerX, topY, fontSize, false);
+    }
+
+    static int drawMenu(Graphics2D g, List<String> items, int selected, int centerX, int topY, int fontSize,
+                        boolean colorBlind) {
         int lineHeight = fontSize * 2;
         int y = topY;
+        java.awt.Color accent = tetris.ui.fx.A11yColors.accent(colorBlind);
         for (int i = 0; i < items.size(); i++) {
             boolean isSelected = i == selected;
             g.setFont(text(fontSize, isSelected));
-            g.setColor(isSelected ? ACCENT : TEXT);
-            drawCentered(g, isSelected ? SELECTED_MARK + items.get(i) : items.get(i), centerX, y + fontSize);
+            g.setColor(isSelected ? accent : TEXT);
+            String label = isSelected ? SELECTED_MARK + items.get(i) : items.get(i);
+            if (colorBlind && isSelected) {
+                int width = g.getFontMetrics().stringWidth(label) + fontSize;
+                g.drawRoundRect(centerX - width / 2, y + 2, width, fontSize + 4, 8, 8);
+            }
+            drawCentered(g, label, centerX, y + fontSize);
             y += lineHeight;
         }
         return y;

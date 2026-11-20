@@ -46,6 +46,7 @@ public class JsonSettingsRepository implements SettingsRepository {
         root.put("devNetworkOverlay", settings.isDevNetworkOverlay());
         root.put("difficulty", settings.getDifficulty().name());
         root.put("controlStyle", settings.getControlStyle().name());
+        root.put("effects", settings.isEffectsHigh() ? "high" : "low");
         ObjectNode keys = root.putObject("keys");
         settings.getKeyMap().codes().forEach((action, keyCode) -> keys.put(action.name(), keyCode));
         return file.write(root);
@@ -60,6 +61,7 @@ public class JsonSettingsRepository implements SettingsRepository {
         applyDevNetworkOverlay(root.get("devNetworkOverlay"), settings, warnings);
         applyDifficulty(root.get("difficulty"), settings, warnings);
         applyControlStyle(root.get("controlStyle"), settings, warnings);
+        applyEffects(root.get("effects"), settings, warnings);
         applyKeys(root.get("keys"), settings, warnings);
         return new LoadResult<>(settings, warnings);
     }
@@ -120,6 +122,23 @@ public class JsonSettingsRepository implements SettingsRepository {
             }
         }
         warnings.add("조작 방식 설정이 올바르지 않아 기본값(모던)을 사용합니다.");
+    }
+
+    /** 없으면 경고 없이 높음. high/low 가 아니면 높음으로 두고 경고 한 번 */
+    private static void applyEffects(JsonNode node, Settings settings, List<String> warnings) {
+        if (isAbsent(node)) return;
+        if (node.isTextual()) {
+            String value = node.asText();
+            if ("high".equalsIgnoreCase(value)) {
+                settings.setEffectsHigh(true);
+                return;
+            }
+            if ("low".equalsIgnoreCase(value)) {
+                settings.setEffectsHigh(false);
+                return;
+            }
+        }
+        warnings.add("연출 설정이 올바르지 않아 기본값(높음)을 사용합니다.");
     }
 
     /** 중복·누락·예약키가 하나라도 있으면 keys 전체를 기본값으로 둔다. 예전 파일에 없는 반시계·홀드는 기본키로 채운다 */

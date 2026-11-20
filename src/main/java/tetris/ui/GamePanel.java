@@ -394,8 +394,7 @@ public class GamePanel extends JPanel implements GameListener {
                 int x = originX + (ghost.getCol() + c) * cellSize;
                 int y = originY + row * cellSize;
                 if (colorBlindMode) {
-                    g.setColor(palette.color(ghost.getType(), true));
-                    g.drawRect(x + 2, y + 2, cellSize - 5, cellSize - 5);
+                    tetris.ui.fx.A11yColors.paintGhostCell(g, x, y, cellSize, true);
                 } else {
                     drawCell(g, x, y, cellSize, ghost.getType(), null);
                 }

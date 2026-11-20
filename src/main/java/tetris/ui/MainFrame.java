@@ -66,7 +66,7 @@ import tetris.ui.versus.*;
  */
 public class MainFrame extends JFrame {
     /** 앱 화면 흐름 (GameState와 별개) */
-    public enum Screen { MAIN_MENU, GAME, SETTINGS, SCOREBOARD, NAME_INPUT, GAME_OVER, BATTLE_MODES, BATTLE, BATTLE_RESULT, P2P_LOBBY, P2P_RESULT, RAID_MENU, RAID }
+    public enum Screen { MAIN_MENU, GAME, SETTINGS, SCOREBOARD, NAME_INPUT, GAME_OVER, BATTLE_MODES, BATTLE, BATTLE_RESULT, P2P_LOBBY, P2P_RESULT, SOLO_MENU, RAID }
 
     private static final int MIN_CELL_PIXELS = 12;
 
@@ -79,6 +79,8 @@ public class MainFrame extends JFrame {
     private final JPanel root = new JPanel(cards);
     private final Map<Screen, JComponent> screens = new EnumMap<>(Screen.class);
     private final MainMenuPanel mainMenuPanel;
+    private final MainMenuPanel soloMenuPanel;
+    private final MainMenuPanel multiMenuPanel;
     private final GamePanel gamePanel;
     private final GameOverPanel gameOverPanel;
     private final NameInputPanel nameInputPanel;
@@ -170,21 +172,30 @@ public class MainFrame extends JFrame {
         this.settingsRepository = settingsRepository;
         this.scoreboardRepository = scoreboardRepository;
 
+        tetris.ui.fx.StarfieldBackground.setEffectsHigh(settings.isEffectsHigh());
+        Runnable mainMenu = () -> showScreen(Screen.MAIN_MENU);
         mainMenuPanel = new MainMenuPanel(mainMenuItems(
-                this::startGame,
+                this::showSoloMenu,
                 () -> startGame(GameMode.ITEM),
+                this::openBattleModes,
                 this::openSettings,
                 this::openScoreboard,
-                this::exitApplication,
-                this::openBattleModes,
-                this::showRaidMenu));
+                this::exitApplication), null, null, settings::isColorBlindMode);
+        soloMenuPanel = new MainMenuPanel(soloMenuItems(this::startGame, this::startSoloRaid, mainMenu),
+                mainMenu, "솔로 플레이", settings::isColorBlindMode);
+        multiMenuPanel = new MainMenuPanel(multiMenuItems(
+                () -> startBattle(BattleMode.CLASSIC),
+                () -> startBattle(BattleMode.ITEM),
+                () -> startBattle(BattleMode.TIMED),
+                this::openP2pLobby,
+                this::startCoopRaid,
+                mainMenu), mainMenu, "멀티플레이", settings::isColorBlindMode);
         PausePanel pausePanel = new PausePanel(this::resumeGame, this::confirmRestart, this::requestQuit);
         gamePanel = new GamePanel(settings, pausePanel, this::onGameOver);
         gameOverPanel = new GameOverPanel(this::afterGameOver);
         nameInputPanel = new NameInputPanel(this::submitName);
-        scoreBoardPanel = new ScoreBoardPanel(() -> showScreen(Screen.MAIN_MENU), this::exitApplication);
-        settingPanel = new SettingPanel(settings, this::onSettingsChanged, this::resetScoreboard,
-                () -> showScreen(Screen.MAIN_MENU));
+        scoreBoardPanel = new ScoreBoardPanel(mainMenu, this::exitApplication);
+        settingPanel = new SettingPanel(settings, this::onSettingsChanged, this::resetScoreboard, mainMenu);
 
         session = createSession(GameMode.CLASSIC);
         keyBindings = new KeyBindingManager(this::requestQuit);
@@ -196,21 +207,13 @@ public class MainFrame extends JFrame {
         addScreen(Screen.NAME_INPUT, nameInputPanel);
         addScreen(Screen.SCOREBOARD, scoreBoardPanel);
         addScreen(Screen.SETTINGS, settingPanel);
-        var modes = new MainMenuPanel(List.of(
-                new MenuItem("로컬 " + BattleModes.label(BattleMode.CLASSIC), () -> startBattle(BattleMode.CLASSIC)),
-                new MenuItem("로컬 " + BattleModes.label(BattleMode.ITEM), () -> startBattle(BattleMode.ITEM)),
-                new MenuItem("로컬 " + BattleModes.label(BattleMode.TIMED), () -> startBattle(BattleMode.TIMED)),
-                new MenuItem("P2P 대전 (같은 LAN)", this::openP2pLobby),
-                new MenuItem("메인 메뉴", () -> showScreen(Screen.MAIN_MENU))));
-        addScreen(Screen.BATTLE_MODES, modes);
-        battleResultPanel = new BattleResultPanel(this::openBattleModes, () -> showScreen(Screen.MAIN_MENU));
+        addScreen(Screen.BATTLE_MODES, multiMenuPanel);
+        battleResultPanel = new BattleResultPanel(this::openBattleModes, mainMenu);
         addScreen(Screen.BATTLE_RESULT, battleResultPanel);
-        onlineResultPanel = new BattleResultPanel("로비로", this::backToP2pLobby, "다시 대전", this::rematchP2p,
-                () -> showScreen(Screen.MAIN_MENU));
+        onlineResultPanel = new BattleResultPanel("로비로", this::backToP2pLobby, "다시 대전", this::rematchP2p, mainMenu);
         addScreen(Screen.P2P_RESULT, onlineResultPanel);
         addScreen(Screen.P2P_LOBBY, new JPanel());
-        addScreen(Screen.RAID_MENU, new MainMenuPanel(raidMenuItems(this::startSoloRaid, this::startCoopRaid,
-                () -> showScreen(Screen.MAIN_MENU))));
+        addScreen(Screen.SOLO_MENU, soloMenuPanel);
         addScreen(Screen.RAID, new JPanel());
         // 개발자 연결 상태 오버레이: 화면·연결은 늦게 생기므로 공급자로 넘긴다.
         // 대전 화면은 온라인 대전 중일 때만 넘긴다 (로컬 대전·싱글은 대상이 아니다)
@@ -414,6 +417,7 @@ public class MainFrame extends JFrame {
         keyBindings.setSuspended(true);
         keyBindings.clearPressedKeys();
         closeBattle();
+        multiMenuPanel.resetSelection();
         showScreen(Screen.BATTLE_MODES);
     }
 
@@ -569,6 +573,7 @@ public class MainFrame extends JFrame {
     private boolean onSettingsChanged() {
         // 설정의 개발자 토글을 개발자 모드 스위치에 반영한다 (dev-net-overlay). --dev로 켠 상태는 그대로 유지된다
         DevMode.setSettingEnabled(settings.isDevNetworkOverlay());
+        tetris.ui.fx.StarfieldBackground.setEffectsHigh(settings.isEffectsHigh());
         updateTitle();
         debugOverlay.refresh(); // 설정에서 끄면 열려 있는 화면의 줄이 바로 사라지고 타이머가 멈춘다
         if (settings.getScreenSize() != appliedScreenSize) applyScreenSize(settings.getScreenSize());
@@ -630,24 +635,34 @@ public class MainFrame extends JFrame {
         return Math.max(MIN_CELL_PIXELS, desired * largestFit / largest);
     }
 
-    /** 메인 메뉴. 대전은 index 5를 유지하고 보스 레이드는 그 다음이다 */
-    static List<MenuItem> mainMenuItems(Runnable start, Runnable itemMode, Runnable settings, Runnable scores,
-                                        Runnable exit, Runnable battle, Runnable raid) {
+    /** 시작 메뉴 6개. 솔로·멀티는 하위 메뉴로 들어간다 */
+    static List<MenuItem> mainMenuItems(Runnable solo, Runnable itemMode, Runnable multi, Runnable settings,
+                                        Runnable scores, Runnable exit) {
         return List.of(
-                new MenuItem(Messages.get("menu.start"), start),
-                new MenuItem("아이템 모드", itemMode),
+                new MenuItem(Messages.get("menu.start"), solo),
+                new MenuItem(Messages.get("menu.item"), itemMode),
+                new MenuItem(Messages.get("menu.multi"), multi),
                 new MenuItem(Messages.get("menu.settings"), settings),
                 new MenuItem(Messages.get("menu.scoreboard"), scores),
-                new MenuItem(Messages.get("menu.exit"), exit),
-                new MenuItem("대전", battle),
-                new MenuItem(Messages.get("menu.raid"), raid));
+                new MenuItem(Messages.get("menu.exit"), exit));
     }
 
-    static List<MenuItem> raidMenuItems(Runnable solo, Runnable coop, Runnable mainMenu) {
+    static List<MenuItem> soloMenuItems(Runnable classic, Runnable raid, Runnable mainMenu) {
         return List.of(
-                new MenuItem(Messages.get("menu.raid.solo"), solo),
+                new MenuItem(Messages.get("menu.solo.classic"), classic),
+                new MenuItem(Messages.get("menu.raid.solo"), raid),
+                new MenuItem(Messages.get("menu.back"), mainMenu));
+    }
+
+    static List<MenuItem> multiMenuItems(Runnable classic, Runnable item, Runnable timed, Runnable online,
+                                         Runnable coop, Runnable mainMenu) {
+        return List.of(
+                new MenuItem(Messages.get("menu.multi.classic"), classic),
+                new MenuItem(Messages.get("menu.multi.item"), item),
+                new MenuItem(Messages.get("menu.multi.timed"), timed),
+                new MenuItem(Messages.get("menu.multi.online"), online),
                 new MenuItem(Messages.get("menu.raid.coop"), coop),
-                new MenuItem("메인 메뉴", mainMenu));
+                new MenuItem(Messages.get("menu.back"), mainMenu));
     }
 
     /** 시드는 시작할 때 한 번 정한다. 테스트는 이 메서드로 시드를 고정한다 */
@@ -664,12 +679,13 @@ public class MainFrame extends JFrame {
         return new LocalRaidClient(config);
     }
 
-    private void showRaidMenu() {
+    private void showSoloMenu() {
         session.end();
         keyBindings.setSuspended(true);
         keyBindings.clearPressedKeys();
         closeBattle();
-        showScreen(Screen.RAID_MENU);
+        soloMenuPanel.resetSelection();
+        showScreen(Screen.SOLO_MENU);
     }
 
     private void startSoloRaid() {
@@ -697,7 +713,10 @@ public class MainFrame extends JFrame {
         showScreen(Screen.RAID);
         raidController = new RaidScreenController(getRootPane(), client, panel, settings.getKeyMap(),
                 mode == RaidMode.SOLO, settings.getControlStyle(),
-                () -> { if (generation == raidGeneration) showRaidMenu(); },
+                () -> { if (generation == raidGeneration) {
+                    if (mode == RaidMode.SOLO) showSoloMenu();
+                    else openBattleModes();
+                } },
                 () -> { if (generation == raidGeneration) startRaid(mode); });
     }
 

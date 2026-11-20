@@ -29,14 +29,17 @@ class ProductionWiringAuditTest {
 
     @Test
     void actualMainMenuContainsSixEntries() throws Exception {
-        withFrame(new Settings(), frame -> assertEquals(6, menuItems(frame).size(),
-                "Production menu must expose classic, item, settings, scoreboard, exit and versus"));
+        withFrame(new Settings(), frame -> {
+            assertEquals(6, menuItems(frame).size(), "시작 메뉴는 실제 항목 6개다");
+            assertTrue(menuItems(frame).stream().anyMatch(entry -> entry.label().contains("아이템")),
+                    "아이템 모드는 시작 메뉴에서 바로 고를 수 있다");
+        });
     }
 
     @Test
     void focusLossCallbackPausesRealGameAndClearsHeldRotate() throws Exception {
         withFrame(new Settings(), frame -> {
-            menuItems(frame).get(0).action().run();
+            startClassic(frame);
             GameSession game = session(frame);
             javax.swing.JComponent panel = (javax.swing.JComponent) field(frame, "gamePanel");
             // 보드 중앙에서 모든 일반 블록을 회전 가능하게 내려 둔다.
@@ -103,7 +106,7 @@ class ProductionWiringAuditTest {
         settings.setDifficulty(difficulty);
         withFrame(settings, frame -> {
             // First entry is the actual production classic action, not a test-created menu.
-            menuItems(frame).get(0).action().run();
+            startClassic(frame);
             GameSession session = session(frame);
             assertAll(() -> assertEquals(GameState.PLAYING, session.snapshot().state()),
                     () -> assertEquals(GameMode.CLASSIC, session.snapshot().mode()),
@@ -137,7 +140,7 @@ class ProductionWiringAuditTest {
         for (GameMode mode : GameMode.values()) {
             withFrame(new Settings(), frame -> {
                 assertTimeout(java.time.Duration.ofSeconds(1),
-                        () -> menuItems(frame).get(mode == GameMode.ITEM ? 1 : 0).action().run(),
+                        () -> startProduction(frame, mode),
                         "6-5: menu start must finish within one second on this host");
                 GameSession game = session(frame);
                 for (int input = 0; input < 1000 && game.getState() != GameState.GAME_OVER; input++) {
@@ -179,7 +182,7 @@ class ProductionWiringAuditTest {
             Scoreboard board = (Scoreboard) field(frame, "scoreboard");
             for (int rank = 0; rank < 10; rank++) board.add(new tetris.feature.score.ScoreEntry(
                     "Top" + rank, 1_000_000 - rank, 1, 0, java.time.Instant.EPOCH));
-            menuItems(frame).get(0).action().run();
+            startClassic(frame);
             GameSession game = session(frame);
             for (int input = 0; input < 1000 && game.getState() != GameState.GAME_OVER; input++) {
                 if (game.getState() == GameState.CLEARING) game.tick();
@@ -242,4 +245,21 @@ class ProductionWiringAuditTest {
     }
 
     @FunctionalInterface private interface FrameCheck { void run(MainFrame frame) throws Exception; }
+
+    private static void startClassic(MainFrame frame) throws Exception {
+        startProduction(frame, tetris.feature.game.GameMode.CLASSIC);
+    }
+
+    /** 일반 게임은 솔로 하위 메뉴, 아이템은 시작 메뉴에서 바로 시작한다 */
+    private static void startProduction(MainFrame frame, tetris.feature.game.GameMode mode) throws Exception {
+        if (mode == tetris.feature.game.GameMode.ITEM) {
+            menuItems(frame).get(1).action().run();
+            return;
+        }
+        menuItems(frame).get(0).action().run();
+        var solo = (MainMenuPanel) ((java.util.Map<?, ?>) field(frame, "screens")).get(MainFrame.Screen.SOLO_MENU);
+        @SuppressWarnings("unchecked")
+        var items = (List<MenuItem>) field(solo, "items");
+        items.get(0).action().run();
+    }
 }

@@ -21,6 +21,11 @@ public final class FxLayer {
     private int shake;
     private int shakeDir = 1;
     private int flash;
+    private boolean colorBlind;
+
+    public void setColorBlind(boolean colorBlind) {
+        this.colorBlind = colorBlind;
+    }
 
     public void absorb(List<RaidEvent> events) {
         if (events == null) return;
@@ -60,6 +65,7 @@ public final class FxLayer {
     }
 
     public void paintSparks(Graphics2D g) {
+        if (StarfieldBackground.lowEffects()) return;
         for (Spark spark : sparks) {
             g.setColor(new Color(spark.rgb, true));
             g.drawLine((int) spark.x, (int) spark.y, (int) (spark.x - spark.vx * 3), (int) (spark.y - spark.vy * 3));
@@ -72,8 +78,9 @@ public final class FxLayer {
         for (Floater floater : numbers) {
             if (floater.player < 0 || floater.player >= boardCenterX.length) continue;
             int alpha = Math.min(255, floater.life * 8);
-            g.setColor(new Color((floater.rgb & 0x00ffffff) | (alpha << 24), true));
-            String text = floater.text;
+            int rgb = colorBlind ? (floater.crit ? 0xE69F00 : 0x56B4E9) : floater.rgb;
+            g.setColor(new Color((rgb & 0x00ffffff) | (alpha << 24), true));
+            String text = floater.crit ? "치명 " + floater.text : floater.text;
             int x = boardCenterX[floater.player] - g.getFontMetrics().stringWidth(text) / 2;
             g.drawString(text, x, boardTop + (int) floater.y);
         }
@@ -87,7 +94,8 @@ public final class FxLayer {
         g.setColor(new Color(0, 0, 0, alpha / 2));
         int width = g.getFontMetrics().stringWidth(banner.text);
         g.drawString(banner.text, centerX - width / 2 + 2, centerY + 2);
-        g.setColor(new Color((banner.rgb & 0x00ffffff) | (alpha << 24), true));
+        int rgb = colorBlind ? 0xF0E442 : banner.rgb;
+        g.setColor(new Color((rgb & 0x00ffffff) | (alpha << 24), true));
         g.drawString(banner.text, centerX - width / 2, centerY);
     }
 
@@ -100,8 +108,8 @@ public final class FxLayer {
                 flash = Math.max(flash, event.value() >= BIG_DAMAGE ? 180 : 110);
             }
             case CRITICAL -> {
-                addNumber(event.player(), String.valueOf(event.value()), 0xFFE27A);
-                banner("CRITICAL!", 0xFFE27A);
+                addNumber(event.player(), String.valueOf(event.value()), 0xFFE27A, true);
+                banner(colorBlind ? "치명타!" : "CRITICAL!", 0xFFE27A);
                 burst(event.player(), 0xFFD36A);
                 shake = Math.max(shake, 12);
                 flash = 200;
@@ -126,8 +134,12 @@ public final class FxLayer {
     }
 
     private void addNumber(int player, String text, int rgb) {
+        addNumber(player, text, rgb, false);
+    }
+
+    private void addNumber(int player, String text, int rgb, boolean crit) {
         if (player < 0) return;
-        numbers.add(new Floater(player, text, rgb, 28));
+        numbers.add(new Floater(player, text, rgb, 28, crit));
     }
 
     private void banner(String text, int rgb) {
@@ -135,7 +147,7 @@ public final class FxLayer {
     }
 
     private void burst(int player, int rgb) {
-        if (player < 0) return;
+        if (player < 0 || StarfieldBackground.lowEffects()) return;
         for (int i = 0; i < 8; i++) {
             double angle = i * Math.PI / 4;
             sparks.add(new Spark(player, Math.cos(angle) * 2.2, -2 + Math.sin(angle), rgb, 16));
@@ -164,14 +176,16 @@ public final class FxLayer {
         final int player;
         final String text;
         final int rgb;
+        final boolean crit;
         double y = 36;
         int life;
 
-        Floater(int player, String text, int rgb, int life) {
+        Floater(int player, String text, int rgb, int life, boolean crit) {
             this.player = player;
             this.text = text;
             this.rgb = 0xff000000 | rgb;
             this.life = life;
+            this.crit = crit;
         }
     }
 

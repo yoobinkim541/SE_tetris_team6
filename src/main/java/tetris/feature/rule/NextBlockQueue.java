@@ -48,14 +48,26 @@ public class NextBlockQueue {
 
     /**
      * 맨 앞 조각을 주어진 블록으로 바꾼다. 큐보다 길면 뒤에 붙인다.
-     * 레이드 저주 블록이 다음 조각을 S/Z로 바꿀 때 쓴다. 생성기 순서는 그 다음부터 그대로다.
      */
     public void replaceFront(List<Block> pieces) {
+        replaceFrom(0, pieces);
+    }
+
+    /**
+     * 이미 보여 준 바로 다음(index 0)은 두고 그 뒤를 바꾼다.
+     * 저주 블록은 보인 NEXT를 갈아끼우지 않고 그 뒤 2개만 S/Z로 둔다.
+     */
+    public void replaceAfterFront(List<Block> pieces) {
+        replaceFrom(1, pieces);
+    }
+
+    private void replaceFrom(int start, List<Block> pieces) {
         if (pieces == null) throw new IllegalArgumentException("pieces cannot be null");
         for (int i = 0; i < pieces.size(); i++) {
             Block piece = pieces.get(i);
             if (piece == null) throw new IllegalArgumentException("piece cannot be null");
-            if (i < queue.size()) queue.set(i, piece);
+            int index = start + i;
+            if (index < queue.size()) queue.set(index, piece);
             else queue.add(piece);
         }
     }

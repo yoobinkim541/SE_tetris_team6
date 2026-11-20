@@ -16,12 +16,13 @@ import javax.swing.Timer;
  * 밤하늘 배경. 그림 한 장(없으면 남색 그라데이션) 위에 별·먼지·별똥별을 코드로 그린다.
  * 화면마다 타이머는 하나(약 60fps)이고, 패널이 보이지 않으면 멈춘다.
  *
- * <p>시스템 속성 {@code tetris.fx=low} 이면 입자(별·먼지·별똥별)를 그리지 않는다.
- * 배경 그림은 그대로 둔다. 설정 화면 항목은 없다.
+ * <p>시스템 속성 {@code tetris.fx=low} 이거나 설정의 연출이 낮음이면 입자(별·먼지·별똥별)를 그리지 않는다.
+ * 배경 그림은 그대로 둔다.
  */
 public final class StarfieldBackground {
     public static final String FX_PROPERTY = "tetris.fx";
     public static final String FX_LOW = "low";
+    private static volatile boolean effectsHigh = true;
     private static final int FRAME_MILLIS = 16;
 
     private final JComponent host;
@@ -66,9 +67,14 @@ public final class StarfieldBackground {
         sync();
     }
 
-    /** {@code tetris.fx=low} 이면 입자를 끈다 */
+    /** {@code tetris.fx=low} 이거나 설정 연출이 낮음이면 입자를 끈다 */
     public static boolean lowEffects() {
-        return FX_LOW.equalsIgnoreCase(System.getProperty(FX_PROPERTY));
+        return !effectsHigh || FX_LOW.equalsIgnoreCase(System.getProperty(FX_PROPERTY));
+    }
+
+    /** 설정 화면의 연출 값. 시스템 속성이 low면 이 값과 관계없이 입자를 끈다 */
+    public static void setEffectsHigh(boolean high) {
+        effectsHigh = high;
     }
 
     /** 같은 타이머로 연출(흔들림·숫자)을 갱신한다. 화면당 타이머는 이 하나다 */

@@ -25,7 +25,7 @@ import tetris.feature.setting.ControlStyle;
  */
 public class SettingPanel extends JPanel {
     private enum Item {
-        SCREEN_SIZE, DIFFICULTY, CONTROL_KEYS, COLOR_BLIND, CONTROL_STYLE, DEV_NET_OVERLAY, RESET_SCOREBOARD, RESET_SETTINGS
+        SCREEN_SIZE, DIFFICULTY, CONTROL_KEYS, COLOR_BLIND, CONTROL_STYLE, EFFECTS, DEV_NET_OVERLAY, RESET_SCOREBOARD, RESET_SETTINGS
     }
 
     private static final Item[] ALL_ITEMS = Item.values();
@@ -110,6 +110,7 @@ public class SettingPanel extends JPanel {
                 applyChange("");
             }
             case CONTROL_STYLE -> changeControlStyle(1);
+            case EFFECTS -> changeEffects(1);
             case DEV_NET_OVERLAY -> {
                 settings.setDevNetworkOverlay(!settings.isDevNetworkOverlay());
                 applyChange("");
@@ -210,6 +211,7 @@ public class SettingPanel extends JPanel {
             case SCREEN_SIZE -> changeScreenSize(delta);
             case DIFFICULTY -> changeDifficulty(delta);
             case CONTROL_STYLE -> changeControlStyle(delta);
+            case EFFECTS -> changeEffects(delta);
             default -> { }
         }
     }
@@ -231,6 +233,12 @@ public class SettingPanel extends JPanel {
     private void changeControlStyle(int delta) {
         ControlStyle[] styles = ControlStyle.values();
         settings.setControlStyle(styles[Theme.cycle(settings.getControlStyle().ordinal(), delta, styles.length)]);
+        applyChange("");
+    }
+
+    private void changeEffects(int delta) {
+        if (delta == 0) return;
+        settings.setEffectsHigh(!settings.isEffectsHigh());
         applyChange("");
     }
 
@@ -339,6 +347,8 @@ public class SettingPanel extends JPanel {
                         Messages.get(settings.isColorBlindMode() ? "settings.on" : "settings.off")};
                 case CONTROL_STYLE -> new String[] {Messages.get("settings.controlStyle"),
                         "◀ " + Messages.get("style." + settings.getControlStyle().name()) + " ▶"};
+                case EFFECTS -> new String[] {Messages.get("settings.effects"),
+                        "◀ " + Messages.get(settings.isEffectsHigh() ? "settings.effects.high" : "settings.effects.low") + " ▶"};
                 case DEV_NET_OVERLAY -> new String[] {Messages.get("settings.devNetOverlay"),
                         Messages.get(settings.isDevNetworkOverlay() ? "settings.on" : "settings.off")};
                 case RESET_SCOREBOARD -> new String[] {Messages.get("settings.resetScoreboard"), ""};

@@ -30,4 +30,13 @@ public enum PatternId {
     public String displayName() {
         return displayName;
     }
+
+    /** 화면·엔진이 같이 쓰는 효과 설명. 봉인은 바로 다음 1개를 가리지 않는다 */
+    public String description() {
+        return switch (this) {
+            case SEAL_PREVIEW -> "바로 다음 1개는 보이고, 2·3번째와 홀드만 가린다";
+            case CURSE_BLOCKS -> "보여 준 다음 블록은 그대로 두고 그 뒤 2개를 S/Z로 바꾼다";
+            default -> displayName;
+        };
+    }
 }

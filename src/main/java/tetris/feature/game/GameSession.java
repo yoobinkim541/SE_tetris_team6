@@ -824,11 +824,11 @@ public class GameSession {
         return lastPlacedCells;
     }
 
-    /** 다음 Spawn 조각부터 강제 교체. 저주 블록이 S/Z를 넣을 때 쓴다 */
+    /** 이미 보여 준 바로 다음은 두고 그 뒤를 바꾼다. 저주 블록이 S/Z 두 개를 넣을 때 쓴다 */
     public void forceUpcoming(Block... pieces) {
         if (nextQueue == null) throw new IllegalStateException("not started");
         if (pieces == null) throw new IllegalArgumentException("pieces");
-        nextQueue.replaceFront(java.util.List.of(pieces));
+        nextQueue.replaceAfterFront(java.util.List.of(pieces));
     }
 
     /** index번째 대기 블록 종류. 큐 밖이면 null */

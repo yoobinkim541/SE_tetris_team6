@@ -153,6 +153,7 @@ public final class Patterns {
 
         public void apply(PatternContext context) {
             int player = Math.max(0, context.target());
+            // 이미 보여 준 바로 다음은 forceUpcoming이 갈아끼우지 않는다. 그 뒤 2개만 S/Z.
             context.forceNext(player, curse(context.random()), curse(context.random()));
         }
 

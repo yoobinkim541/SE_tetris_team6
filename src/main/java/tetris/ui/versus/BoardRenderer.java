@@ -31,8 +31,7 @@ public final class BoardRenderer {
                 if (ghost[r][c] == 0) continue;
                 int px = x + c * size, py = y + r * size;
                 if (colorBlind) {
-                    layer.setColor(palette.color(tetris.component.block.BlockType.values()[ghost[r][c] - 1], true));
-                    layer.drawRect(px + 2, py + 2, Math.max(1, size - 5), Math.max(1, size - 5));
+                    tetris.ui.fx.A11yColors.paintGhostCell(layer, px, py, size, true);
                 } else {
                     paintCell(layer, ghost[r][c], px, py, size);
                 }

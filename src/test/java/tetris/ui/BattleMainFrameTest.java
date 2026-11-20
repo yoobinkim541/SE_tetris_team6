@@ -392,7 +392,7 @@ class BattleMainFrameTest {
                 frame[0].setVisible(true);
                 try {
                     var menu = (MainMenuPanel) field(frame[0], "mainMenuPanel");
-                    for (int i=0;i<5;i++) menu.moveSelection(1);
+                    for (int i=0;i<2;i++) menu.moveSelection(1);
                     menu.activateSelected();
                     assertEquals(MainFrame.Screen.BATTLE_MODES, field(frame[0], "currentScreen"));
                     frame[0].startBattle(BattleMode.CLASSIC);

@@ -3,6 +3,7 @@ package tetris.ui;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 
+import java.awt.event.KeyEvent;
 import java.util.ArrayList;
 import java.util.List;
 import javax.swing.SwingUtilities;
@@ -14,31 +15,47 @@ import tetris.feature.raid.api.RaidMode;
 import tetris.feature.setting.ControlStyle;
 
 /**
- * 보스 레이드 메뉴. MainFrame은 화면 없는 테스트에서 만들 수 없어서,
- * 프레임이 쓰는 메뉴 목록을 그대로 눌러 솔로·협동·돌아가기를 확인한다.
+ * 시작 메뉴는 6개다. 솔로·멀티 하위 메뉴에서 레이드와 대전에 들어가고, Esc는 시작 메뉴로 돌아간다.
  */
 @Timeout(30)
 class RaidMenuNavigationTest {
     @Test
-    void raidMenuReachesSoloCoopAndBackWithoutTouchingScores() throws Exception {
+    void startMenuReachesSoloRaidMultiplayerAndBackWithoutTouchingScores() throws Exception {
         List<String> log = new ArrayList<>();
-        MainMenuPanel main = new MainMenuPanel(MainFrame.mainMenuItems(
-                () -> log.add("start"), () -> log.add("item"), () -> log.add("settings"),
-                () -> log.add("scores"), () -> log.add("exit"), () -> log.add("battle"),
-                () -> log.add("raid")));
-        assertEquals("대전", mainItems().get(5).label(), "기존 대전 메뉴 위치는 그대로다");
-        assertEquals("보스 레이드", mainItems().get(6).label());
-        choose(main, 6);
-        assertEquals(List.of("raid"), log);
+        List<MenuItem> main = MainFrame.mainMenuItems(
+                () -> log.add("solo-menu"), () -> log.add("item"), () -> log.add("multi"),
+                () -> log.add("settings"), () -> log.add("scores"), () -> log.add("exit"));
+        assertEquals(List.of("게임 시작 (솔로)", "아이템 모드", "멀티플레이", "설정", "스코어보드", "게임 종료"),
+                main.stream().map(MenuItem::label).toList());
+        assertEquals(6, main.size());
 
-        MainMenuPanel raid = new MainMenuPanel(MainFrame.raidMenuItems(
-                () -> log.add("solo"), () -> log.add("coop"), () -> log.add("back")));
-        assertEquals(List.of("솔로 레이드", "협동 레이드 (2인)", "메인 메뉴"),
-                raidItems().stream().map(MenuItem::label).toList());
-        choose(raid, 0);
-        choose(raid, 1);
-        choose(raid, 2);
-        assertEquals(List.of("raid", "solo", "coop", "back"), log);
+        MainMenuPanel start = new MainMenuPanel(main);
+        choose(start, 0);
+        choose(start, 2);
+        assertEquals(List.of("solo-menu", "multi"), log);
+
+        List<MenuItem> solo = MainFrame.soloMenuItems(
+                () -> log.add("classic"), () -> log.add("solo-raid"), () -> log.add("solo-back"));
+        assertEquals(List.of("일반 게임", "솔로 레이드", "메인 메뉴"),
+                solo.stream().map(MenuItem::label).toList());
+        MainMenuPanel soloPanel = new MainMenuPanel(solo, () -> log.add("esc-solo"), "솔로 플레이", () -> false);
+        choose(soloPanel, 0);
+        choose(soloPanel, 1);
+        choose(soloPanel, 2);
+        press(soloPanel, KeyEvent.VK_ESCAPE);
+        assertEquals(List.of("solo-menu", "multi", "classic", "solo-raid", "solo-back", "esc-solo"), log);
+
+        List<MenuItem> multi = MainFrame.multiMenuItems(
+                () -> log.add("local"), () -> log.add("item-battle"), () -> log.add("timed"),
+                () -> log.add("online"), () -> log.add("coop"), () -> log.add("multi-back"));
+        assertEquals(List.of("로컬 일반 대전", "로컬 아이템 대전", "로컬 시간제한 대전",
+                "온라인 대전 (LAN·인터넷)", "협동 레이드 (2인)", "메인 메뉴"),
+                multi.stream().map(MenuItem::label).toList());
+        MainMenuPanel multiPanel = new MainMenuPanel(multi, () -> log.add("esc-multi"), "멀티플레이", () -> false);
+        choose(multiPanel, 4);
+        press(multiPanel, KeyEvent.VK_ESCAPE);
+        assertEquals("coop", log.get(log.size() - 2));
+        assertEquals("esc-multi", log.get(log.size() - 1));
 
         RaidConfig config = MainFrame.raidConfig(RaidMode.COOP, ControlStyle.MODERN, 42L);
         assertEquals(RaidMode.COOP, config.mode());
@@ -50,16 +67,14 @@ class RaidMenuNavigationTest {
         });
     }
 
-    private static List<MenuItem> mainItems() {
-        return MainFrame.mainMenuItems(() -> { }, () -> { }, () -> { }, () -> { }, () -> { }, () -> { }, () -> { });
-    }
-
-    private static List<MenuItem> raidItems() {
-        return MainFrame.raidMenuItems(() -> { }, () -> { }, () -> { });
-    }
-
     private static void choose(MainMenuPanel menu, int index) {
         while (menu.getSelectedIndex() != index) menu.moveSelection(1);
         menu.activateSelected();
+    }
+
+    private static void press(MainMenuPanel menu, int key) {
+        var stroke = javax.swing.KeyStroke.getKeyStroke(key, 0);
+        Object name = menu.getInputMap(javax.swing.JComponent.WHEN_IN_FOCUSED_WINDOW).get(stroke);
+        menu.getActionMap().get(name).actionPerformed(new java.awt.event.ActionEvent(menu, 0, "esc"));
     }
 }

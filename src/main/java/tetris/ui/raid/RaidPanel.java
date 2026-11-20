@@ -27,11 +27,11 @@ import tetris.ui.versus.BoardRenderer;
 
 /**
  * 보스 레이드 화면. 솔로는 보드 | 보스, 협동은 P1 | 보스 | P2.
- * 960×720 가상 화면에 그린 뒤 패널 크기에 맞춰 줄인다. 세 화면 크기에서 잘리지 않는다.
+ * 600×720 가상 화면은 게임 창(5:6)과 같아서 세 크기에서 보드가 최대한 커진다.
  * 에셋이 없으면 도형으로 대신 그린다.
  */
 public final class RaidPanel extends JPanel {
-    static final int VW = 960;
+    static final int VW = 600;
     static final int VH = 720;
 
     private static final Color PANEL = new Color(8, 10, 28, 210);
@@ -64,10 +64,15 @@ public final class RaidPanel extends JPanel {
     private int originY;
     private Rectangle menuButton = new Rectangle();
     private Rectangle retryButton = new Rectangle();
+    private final Rectangle cueTarget = new Rectangle();
+    private final Rectangle cueLucky = new Rectangle();
+    private final Rectangle cueNext = new Rectangle();
+    private final Rectangle cueScore = new Rectangle();
 
     public RaidPanel(boolean colorBlind) {
         this.colorBlind = colorBlind;
         boards = new BoardRenderer(colorBlind);
+        fx.setColorBlind(colorBlind);
         setOpaque(true);
         setBackground(new Color(0x07091A));
         stars = new StarfieldBackground(this, AssetStore.BG_RAID);
@@ -180,13 +185,13 @@ public final class RaidPanel extends JPanel {
 
     private void paintScene(Graphics2D g) {
         boolean coop = snapshot.mode() == RaidMode.COOP;
-        Slot left = coop ? slot(14, 286, 16) : slot(16, 340, 22);
-        Slot right = coop ? slot(660, 286, 16) : null;
-        int bossX = coop ? 310 : 368;
-        int bossW = coop ? 340 : 576;
+        Slot left = coop ? coopSlot(6) : soloSlot();
+        Slot right = coop ? coopSlot(VW - 6 - (22 * 10 + 12)) : null;
+        int bossX = coop ? left.x + left.w + 6 : left.x + left.w + 8;
+        int bossW = coop ? right.x - bossX - 6 : VW - bossX - 8;
         paintPlayer(g, snapshot.players().get(0), 0, left);
         if (right != null) paintPlayer(g, snapshot.players().get(1), 1, right);
-        Rectangle boss = new Rectangle(bossX, 46, bossW, 620);
+        Rectangle boss = new Rectangle(bossX, 8, Math.max(80, bossW), VH - 44);
         paintBoss(g, boss);
         bossBounds.setBounds(originX + (int) (boss.x * scale), originY + (int) (boss.y * scale),
                 Math.max(1, (int) (boss.width * scale)), Math.max(1, (int) (boss.height * scale)));
@@ -208,6 +213,26 @@ public final class RaidPanel extends JPanel {
         if (snapshot.phase() == RaidPhase.FINISHED && snapshot.result() != null) paintResult(g);
     }
 
+    private static Slot soloSlot() {
+        int cell = 26;
+        int x = 8;
+        int boardX = x + 8;
+        int boardY = 34;
+        int sideX = boardX + cell * 10 + 8;
+        int w = sideX + 72 - x;
+        int h = boardY - 8 + cell * 20 + 88;
+        return new Slot(x, 8, w, h, boardX, boardY, cell, sideX);
+    }
+
+    private static Slot coopSlot(int x) {
+        int cell = 22;
+        int boardX = x + 6;
+        int boardY = 28;
+        int w = cell * 10 + 12;
+        int h = boardY - 6 + cell * 20 + 156;
+        return new Slot(x, 6, w, h, boardX, boardY, cell, boardX);
+    }
+
     private static Slot slot(int x, int width, int cell) {
         int boardX = x + 10;
         int boardY = 78;
@@ -217,10 +242,12 @@ public final class RaidPanel extends JPanel {
     private void paintPlayer(Graphics2D g, RaidSnapshot.PlayerView player, int index, Slot slot) {
         g.setColor(PANEL);
         g.fillRoundRect(slot.x, slot.y, slot.w, slot.h, 18, 18);
-        g.setColor(CYAN);
-        g.setFont(font(16, true));
-        String title = (index == 0 ? "P1" : "P2") + (player.alive() ? "" : "  쓰러짐");
-        g.drawString(title, slot.x + 12, slot.y + 22);
+        g.setColor(index == 0 ? tetris.ui.fx.A11yColors.mine(colorBlind) : TEXT);
+        g.setFont(font(14, true));
+        String who = (colorBlind ? (index == 0 ? "■ " : "● ") : "") + (index == 0 ? "P1" : "P2");
+        String title = who + "  점수 " + player.board().score() + (player.alive() ? "" : "  쓰러짐");
+        g.drawString(title, slot.x + 8, slot.y + 18);
+        mark(cueScore, slot.x + 8, slot.y + 4, Math.min(slot.w - 16, 160), 18);
         var board = player.board();
         boards.paintGhost(g, board.ghost(), slot.boardX, slot.boardY, slot.cell);
         boards.paint(g, board.cells(), board.items(), slot.boardX, slot.boardY, slot.cell);
@@ -241,24 +268,34 @@ public final class RaidPanel extends JPanel {
 
     private void paintTargetBorder(Graphics2D g, Slot slot) {
         float pulse = 0.45f + 0.55f * (float) Math.abs(Math.sin(stars.frame() / 6.0));
-        g.setColor(new Color(255, 48, 72, (int) (140 + 100 * pulse)));
-        g.setStroke(new BasicStroke(3f + pulse * 2f));
+        Color markColor = tetris.ui.fx.A11yColors.target(colorBlind);
+        g.setColor(new Color(markColor.getRed(), markColor.getGreen(), markColor.getBlue(), (int) (160 + 80 * pulse)));
+        g.setStroke(colorBlind
+                ? new BasicStroke(3f, BasicStroke.CAP_BUTT, BasicStroke.JOIN_MITER, 1f, new float[] {6f, 4f}, 0f)
+                : new BasicStroke(3f + pulse * 2f));
         g.drawRoundRect(slot.x + 2, slot.y + 2, slot.w - 4, slot.h - 4, 18, 18);
         g.setFont(font(13, true));
-        g.drawString("대상", slot.x + slot.w - 40, slot.y + 22);
+        g.setColor(markColor);
+        String label = "▼ 대상";
+        int labelX = slot.x + slot.w - g.getFontMetrics().stringWidth(label) - 6;
+        g.drawString(label, labelX, slot.y + 18);
+        mark(cueTarget, labelX, slot.y + 4, g.getFontMetrics().stringWidth(label) + 2, 16);
         g.setStroke(new BasicStroke(1f));
     }
 
     private void paintLucky(Graphics2D g, int[][] lucky, Slot slot) {
         if (lucky == null) return;
-        g.setColor(GOLD);
+        boolean marked = false;
         for (int r = 0; r < lucky.length && r < VersusRules.BOARD_ROWS; r++) {
             for (int c = 0; c < lucky[r].length && c < VersusRules.BOARD_COLS; c++) {
                 if (lucky[r][c] == 0) continue;
                 int x = slot.boardX + c * slot.cell;
                 int y = slot.boardY + r * slot.cell;
-                g.drawRect(x + 1, y + 1, slot.cell - 3, slot.cell - 3);
-                g.fillOval(x + 2, y + 2, Math.max(2, slot.cell / 5), Math.max(2, slot.cell / 5));
+                tetris.ui.fx.A11yColors.paintLuckyMark(g, x, y, slot.cell, colorBlind);
+                if (!marked) {
+                    mark(cueLucky, x, y, slot.cell, slot.cell);
+                    marked = true;
+                }
             }
         }
     }
@@ -276,34 +313,52 @@ public final class RaidPanel extends JPanel {
             int y = slot.boardY + row * slot.cell;
             int w = width * slot.cell;
             int h = height * slot.cell;
-            g.setColor(new Color(180, 220, 255, 70));
-            g.fillRect(x, y, w, h);
-            g.setColor(colorBlind ? Color.WHITE : new Color(0xD7F6FF));
-            for (int i = -h; i < w; i += 6) g.drawLine(x + i, y, x + i + h, y + h);
+            Graphics2D layer = (Graphics2D) g.create();
+            try {
+                layer.clipRect(slot.boardX, slot.boardY, slot.cell * VersusRules.BOARD_COLS, slot.cell * VersusRules.BOARD_ROWS);
+                layer.clipRect(x, y, w, h);
+                layer.setColor(new Color(180, 220, 255, 70));
+                layer.fillRect(x, y, w, h);
+                layer.setColor(colorBlind ? Color.WHITE : new Color(0xD7F6FF));
+                for (int i = -h; i < w; i += 6) layer.drawLine(x + i, y, x + i + h, y + h);
+            } finally {
+                layer.dispose();
+            }
         }
     }
 
     private void paintSide(Graphics2D g, RaidSnapshot.PlayerView player, Slot slot) {
         boolean sealed = player.effects().stream().anyMatch(effect -> effect.pattern() == PatternId.SEAL_PREVIEW);
+        boolean stacked = slot.sideX == slot.boardX;
+        int x = stacked ? slot.boardX : slot.sideX;
+        int top = stacked ? slot.boardY + slot.cell * 20 + 6 : slot.boardY;
+        int previewCell = stacked ? 8 : 10;
+        g.setFont(font(11, false));
+        int ascent = g.getFontMetrics().getAscent();
+        int labelH = g.getFontMetrics().getHeight();
+        int gap = 6;
         g.setColor(TEXT);
-        g.setFont(font(12, false));
-        g.drawString("홀드", slot.sideX, slot.boardY + 12);
+        g.drawString("홀드", x, top + ascent);
+        int holdY = top + labelH + gap;
+        int holdH = Math.max(28, previewCell * 2);
         var hold = player.board().hold();
-        if (!sealed) boards.paint(g, hold.length == 0 ? new int[0][] : hold, slot.sideX, slot.boardY + 16, 12);
-        else paintLock(g, slot.sideX, slot.boardY + 16, 48, 48);
+        if (!sealed) boards.paint(g, hold.length == 0 ? new int[0][] : hold, x, holdY, previewCell);
+        else paintLock(g, x, holdY, 40, holdH);
+        int nextTop = holdY + holdH + gap;
         g.setColor(TEXT);
-        g.drawString("다음", slot.sideX, slot.boardY + 78);
+        g.drawString(sealed ? "다음 1" : "다음", x, nextTop + ascent);
         List<int[][]> previews = player.board().previews().isEmpty()
                 ? List.<int[][]>of(player.board().next()) : player.board().previews();
         List<int[][]> extra = player.extendedPreviews();
         int count = previews.size() + extra.size();
-        int step = count > 3 ? 30 : 42;
-        int cell = count > 3 ? 8 : 10;
+        int step = stacked ? 22 : (count > 3 ? 28 : 36);
+        int previewY = nextTop + labelH + gap;
         for (int i = 0; i < count; i++) {
             int[][] shape = i < previews.size() ? previews.get(i) : extra.get(i - previews.size());
-            int y = slot.boardY + 84 + i * step;
-            if (sealed) paintLock(g, slot.sideX, y, 40, step - 6);
-            else boards.paint(g, shape, slot.sideX, y, cell);
+            int y = previewY + i * step;
+            if (sealed && i > 0) paintLock(g, x, y, 40, Math.max(12, step - 6));
+            else boards.paint(g, shape, x, y, previewCell);
+            if (i == 0) mark(cueNext, x, y, previewCell * 4, previewCell * 4);
         }
     }
 
@@ -320,20 +375,29 @@ public final class RaidPanel extends JPanel {
     }
 
     private void paintBadges(Graphics2D g, RaidSnapshot.PlayerView player, Slot slot) {
-        int y = slot.boardY + slot.cell * 20 + 16;
-        g.setFont(font(12, true));
+        boolean stacked = slot.sideX == slot.boardX;
+        g.setFont(font(11, true));
+        int line = g.getFontMetrics().getHeight() + 3;
+        int x = stacked ? slot.boardX + 52 : slot.x + 8;
+        int y = (stacked ? slot.boardY + slot.cell * 20 + 6 : slot.boardY + slot.cell * 20 + 8)
+                + g.getFontMetrics().getAscent();
         for (RaidSnapshot.Effect effect : player.effects()) {
             String label = switch (effect.pattern()) {
-                case REVERSE -> "반전 ↔ " + effect.remainingPieces();
-                case OVERLOAD -> "과부하 ⚡ " + effect.remainingPieces();
-                case SEAL_PREVIEW -> "봉인 " + effect.remainingPieces();
-                case CLOUD -> "구름 " + effect.remainingPieces();
+                case REVERSE -> "↔ 반전 " + effect.remainingPieces();
+                case OVERLOAD -> "⚡ 과부하 " + effect.remainingPieces();
+                case SEAL_PREVIEW -> "잠금 봉인 " + effect.remainingPieces();
+                case CLOUD -> "빗금 구름 " + effect.remainingPieces();
                 default -> null;
             };
             if (label == null) continue;
-            g.setColor(effect.pattern() == PatternId.REVERSE ? MAGENTA : CYAN);
-            g.drawString(label, slot.x + 12, y);
-            y += 16;
+            g.setColor(switch (effect.pattern()) {
+                case REVERSE -> colorBlind ? tetris.ui.fx.A11yColors.PURPLE : MAGENTA;
+                case OVERLOAD -> colorBlind ? tetris.ui.fx.A11yColors.ORANGE : CYAN;
+                case SEAL_PREVIEW -> colorBlind ? tetris.ui.fx.A11yColors.BLUE : CYAN;
+                default -> colorBlind ? tetris.ui.fx.A11yColors.WHITE : CYAN;
+            });
+            g.drawString(label, x, y);
+            y += line;
         }
     }
 
@@ -348,21 +412,22 @@ public final class RaidPanel extends JPanel {
         g.setStroke(new BasicStroke(4f));
         g.setColor(new Color(90, 90, 100));
         g.drawOval(cx - r, cy - r, r * 2, r * 2);
-        g.setColor(new Color(0x8CFFC1));
+        g.setColor(colorBlind ? tetris.ui.fx.A11yColors.SKY : new Color(0x8CFFC1));
         g.drawArc(cx - r, cy - r, r * 2, r * 2, 90, -(int) (360.0 * progress / required));
         g.setStroke(new BasicStroke(1f));
-        g.setFont(font(16, true));
+        g.setFont(font(14, true));
         g.setColor(TEXT);
-        drawCentered(g, progress + "/" + required, cx, cy + 6);
+        drawCentered(g, "부활 " + progress + "/" + required, cx, cy + 6);
     }
 
     private void paintBoss(Graphics2D g, Rectangle area) {
         g.setColor(PANEL);
         g.fillRoundRect(area.x, area.y, area.width, area.height, 20, 20);
         RaidSnapshot.BossView boss = snapshot.boss();
-        int art = Math.min(area.width - 36, snapshot.mode() == RaidMode.COOP ? 210 : 250);
+        int pad = 8;
+        int art = Math.max(48, area.width - pad * 2);
         int artX = area.x + (area.width - art) / 2;
-        int artY = area.y + 16;
+        int artY = area.y + 8;
         BufferedImage image = assets.boss(boss.id(), boss.level(), art);
         if (image != null) g.drawImage(image, artX, artY, null);
         else paintBossFallback(g, boss.id(), artX, artY, art);
@@ -370,17 +435,24 @@ public final class RaidPanel extends JPanel {
             g.setColor(new Color(255, 255, 255, Math.min(180, fx.flashAlpha())));
             g.fillRoundRect(artX, artY, art, art, 16, 16);
         }
-        int textY = artY + art + 28;
+        int y = artY + art + 14;
+        String title = boss.id().displayName() + "  Lv." + boss.level();
+        int titleSize = fittedSize(g, title, area.width - pad * 2, 18, 10, true);
         g.setColor(TEXT);
-        g.setFont(font(22, true));
-        drawCentered(g, boss.id().displayName() + "  Lv." + boss.level(), area.x + area.width / 2, textY);
-        paintHp(g, area.x + 18, textY + 12, area.width - 36, boss);
-        paintPattern(g, area, textY + 40, boss);
-        paintGauge(g, area.x + 18, textY + 128, area.width - 36);
-        g.setColor(DIM);
-        g.setFont(font(16, false));
-        drawCentered(g, "처치 " + snapshot.kills() + "   ·   " + clock(snapshot.elapsedMillis()),
-                area.x + area.width / 2, Math.min(area.y + area.height - 18, textY + 176));
+        g.setFont(font(titleSize, true));
+        drawCentered(g, title, area.x + area.width / 2, y + g.getFontMetrics().getAscent());
+        y += g.getFontMetrics().getHeight() + 6;
+        y = paintHp(g, area.x + pad, y, area.width - pad * 2, boss) + 8;
+        y = paintPattern(g, area, y, boss) + 14;
+        paintGauge(g, area.x + pad, y, area.width - pad * 2);
+        String footer = "처치 " + snapshot.kills() + "  ·  " + clock(snapshot.elapsedMillis());
+        int footerSize = fittedSize(g, footer, area.width - pad * 2, 13, 9, false);
+        g.setFont(font(footerSize, false));
+        int footerBase = area.y + area.height - 10;
+        if (footerBase > y + 36) {
+            g.setColor(DIM);
+            drawCentered(g, footer, area.x + area.width / 2, footerBase);
+        }
     }
 
     private void paintBossFallback(Graphics2D g, BossId id, int x, int y, int size) {
@@ -402,49 +474,86 @@ public final class RaidPanel extends JPanel {
         g.fillOval(x + size / 2 - 22, y + size / 2 - 8, 10, 10);
         g.fillOval(x + size / 2 + 12, y + size / 2 - 8, 10, 10);
         g.setColor(TEXT);
-        g.setFont(font(14, true));
-        drawCentered(g, id.displayName(), x + size / 2, y + size - 16);
+        g.setFont(font(Math.max(10, size / 12), true));
+        drawCentered(g, id.displayName(), x + size / 2, y + size - 12);
     }
 
-    private void paintHp(Graphics2D g, int x, int y, int width, RaidSnapshot.BossView boss) {
-        g.setFont(font(12, false));
-        String label = boss.hp() + "/" + boss.maxHp();
-        int textW = g.getFontMetrics().stringWidth(label);
-        int barW = Math.max(40, width - textW - 8);
-        paintBar(g, x, y, barW, 16, boss.hp() / (double) boss.maxHp(), HP);
+    private int paintHp(Graphics2D g, int x, int y, int width, RaidSnapshot.BossView boss) {
+        String label = "보스 " + boss.hp() + "/" + boss.maxHp();
+        int size = fittedSize(g, label, width, 12, 8, true);
+        g.setFont(font(size, true));
         g.setColor(TEXT);
-        g.drawString(label, x + barW + 6, y + 13);
+        int base = y + g.getFontMetrics().getAscent();
+        g.drawString(label, x, base);
+        int barY = base + 4;
+        paintBar(g, x, barY, width, 12, boss.hp() / (double) boss.maxHp(), tetris.ui.fx.A11yColors.hp(colorBlind));
+        int bottom = barY + 12;
         int[] split = boss.splitHp();
-        if (split.length == 0) return;
-        int mini = Math.max(40, (width - 8 * (split.length - 1)) / split.length);
+        if (split.length == 0) return bottom;
+        int gap = 6;
+        int mini = Math.max(16, (width - gap * (split.length - 1)) / split.length);
+        int splitY = bottom + 6;
+        int labelBottom = splitY + 8;
         for (int i = 0; i < split.length; i++) {
             int hp = Math.max(0, split[i]);
             int max = Math.max(hp, 1);
-            paintBar(g, x + i * (mini + 8), y + 22, mini, 8, hp / (double) max, new Color(0x3DDC8A));
+            int bx = x + i * (mini + gap);
+            paintBar(g, bx, splitY, mini, 8, hp / (double) max, tetris.ui.fx.A11yColors.splitHp(colorBlind));
+            String splitLabel = "분열" + (i + 1) + " " + hp;
+            int labelSize = fittedSize(g, splitLabel, mini, 10, 7, true);
+            g.setFont(font(labelSize, true));
+            g.setColor(TEXT);
+            int splitBase = splitY + 8 + 3 + g.getFontMetrics().getAscent();
+            g.drawString(splitLabel, bx, splitBase);
+            labelBottom = Math.max(labelBottom, splitBase + 2);
         }
+        return labelBottom;
     }
 
-    private void paintPattern(Graphics2D g, Rectangle area, int y, RaidSnapshot.BossView boss) {
+    private int paintPattern(Graphics2D g, Rectangle area, int y, RaidSnapshot.BossView boss) {
+        int pad = 8;
+        int innerRight = area.x + area.width - pad;
+        int icon = Math.min(26, Math.max(16, (area.width - pad * 2) / 5));
+        int x = area.x + pad;
         PatternId pattern = boss.nextPattern();
-        int icon = 40;
-        int x = area.x + 18;
         BufferedImage image = pattern == null ? null : assets.scaled(AssetStore.patternPath(pattern), icon, icon);
         if (image != null) g.drawImage(image, x, y, null);
         else paintPatternFallback(g, pattern, x, y, icon);
-        g.setColor(TEXT);
-        g.setFont(font(16, true));
         String name = pattern == null ? "패턴 없음" : pattern.displayName();
-        g.drawString(name + "  " + targetText(boss.target()), x + icon + 8, y + 16);
-        g.setFont(font(13, false));
+        String who = targetText(boss.target());
+        int textX = x + icon + 6;
+        int textW = Math.max(12, innerRight - textX);
+        int nameSize = fittedSize(g, name, textW, 13, 8, true);
+        g.setColor(TEXT);
+        g.setFont(font(nameSize, true));
+        int nameBase = y + g.getFontMetrics().getAscent();
+        g.drawString(name, textX, nameBase);
+        int nameBottom = nameBase + g.getFontMetrics().getDescent();
+        int whoSize = fittedSize(g, who, textW, 11, 8, false);
         g.setColor(DIM);
-        String hint = boss.fleeMillis() >= 0 ? "도망까지 " + Math.max(0, boss.fleeMillis() / 1000) + "초"
+        g.setFont(font(whoSize, false));
+        int whoBase = nameBottom + 4 + g.getFontMetrics().getAscent();
+        g.drawString(who, textX, whoBase);
+        int blockBottom = Math.max(y + icon, whoBase + 2);
+        String hint = pattern == PatternId.SEAL_PREVIEW ? "다음 1개만 표시"
+                : pattern == PatternId.CURSE_BLOCKS ? "보인 다음 유지"
+                : boss.fleeMillis() >= 0 ? "도망까지 " + Math.max(0, boss.fleeMillis() / 1000) + "초"
                 : "조각 후 발동";
-        g.drawString(hint, x + icon + 8, y + 34);
-        g.setColor(CYAN);
-        g.setFont(font(40, true));
         String pieces = boss.fleeMillis() >= 0 ? String.valueOf(Math.max(0, boss.fleeMillis() / 1000))
                 : String.valueOf(Math.max(0, boss.piecesLeft()));
-        drawCentered(g, pieces, area.x + area.width - 36, y + 36);
+        int hintSize = fittedSize(g, hint, area.width - pad * 2, 11, 8, false);
+        g.setFont(font(hintSize, false));
+        g.setColor(DIM);
+        int hintBase = blockBottom + 8 + g.getFontMetrics().getAscent();
+        g.drawString(hint, x, hintBase);
+        int hintBottom = hintBase + g.getFontMetrics().getDescent();
+        int numberSize = Math.min(16, Math.max(12, area.width / 9));
+        g.setFont(font(numberSize, true));
+        int numberBase = hintBottom + 8 + g.getFontMetrics().getAscent();
+        g.setColor(colorBlind ? tetris.ui.fx.A11yColors.SKY : CYAN);
+        int numW = g.getFontMetrics().stringWidth(pieces);
+        g.drawString(pieces, innerRight - numW, numberBase);
+        return numberBase + g.getFontMetrics().getDescent() + 8;
     }
 
     private String targetText(int target) {
@@ -476,8 +585,9 @@ public final class RaidPanel extends JPanel {
     private void paintGauge(Graphics2D g, int x, int y, int width) {
         g.setColor(DIM);
         g.setFont(font(12, false));
-        g.drawString(snapshot.mode() == RaidMode.SOLO ? "필살 게이지" : "협동 게이지", x, y);
-        paintBar(g, x, y + 6, width, 12, snapshot.gauge() / 100.0, CYAN);
+        String name = (snapshot.mode() == RaidMode.SOLO ? "필살" : "협동") + " " + snapshot.gauge();
+        g.drawString(name, x, y);
+        paintBar(g, x, y + 6, width, 12, snapshot.gauge() / 100.0, tetris.ui.fx.A11yColors.gauge(colorBlind));
     }
 
     private static void paintBar(Graphics2D g, int x, int y, int width, int height, double ratio, Color fill) {
@@ -500,8 +610,8 @@ public final class RaidPanel extends JPanel {
         g.setFont(font(16, false));
         g.setColor(DIM);
         drawCentered(g, String.format("%.1f초  ·  좌우 이동, 하드 드롭 확정", offer.remainingMillis() / 1000.0), VW / 2, 176);
-        int cardW = 150;
-        int cardH = 220;
+        int cardW = Math.min(140, (VW - 48) / 3 - 8);
+        int cardH = 200;
         int gap = 18;
         int total = cardW * 3 + gap * 2;
         int x0 = (VW - total) / 2;
@@ -527,9 +637,14 @@ public final class RaidPanel extends JPanel {
         g.setFont(font(11, false));
         g.setColor(DIM);
         drawCentered(g, card.description(), x + w / 2, y + h - 16);
-        g.setColor(selected ? CYAN : new Color(255, 255, 255, 40));
-        g.setStroke(new BasicStroke(selected ? 3f : 1f));
+        g.setColor(selected ? tetris.ui.fx.A11yColors.selected(colorBlind) : new Color(255, 255, 255, 40));
+        g.setStroke(new BasicStroke(selected ? (colorBlind ? 5f : 3f) : 1f));
         g.drawRoundRect(x, y, w, h, 14, 14);
+        if (selected) {
+            g.setFont(font(16, true));
+            g.setColor(tetris.ui.fx.A11yColors.selected(colorBlind));
+            drawCentered(g, "▼", x + w / 2, y - 2);
+        }
         g.setStroke(new BasicStroke(1f));
     }
 
@@ -547,18 +662,21 @@ public final class RaidPanel extends JPanel {
     private void paintConfirm(Graphics2D g) {
         g.setColor(new Color(4, 6, 16, 170));
         g.fillRect(0, 0, VW, VH);
+        int boxW = Math.min(420, VW - 40);
+        int boxX = (VW - boxW) / 2;
+        int boxY = 240;
         g.setColor(new Color(16, 18, 36));
-        g.fillRoundRect(250, 240, 460, 200, 18, 18);
-        g.setColor(CYAN);
-        g.drawRoundRect(250, 240, 460, 200, 18, 18);
+        g.fillRoundRect(boxX, boxY, boxW, 200, 18, 18);
+        g.setColor(colorBlind ? tetris.ui.fx.A11yColors.ORANGE : CYAN);
+        g.drawRoundRect(boxX, boxY, boxW, 200, 18, 18);
         g.setColor(TEXT);
-        g.setFont(font(22, true));
+        g.setFont(font(20, true));
         drawCentered(g, "레이드를 끝낼까요?", VW / 2, 300);
-        g.setFont(font(14, false));
+        g.setFont(font(13, false));
         g.setColor(DIM);
         drawCentered(g, "점수는 저장되지 않습니다", VW / 2, 326);
-        menuButton = new Rectangle(300, 360, 160, 42);
-        retryButton = new Rectangle(500, 360, 160, 42);
+        menuButton = new Rectangle(boxX + 24, 360, boxW / 2 - 36, 42);
+        retryButton = new Rectangle(VW / 2 + 12, 360, boxW / 2 - 36, 42);
         paintChoice(g, menuButton, "끝내기", confirmYes);
         paintChoice(g, retryButton, "계속", !confirmYes);
     }
@@ -567,24 +685,28 @@ public final class RaidPanel extends JPanel {
         RaidSnapshot.Result result = snapshot.result();
         g.setColor(new Color(4, 6, 16, 190));
         g.fillRect(0, 0, VW, VH);
+        int boxW = Math.min(460, VW - 40);
+        int boxH = 360;
+        int boxX = (VW - boxW) / 2;
+        int boxY = 160;
         g.setColor(new Color(14, 16, 34));
-        g.fillRoundRect(230, 150, 500, 380, 20, 20);
-        g.setColor(MAGENTA);
-        g.drawRoundRect(230, 150, 500, 380, 20, 20);
+        g.fillRoundRect(boxX, boxY, boxW, boxH, 20, 20);
+        g.setColor(colorBlind ? tetris.ui.fx.A11yColors.PURPLE : MAGENTA);
+        g.drawRoundRect(boxX, boxY, boxW, boxH, 20, 20);
         g.setColor(TEXT);
-        g.setFont(font(28, true));
+        g.setFont(font(26, true));
         drawCentered(g, "레이드 종료", VW / 2, 210);
-        g.setFont(font(20, false));
-        drawCentered(g, "처치  " + result.kills(), VW / 2, 270);
-        drawCentered(g, "총 데미지  " + result.totalDamage(), VW / 2, 308);
-        drawCentered(g, "시간  " + clock(result.survivedMillis()), VW / 2, 346);
-        menuButton = new Rectangle(280, 420, 180, 46);
-        retryButton = new Rectangle(500, 420, 180, 46);
-        paintChoice(g, menuButton, "메인 메뉴", resultIndex == 0);
+        g.setFont(font(18, false));
+        drawCentered(g, "처치  " + result.kills(), VW / 2, 260);
+        drawCentered(g, "총 데미지  " + result.totalDamage(), VW / 2, 298);
+        drawCentered(g, "시간  " + clock(result.survivedMillis()), VW / 2, 336);
+        menuButton = new Rectangle(boxX + 24, 390, boxW / 2 - 36, 44);
+        retryButton = new Rectangle(VW / 2 + 12, 390, boxW / 2 - 36, 44);
+        paintChoice(g, menuButton, "메뉴로", resultIndex == 0);
         paintChoice(g, retryButton, "다시 하기", resultIndex == 1);
         g.setFont(font(13, false));
         g.setColor(DIM);
-        drawCentered(g, "←/→ 선택   Enter 확인", VW / 2, 496);
+        drawCentered(g, "←/→ 선택   Enter 확인", VW / 2, 470);
     }
 
     private void paintChoice(Graphics2D g, Rectangle box, String label, boolean selected) {
@@ -629,8 +751,34 @@ public final class RaidPanel extends JPanel {
         return new Font(Font.DIALOG, bold ? Font.BOLD : Font.PLAIN, size);
     }
 
+    private static int fittedSize(Graphics2D g, String text, int maxWidth, int preferred, int min, boolean bold) {
+        int size = preferred;
+        g.setFont(font(size, bold));
+        while (size > min && g.getFontMetrics().stringWidth(text) > maxWidth) {
+            g.setFont(font(--size, bold));
+        }
+        return size;
+    }
+
     private static void drawCentered(Graphics2D g, String text, int centerX, int baseline) {
         g.drawString(text, centerX - g.getFontMetrics().stringWidth(text) / 2, baseline);
+    }
+
+    /** 마지막으로 그린 비색상 단서의 패널 좌표. 없으면 빈 사각형 */
+    public Rectangle cueBounds(String name) {
+        Rectangle source = switch (name) {
+            case "target" -> cueTarget;
+            case "lucky" -> cueLucky;
+            case "next" -> cueNext;
+            case "score" -> cueScore;
+            default -> new Rectangle();
+        };
+        return new Rectangle(source);
+    }
+
+    private void mark(Rectangle box, int vx, int vy, int vw, int vh) {
+        box.setBounds(originX + (int) (vx * scale), originY + (int) (vy * scale),
+                Math.max(1, (int) (vw * scale)), Math.max(1, (int) (vh * scale)));
     }
 
     private record Slot(int x, int y, int w, int h, int boardX, int boardY, int cell, int sideX) {

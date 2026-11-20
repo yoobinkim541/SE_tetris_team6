@@ -11,6 +11,7 @@ import javax.swing.JComponent;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import tetris.component.block.TBlock;
@@ -92,6 +93,62 @@ class ChecklistInputLatencyTest {
                 }
             }
             System.out.printf("[checklist-input] mode=%s inputs=21 rate<=3Hz maxLatencyMs=%.3f%n", mode, maxLatency / 1_000_000.0);
+        } finally {
+            onEdt(() -> { if (session[0] != null) session[0].end(); });
+        }
+    }
+
+    @Test
+    @DisplayName("2-12: 모던 DAS가 OS 반복을 무시해도 1초에 3번 이하인 누름·뗌은 빠지지 않는다")
+    void modernSparsePressReleaseIsAppliedWithinOneSecond() throws Exception {
+        Settings settings = new Settings();
+        settings.setControlStyle(tetris.feature.setting.ControlStyle.MODERN);
+        GamePanel[] panel = new GamePanel[1];
+        GameSession[] session = new GameSession[1];
+        try {
+            for (GameAction command : new GameAction[] {GameAction.MOVE_LEFT, GameAction.MOVE_RIGHT, GameAction.SOFT_DROP}) {
+                onEdt(() -> {
+                    if (session[0] != null) session[0].end();
+                    panel[0] = new GamePanel(settings, new PausePanel(() -> {}, () -> {}, () -> {}), s -> {});
+                    panel[0].setCellSize(20);
+                    panel[0].setSize(panel[0].getPreferredSize());
+                    session[0] = new GameSession(GameMode.CLASSIC, Difficulty.NORMAL, tetris.component.block.TBlock::new,
+                            new GameClock() {
+                                public void start(int millis) {}
+                                public void stop() {}
+                            }, panel[0], tetris.feature.setting.ControlStyle.MODERN);
+                    new KeyBindingManager(() -> {})
+                            .bindGameKeys(panel[0], settings.getKeyMap(), session[0], tetris.feature.setting.ControlStyle.MODERN);
+                    session[0].start();
+                    for (int row = 0; row < 4; row++) session[0].moveDown();
+                    render(panel[0]);
+                });
+                long previous = 0;
+                for (int repetition = 0; repetition < 3; repetition++) {
+                    long wait = INTERVAL_NANOS - (System.nanoTime() - previous);
+                    if (previous != 0 && wait > 0) TimeUnit.NANOSECONDS.sleep(wait);
+                    previous = System.nanoTime();
+                    long submitted = previous;
+                    FutureTask<Long> event = new FutureTask<>(() -> {
+                        var before = session[0].snapshot();
+                        int key = settings.getKeyMap().keyOf(command);
+                        dispatch(panel[0], key, false);
+                        dispatch(panel[0], key, true);
+                        var after = session[0].snapshot();
+                        switch (command) {
+                            case MOVE_LEFT -> assertEquals(before.currentBlock().getCol() - 1, after.currentBlock().getCol());
+                            case MOVE_RIGHT -> assertEquals(before.currentBlock().getCol() + 1, after.currentBlock().getCol());
+                            case SOFT_DROP -> assertEquals(before.currentBlock().getRow() + 1, after.currentBlock().getRow());
+                            default -> throw new AssertionError(command);
+                        }
+                        render(panel[0]);
+                        return System.nanoTime() - submitted;
+                    });
+                    SwingUtilities.invokeLater(event);
+                    long latency = event.get(1, TimeUnit.SECONDS);
+                    assertTrue(latency < MAX_LATENCY_NANOS, command + " latency=" + latency);
+                }
+            }
         } finally {
             onEdt(() -> { if (session[0] != null) session[0].end(); });
         }

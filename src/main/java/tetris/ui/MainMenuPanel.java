@@ -3,6 +3,7 @@ package tetris.ui;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.event.KeyEvent;
+import java.util.function.BooleanSupplier;
 import java.awt.image.BufferedImage;
 import java.util.ArrayList;
 import java.util.List;
@@ -15,11 +16,21 @@ public class MainMenuPanel extends JPanel {
     private final List<MenuItem> items;
     private final List<String> warnings = new ArrayList<>();
     private final StarfieldBackground stars;
+    private final String title;
+    private final BooleanSupplier colorBlind;
+    private final boolean submenu;
     private int selected;
 
     public MainMenuPanel(List<MenuItem> items) {
+        this(items, null, null, () -> false);
+    }
+
+    public MainMenuPanel(List<MenuItem> items, Runnable onBack, String title, BooleanSupplier colorBlind) {
         if (items == null || items.isEmpty()) throw new IllegalArgumentException("items cannot be empty");
         this.items = List.copyOf(items);
+        this.title = title;
+        this.colorBlind = colorBlind == null ? () -> false : colorBlind;
+        this.submenu = onBack != null;
         setBackground(Theme.BACKGROUND);
         setFocusable(true);
         stars = new StarfieldBackground(this, AssetStore.BG_MENU);
@@ -27,7 +38,9 @@ public class MainMenuPanel extends JPanel {
         KeyBindingManager.bindKey(this, KeyEvent.VK_UP, () -> moveSelection(-1));
         KeyBindingManager.bindKey(this, KeyEvent.VK_DOWN, () -> moveSelection(1));
         KeyBindingManager.bindKey(this, KeyEvent.VK_ENTER, this::activateSelected);
+        if (onBack != null) KeyBindingManager.bindKey(this, KeyEvent.VK_ESCAPE, onBack);
     }
+
 
     /** delta = -1(위) / +1(아래). 끝에서 순환 */
     public void moveSelection(int delta) {
@@ -53,6 +66,11 @@ public class MainMenuPanel extends JPanel {
         return selected;
     }
 
+    public void resetSelection() {
+        selected = 0;
+        repaint();
+    }
+
     @Override
     protected void paintComponent(Graphics g) {
         super.paintComponent(g);
@@ -74,10 +92,22 @@ public class MainMenuPanel extends JPanel {
         List<String> labels = items.stream().map(MenuItem::label).toList();
         int fontSize = unit + unit / 3;
         int menuTop = h * 2 / 5 - fontSize;
+        if (title != null) menuTop += fontSize;
         int menuHeight = labels.size() * fontSize * 2 + fontSize;
+        int limit = h - unit * 4 - menuTop;
+        while (menuHeight > limit && fontSize > 12) {
+            fontSize--;
+            menuHeight = labels.size() * fontSize * 2 + fontSize;
+        }
         g2.setColor(new java.awt.Color(8, 10, 24, 150));
-        g2.fillRoundRect(w / 5, menuTop, w * 3 / 5, menuHeight, 18, 18);
-        Theme.drawMenu(g2, labels, selected, w / 2, h * 2 / 5, fontSize);
+        g2.fillRoundRect(w / 5, menuTop - fontSize, w * 3 / 5, menuHeight + fontSize, 18, 18);
+        if (title != null) {
+            g2.setFont(Theme.text(fontSize, true));
+            g2.setColor(tetris.ui.fx.A11yColors.accent(colorBlind.getAsBoolean()));
+            Theme.drawCentered(g2, title, w / 2, menuTop - fontSize / 2);
+        }
+        Theme.drawMenu(g2, labels, selected, w / 2, h * 2 / 5 + (title == null ? 0 : fontSize), fontSize,
+                colorBlind.getAsBoolean());
 
         g2.setFont(Theme.text(Math.max(10, unit * 3 / 4), false));
         g2.setColor(Theme.WARNING);
@@ -87,6 +117,6 @@ public class MainMenuPanel extends JPanel {
             y += unit * 3 / 2;
         }
 
-        Theme.drawGuide(g2, Messages.keyGuide(MainFrame.Screen.MAIN_MENU, null), w, h);
+        Theme.drawGuide(g2, Messages.keyGuide(submenu ? MainFrame.Screen.SOLO_MENU : MainFrame.Screen.MAIN_MENU, null), w, h);
     }
 }

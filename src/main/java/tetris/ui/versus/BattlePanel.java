@@ -14,6 +14,8 @@ import tetris.feature.versus.api.VersusRules;
 /** One reusable two-player view. Owns no engine, socket or key bindings. EDT confined. */
 public final class BattlePanel extends JPanel {
     private final BoardRenderer renderer;
+    private final boolean colorBlind;
+    private final tetris.ui.fx.StarfieldBackground stars;
     private final String guide;
     private BattleKeyMap keys;
     private final String modeLabel;
@@ -43,8 +45,10 @@ public final class BattlePanel extends JPanel {
         this.modeLabel = Objects.requireNonNull(modeLabel);
         this.mode = mode;
         this.viewer = viewer;
+        this.colorBlind = colorBlind;
         setFocusable(true);
         renderer = new BoardRenderer(colorBlind);
+        stars = new tetris.ui.fx.StarfieldBackground(this, tetris.ui.fx.AssetStore.BG_VERSUS);
         this.guide = Objects.requireNonNull(guide);
         getAccessibleContext().setAccessibleDescription(guide);
         setBackground(new Color(0x1B1E24)); setPreferredSize(new Dimension(960,720));
@@ -140,14 +144,24 @@ public final class BattlePanel extends JPanel {
         };
     }
 
+    @Override public void removeNotify() {
+        stars.dispose();
+        super.removeNotify();
+    }
+
     @Override protected void paintComponent(Graphics graphics) {
         super.paintComponent(graphics);
+        Graphics2D sky = (Graphics2D) graphics.create();
+        try { stars.paint(sky, getWidth(), getHeight()); }
+        finally { sky.dispose(); }
         if (snapshot == null) return;
         Graphics2D g = (Graphics2D) graphics.create();
         try {
             double scale = Math.min(getWidth()/960.0,getHeight()/720.0);
             if (scale <= 0) return;
             g.translate((getWidth()-960*scale)/2,(getHeight()-720*scale)/2); g.scale(scale,scale);
+            g.setColor(new Color(8, 10, 22, 150));
+            g.fillRect(0, 0, 960, 720);
             g.setFont(new Font(Font.DIALOG,Font.BOLD,22)); g.setColor(Color.WHITE);
             g.drawString(statusText(snapshot, viewer),28,32);
             if (!modeLabel.isEmpty()) g.drawString(modeLabel,
@@ -242,9 +256,14 @@ public final class BattlePanel extends JPanel {
     }
     private void paintPlayer(Graphics2D g, MatchSnapshot.PlayerView player, int x, PlayerId id) {
         boolean mine = viewer != null && viewer == id;
-        g.setColor(mine ? new Color(0x8BD3FF) : Color.WHITE); g.setFont(new Font(Font.DIALOG,Font.BOLD,22));
-        g.drawString(boardTitle(id, viewer)+"  점수 "+player.score(),x,70);
-        if (mine) { g.drawRect(x-3,87,10*27+5,20*27+5); g.setColor(Color.WHITE); }
+        g.setColor(mine ? tetris.ui.fx.A11yColors.mine(colorBlind) : Color.WHITE); g.setFont(new Font(Font.DIALOG,Font.BOLD,22));
+        g.drawString((colorBlind ? (id == PlayerId.ONE ? "■ " : "● ") : "") + boardTitle(id, viewer)+"  점수 "+player.score(),x,70);
+        if (mine) {
+            if (colorBlind) g.setStroke(new BasicStroke(3f));
+            g.drawRect(x-3,87,10*27+5,20*27+5);
+            g.setStroke(new BasicStroke(1f));
+            g.setColor(Color.WHITE);
+        }
         renderer.paintGhost(g, player.ghost(), x, 90, 27);
         renderer.paint(g, player.cells(), player.items(), x, 90, 27);
         g.setColor(Color.WHITE);
@@ -255,7 +274,8 @@ public final class BattlePanel extends JPanel {
                 ? java.util.List.<int[][]>of(player.next()) : player.previews();
         for (int i = 0; i < previews.size(); i++) renderer.paint(g, previews.get(i), x + 288, 188 + i * 52, 14);
         var queue = player.pendingRows();
-        g.setColor(Color.WHITE); g.drawString("공격 대기 "+queue.size()+"/"+VersusRules.MAX_PENDING_ROWS,x+288,260);
+        g.setColor(colorBlind ? tetris.ui.fx.A11yColors.ORANGE : Color.WHITE);
+        g.drawString((colorBlind ? "▼ " : "") + "공격 대기 "+queue.size()+"/"+VersusRules.MAX_PENDING_ROWS,x+288,260);
         for(int r=0;r<VersusRules.MAX_PENDING_ROWS;r++) {
             int[] row = r < queue.size() ? queue.get(r) : new int[VersusRules.BOARD_COLS];
             renderer.paint(g,new int[][]{row},x+288,280+r*16,14);
