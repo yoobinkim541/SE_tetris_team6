@@ -46,4 +46,37 @@
 
 ## Sounds
 
-아직 없음.
+효과음과 배경음은 외부 샘플 없이 팀 스크립트 `tools/sfx/make_sfx.py`로 2026-11-20에 합성했다. 제3자 음원·녹음은 쓰지 않았다. 형식은 16비트 모노 22050 Hz WAV이고, 효과음은 클릭이 나지 않게 양끝을 짧게 페이드했다. 배경음 둘은 끝과 처음이 이어지는 루프라 가장자리를 0으로 내리지 않는다. 다시 만들려면 저장소 루트에서 `python tools/sfx/make_sfx.py`를 실행한다. 출력은 `src/main/resources/sfx/`이다.
+
+| 파일 | 길이 | 내용 |
+|---|---|---|
+| `sfx/move.wav` | 0.046초 | 블록 이동 틱 |
+| `sfx/rotate.wav` | 0.085초 | 회전. 짧게 올라가는 꺾임 |
+| `sfx/hold.wav` | 0.160초 | 홀드. 부드러운 종 |
+| `sfx/harddrop.wav` | 0.250초 | 하드드롭. 내려꽂는 소리와 착지 |
+| `sfx/lock.wav` | 0.070초 | 착지 클릭 |
+| `sfx/clear1.wav` | 0.280초 | 1줄 삭제. 단일 종 |
+| `sfx/clear2.wav` | 0.390초 | 2줄 삭제. 두 음 |
+| `sfx/clear3.wav` | 0.480초 | 3줄 삭제. 세 음 |
+| `sfx/tetris.wav` | 0.750초 | 4줄 삭제. 장조 팡파르 |
+| `sfx/tspin.wav` | 0.400초 | T스핀. 올라가는 반짝임 |
+| `sfx/combo.wav` | 0.430초 | 콤보. 음이 올라감 |
+| `sfx/attack_send.wav` | 0.200초 | 공격을 보냄 |
+| `sfx/attack_receive.wav` | 0.260초 | 공격을 맞음 |
+| `sfx/boss_spawn.wav` | 1.120초 | 보스 등장 |
+| `sfx/boss_attack_warn.wav` | 0.465초 | 보스 패턴 경고 |
+| `sfx/boss_hit.wav` | 0.180초 | 보스 타격 |
+| `sfx/boss_defeat.wav` | 1.100초 | 보스 처치 |
+| `sfx/critical.wav` | 0.265초 | 크리티컬 스파클 |
+| `sfx/revive.wav` | 0.780초 | 부활. 올라가는 장조 |
+| `sfx/ultimate.wav` | 0.950초 | 필살기 |
+| `sfx/card_flip.wav` | 0.090초 | 카드 뒤집기 |
+| `sfx/card_pick.wav` | 0.340초 | 카드 선택 |
+| `sfx/countdown.wav` | 0.150초 | 카운트 비프 |
+| `sfx/go.wav` | 0.360초 | 시작 화음 |
+| `sfx/victory.wav` | 1.020초 | 승리 팡파르 |
+| `sfx/defeat.wav` | 1.060초 | 패배. 내려가는 단조 |
+| `sfx/menu_move.wav` | 0.034초 | 메뉴 이동 틱 |
+| `sfx/menu_select.wav` | 0.195초 | 메뉴 결정 |
+| `sfx/bgm_raid.wav` | 36.571초 | 레이드 배경음. 신스웨이브 아르페지오 루프 |
+| `sfx/bgm_menu.wav` | 40.000초 | 메뉴 배경음. 잔잔한 루프 |
