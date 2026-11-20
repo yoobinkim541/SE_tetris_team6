@@ -102,7 +102,7 @@ class P2pInternetLobbyTest {
         panel.joinInternetButton().doClick();
         assertTrue(relayServer.requests.isEmpty());
         assertTrue(controller.isError());
-        assertTrue(panel.statusText().contains("4자리"), panel.statusText());
+        assertTrue(panel.statusText().contains("방 코드가 올바르지 않습니다"), panel.statusText());
     }
 
     @Test

@@ -94,7 +94,7 @@ public final class P2pLobbyController implements P2pLobbyPanel.Actions, AutoClos
     public P2pLobbyController(LobbyClient lobby, Navigation navigation, IntSupplier localPort,
                               Supplier<List<String>> lanAddresses, Supplier<List<String>> recentPeers) {
         this(lobby, navigation, localPort, lanAddresses, recentPeers,
-                () -> new InternetRelay(InternetRelay.configuredUri(), SwingUtilities::invokeLater));
+                () -> new InternetRelay(InternetRelay.configuredRoutes(), SwingUtilities::invokeLater));
     }
 
     /** relayFactory: 인터넷 대전을 시작할 때마다 새 중계 접속 하나를 만든다 (테스트는 가짜 중계) */
@@ -220,14 +220,15 @@ public final class P2pLobbyController implements P2pLobbyPanel.Actions, AutoClos
     @Override
     public void joinInternet(String code) {
         if (closed || current.state() != State.INITIAL || relay != null) return;
-        String trimmed = code == null ? "" : code.trim();
-        if (!trimmed.matches("\\d{4}")) {
-            showMessage("방 코드는 숫자 4자리입니다. 호스트 화면에 보이는 코드를 입력하세요.");
+        String trimmed = code == null ? "" : code.trim().toUpperCase(java.util.Locale.ROOT);
+        InternetRelay opened = relayFactory.get();
+        if (!opened.accepts(trimmed)) {
+            opened.close();
+            showMessage("방 코드가 올바르지 않습니다. 호스트 화면에 보이는 코드(예: K7Q-M2X)를 그대로 입력하세요.");
             return;
         }
         clearMessage();
         internetSession = true;
-        InternetRelay opened = relayFactory.get();
         relay = opened;
         long mine = ++attempt;
         message = "방 " + trimmed + "에 참가하는 중…";

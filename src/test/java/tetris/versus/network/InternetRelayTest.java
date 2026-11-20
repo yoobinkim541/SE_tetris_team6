@@ -168,6 +168,72 @@ class InternetRelayTest {
         }
     }
 
+    @Test
+    void 메인_중계_서버로_방을_만들고_6글자_코드로_참가해_바이트가_오간다() throws Exception {
+        try (tetris.relay.RelayServer main = new tetris.relay.RelayServer(0, tetris.relay.RelayLimits.DEFAULT,
+                System::nanoTime, new java.util.Random(7))) {
+            main.start();
+            var routes = java.util.List.of(InternetRelay.Route.main(URI.create("tcp://127.0.0.1:" + main.localPort())));
+            try (ServerSocket hostGame = new ServerSocket(0, 1, InetAddress.getLoopbackAddress());
+                 InternetRelay host = new InternetRelay(routes, Runnable::run);
+                 InternetRelay guest = new InternetRelay(routes, Runnable::run)) {
+                String shown = await(host.openRoom(hostGame.getLocalPort()));
+                assertTrue(shown.matches("[A-Z2-9]{3}-[A-Z2-9]{3}"), "화면에는 3+3으로 보인다: " + shown);
+
+                int loopback = await(guest.join(shown.toLowerCase())); // 소문자·하이픈 그대로 입력해도 된다
+                try (Socket guestGame = new Socket(InetAddress.getLoopbackAddress(), loopback);
+                     Socket hostSide = hostGame.accept()) {
+                    hostSide.setSoTimeout((int) TimeUnit.SECONDS.toMillis(WAIT));
+                    guestGame.setSoTimeout((int) TimeUnit.SECONDS.toMillis(WAIT));
+                    guestGame.getOutputStream().write("HELLO".getBytes());
+                    guestGame.getOutputStream().flush();
+                    assertArrayEquals("HELLO".getBytes(), readExactly(hostSide.getInputStream(), 5));
+                    hostSide.getOutputStream().write("WELCOME".getBytes());
+                    hostSide.getOutputStream().flush();
+                    assertArrayEquals("WELCOME".getBytes(), readExactly(guestGame.getInputStream(), 7));
+                }
+            }
+        }
+    }
+
+    @Test
+    void 메인_서버에_닿지_않으면_호스트는_예비_서버에서_방을_만든다() throws Exception {
+        int closedPort;
+        try (ServerSocket probe = new ServerSocket(0, 1, InetAddress.getLoopbackAddress())) {
+            closedPort = probe.getLocalPort();
+        }
+        var routes = java.util.List.of(
+                InternetRelay.Route.main(URI.create("tcp://127.0.0.1:" + closedPort)),
+                InternetRelay.Route.fallback(RELAY, server));
+        try (ServerSocket hostGame = new ServerSocket(0, 1, InetAddress.getLoopbackAddress());
+             InternetRelay host = new InternetRelay(routes, Runnable::run)) {
+            assertTrue(await(host.openRoom(hostGame.getLocalPort())).matches("\\d{4}"),
+                    "예비 서버 코드는 숫자 4자리라 참가자도 같은 서버로 간다");
+        }
+    }
+
+    @Test
+    void 참가자는_코드_모양으로_서버를_고른다() {
+        java.util.List<URI> opened = new java.util.ArrayList<>();
+        RelayTransport recording = (uri, timeout, listener) -> {
+            opened.add(uri);
+            return CompletableFuture.failedFuture(new IOException("stop here"));
+        };
+        URI mainUri = URI.create("tcp://main.test:47123");
+        var routes = java.util.List.of(
+                new InternetRelay.Route("메인", mainUri, java.time.Duration.ofSeconds(1), recording,
+                        tetris.relay.LobbyCode::normalize, tetris.relay.LobbyCode::display),
+                InternetRelay.Route.fallback(RELAY, recording));
+        try (InternetRelay a = new InternetRelay(routes, Runnable::run);
+             InternetRelay b = new InternetRelay(routes, Runnable::run)) {
+            assertTrue(a.accepts("k7q-m2x") && a.accepts("4821"));
+            assertTrue(!a.accepts("12a") && !a.accepts("K7QM2"));
+            a.join("K7Q-M2X");
+            b.join("4821");
+            assertEquals(java.util.List.of(mainUri, RELAY), opened);
+        }
+    }
+
     /** tetris_relay.py와 같은 규칙의 메모리 안 중계 서버. 콜백은 network 스레드 하나에서 순서대로 보낸다 */
     private static final class FakeRelayServer implements RelayTransport {
         private static final ObjectMapper JSON = new ObjectMapper();
