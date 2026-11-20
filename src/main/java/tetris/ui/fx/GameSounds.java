@@ -423,12 +423,29 @@ public final class GameSounds {
 
         SoundId looping();
 
+        /**
+         * 실제 장치로 보내는 재생기. 파일 해독과 라인 열기는 느린 PC에서 수백 ms가 걸릴 수 있어
+         * 화면 스레드를 막지 않도록 전용 스레드 하나에서 순서대로 처리한다.
+         */
         static Sink of(SoundEffects effects) {
+            java.util.concurrent.ExecutorService audio = java.util.concurrent.Executors.newSingleThreadExecutor(r -> {
+                Thread t = new Thread(r, "game-sounds");
+                t.setDaemon(true);
+                return t;
+            });
             return new Sink() {
-                @Override public void play(SoundId id) { effects.play(id); }
-                @Override public void loop(SoundId id) { effects.loop(id); }
-                @Override public void stopLoop() { effects.stopLoop(); }
-                @Override public SoundId looping() { return effects.looping(); }
+                private volatile SoundId requested;
+
+                @Override public void play(SoundId id) { audio.execute(() -> effects.play(id)); }
+                @Override public void loop(SoundId id) {
+                    requested = id;
+                    audio.execute(() -> effects.loop(id));
+                }
+                @Override public void stopLoop() {
+                    requested = null;
+                    audio.execute(effects::stopLoop);
+                }
+                @Override public SoundId looping() { return requested; }
             };
         }
     }
