@@ -13,6 +13,7 @@ import tetris.feature.data.Board;
 import tetris.feature.game.GameListener;
 import tetris.feature.game.GameSnapshot;
 import tetris.feature.game.GameState;
+import tetris.feature.rule.TSpinType;
 import tetris.feature.setting.Settings;
 
 /**
@@ -141,6 +142,7 @@ public class GamePanel extends JPanel implements GameListener {
         int boardY = padding;
 
         drawBoard(g2, boardX, boardY);
+        drawTSpin(g2, boardX, boardY);
         drawInfo(g2, boardX + cellSize * Board.WIDTH + padding, boardY);
     }
 
@@ -181,6 +183,23 @@ public class GamePanel extends JPanel implements GameListener {
                 drawCell(g, x + (current.getCol() + c) * cellSize, y + row * cellSize, cellSize, current.getType(), current.itemCellAt(r, c).orElse(null));
             }
         }
+    }
+
+    // 가장 최근 Lock이 T-스핀이면 보드 위쪽에 표시한다 (TSP-4). 다음 Lock에서 판정이 바뀌면 사라진다
+    private void drawTSpin(Graphics2D g, int x, int y) {
+        if (snapshot == null || !snapshot.lastTSpin().isTSpin()) return;
+        String text = snapshot.lastTSpin() == TSpinType.MINI ? "T-SPIN MINI" : "T-SPIN!";
+        int fontSize = Math.max(10, cellSize * 4 / 5);
+        g.setFont(Theme.text(fontSize, true));
+        int boardWidth = cellSize * Board.WIDTH;
+        while (g.getFontMetrics().stringWidth(text) > boardWidth - cellSize && fontSize > 6)
+            g.setFont(Theme.text(--fontSize, true));
+        int textX = x + (boardWidth - g.getFontMetrics().stringWidth(text)) / 2;
+        int textY = y + cellSize * 3;
+        g.setColor(Theme.PANEL);
+        g.drawString(text, textX + 1, textY + 1); // 블록 위에서도 읽히도록 그림자
+        g.setColor(Theme.ACCENT);
+        g.drawString(text, textX, textY);
     }
 
     private void drawInfo(Graphics2D g, int x, int y) {

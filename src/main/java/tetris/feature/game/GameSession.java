@@ -14,16 +14,18 @@ import tetris.feature.item.Cell;
 import tetris.feature.item.GameModifiers;
 import tetris.feature.item.ItemResult;
 import tetris.feature.item.ItemType;
-import tetris.feature.rule.BasicRotationPolicy;
 import tetris.feature.rule.BlockGenerator;
-import tetris.feature.rule.ImmediateLockPolicy;
 import tetris.feature.rule.ItemBlockGenerator;
 import tetris.feature.rule.LevelPolicy;
+import tetris.feature.rule.LockDelayPolicy;
 import tetris.feature.rule.LockPolicy;
 import tetris.feature.rule.NextBlockQueue;
 import tetris.feature.rule.RotationPolicy;
 import tetris.feature.rule.ScoringPolicy;
 import tetris.feature.rule.SpawnPolicy;
+import tetris.feature.rule.SrsRotationPolicy;
+import tetris.feature.rule.TSpinDetector;
+import tetris.feature.rule.TSpinType;
 import tetris.feature.versus.AttackRowExtractor;
 import tetris.feature.versus.api.AttackRows;
 import tetris.feature.versus.api.LockResult;
@@ -53,10 +55,15 @@ public class GameSession {
     private boolean pausedDuringClearing;         // CLEARING에서 Pause했는지. Resume 때 CLEARING으로 돌아간다
     private GameModifiers modifiers = new GameModifiers(); // 지속 효과 (D, S). start()마다 새로 만든다
     private boolean crushing;                     // 무게추가 첫 하강에 실패해 분쇄 모드가 됐는지 (ITW-4)
+    private boolean lockDelayActive;              // 착지해 Lock 유예 타이머가 도는 중인지 (LCK-6)
+    private int lockResets;                       // 이번 블록이 유예 타이머를 다시 센 횟수 (최대 LockPolicy.maxResets)
+    private boolean lastActionIsRotate;           // 마지막으로 성공한 조작이 회전인지 (T-스핀 판정용, ROT-7)
+    private int lastKickIndex = -1;               // 마지막 회전에 쓰인 SRS 킥 번호. 회전한 적 없으면 -1 (TSP-3)
+    private TSpinType lastTSpin = TSpinType.NONE; // 가장 최근 Lock의 T-스핀 판정. 다음 Lock 때 바뀐다 (TSP-4)
 
     private final SpawnPolicy spawnPolicy = new SpawnPolicy();
-    private final RotationPolicy rotationPolicy = new BasicRotationPolicy();
-    private final LockPolicy lockPolicy = new ImmediateLockPolicy();
+    private final RotationPolicy rotationPolicy = new SrsRotationPolicy(); // ROT-8: SRS Wall Kick
+    private final LockPolicy lockPolicy;
     private final LevelPolicy levelPolicy;
     private final ScoringPolicy scoringPolicy = new ScoringPolicy();
     private final GameClock clock;
@@ -77,9 +84,20 @@ public class GameSession {
         this(mode, difficulty, generator, clock, listener, SpawnBoundary.IMMEDIATE);
     }
 
+    /** Lock 정책을 직접 고른다. 1차 규칙(하강 실패 즉시 Lock)을 재현할 때 ImmediateLockPolicy를 넘긴다 */
+    public GameSession(GameMode mode, Difficulty difficulty, BlockGenerator generator, GameClock clock,
+                       GameListener listener, LockPolicy lockPolicy) {
+        this(mode, difficulty, generator, clock, listener, SpawnBoundary.IMMEDIATE, lockPolicy);
+    }
+
     /** Versus hook: settlement is observable before the next block is spawned. */
     public GameSession(GameMode mode, Difficulty difficulty, BlockGenerator generator, GameClock clock,
                        GameListener listener, SpawnBoundary spawnBoundary) {
+        this(mode, difficulty, generator, clock, listener, spawnBoundary, new LockDelayPolicy());
+    }
+
+    public GameSession(GameMode mode, Difficulty difficulty, BlockGenerator generator, GameClock clock,
+                       GameListener listener, SpawnBoundary spawnBoundary, LockPolicy lockPolicy) {
         if (mode == null) throw new IllegalArgumentException("mode cannot be null");
         if (difficulty == null) throw new IllegalArgumentException("difficulty cannot be null");
         if (generator == null) throw new IllegalArgumentException("generator cannot be null");
@@ -93,6 +111,7 @@ public class GameSession {
         this.clock = clock;
         this.listener = listener;
         this.spawnBoundary = Objects.requireNonNull(spawnBoundary, "spawnBoundary");
+        this.lockPolicy = Objects.requireNonNull(lockPolicy, "lockPolicy");
     }
 
     // ── 수명주기 ─────────────────────────────
@@ -112,6 +131,8 @@ public class GameSession {
         pendingClear = null;
         pausedDuringClearing = false;
         crushing = false;
+        resetLockState();
+        lastTSpin = TSpinType.NONE;
         modifiers = new GameModifiers();
 
         state = GameState.PLAYING; // Spawn 충돌 시 PLAYING -> GAME_OVER 전이가 되도록 먼저 전환
@@ -150,17 +171,22 @@ public class GameSession {
         shift(1);
     }
 
-    /** Soft Drop: 자동 낙하와 같은 하강 시도. 낙하 타이머는 리셋하지 않는다 (TMR-4) */
+    /** Soft Drop: 자동 낙하와 같은 하강 시도. 낙하 타이머는 리셋하지 않는다 (TMR-4). 착지 유예 중에는 Lock을 앞당기지 않는다 (LCK-6) */
     public void moveDown() {
         if (state != GameState.PLAYING || spawnPending) return;
-        descendOrLock();
+        descendOrLock(false);
     }
 
     /** 실패하면 모양·위치·회전 상태를 바꾸지 않는다 (ROT-3) */
     public void rotateRight() {
         if (state != GameState.PLAYING || spawnPending) return;
         if (currentBlock.isWeight()) return; // ITW-1: 무게추는 회전하지 않는다
-        if (rotationPolicy.rotate(board, currentBlock)) listener.onChanged(snapshot());
+        int kick = rotationPolicy.tryRotate(board, currentBlock);
+        if (kick < 0) return;
+        lastActionIsRotate = true;
+        lastKickIndex = kick;
+        onMovedOrRotated();
+        if (state == GameState.PLAYING) listener.onChanged(snapshot()); // 다 쓴 블록은 다시 닿는 순간 Lock될 수 있다
     }
 
     /** 내려갈 수 있는 만큼 한 번에 내리고 +칸수 x Level (SCR-2) 후 즉시 Lock. 점수는 Level이 바뀔 수 있는 Lock 전에 더한다 */
@@ -173,6 +199,7 @@ public class GameSession {
             int distance = board.getDropDistance(currentBlock);
             currentBlock.setPosition(currentBlock.getRow() + distance, currentBlock.getCol());
             score += scoringPolicy.hardDropScore(distance, levelPolicy.getLevel());
+            if (distance > 0) lastActionIsRotate = false; // 내려가지 않았다면 직전 회전이 그대로 마지막 행동이다
         }
 
         lockCurrentBlock();
@@ -186,7 +213,7 @@ public class GameSession {
             return;
         }
         if (state != GameState.PLAYING || spawnPending) return;
-        descendOrLock();
+        descendOrLock(true);
     }
 
     // ── Pause / Quit ─────────────────────────
@@ -210,7 +237,7 @@ public class GameSession {
             clock.start(CLEAR_ANIMATION_MILLIS);
         } else {
             state = GameState.PLAYING;
-            if (!spawnPending) clock.start(currentFallIntervalMillis);
+            if (!spawnPending) clock.start(lockDelayActive ? lockPolicy.lockDelayMillis() : currentFallIntervalMillis);
         }
         pausedDuringClearing = false;
         listener.onChanged(snapshot());
@@ -266,6 +293,18 @@ public class GameSession {
 
     public boolean isSpawnPending() { return spawnPending; }
 
+    /**
+     * 마지막으로 성공한 조작이 회전이면 true (ROT-7). 회전 성공 시 true, 좌우 이동·한 칸 이상 하강
+     * (자동 낙하, Soft Drop, 실제로 내려간 Hard Drop) 성공 시 false. Lock 뒤 다음 Spawn 전까지는 Lock된 블록의 값을 유지한다.
+     */
+    public boolean isLastActionRotate() { return lastActionIsRotate; }
+
+    /** 착지해 Lock 유예 타이머가 도는 중인지 (LCK-6) */
+    public boolean isLockDelayActive() { return lockDelayActive; }
+
+    /** 가장 최근 Lock이 T-스핀이었는지 (TSP-4). 새 게임은 NONE에서 시작하고 Lock할 때마다 다시 판정한다 */
+    public TSpinType getLastTSpin() { return lastTSpin; }
+
     /** Compatibility hook; an in-flight lock keeps its original boundary. */
     public void setSpawnBoundary(SpawnBoundary boundary) {
         if (boundary == null) throw new IllegalArgumentException("spawnBoundary");
@@ -308,7 +347,8 @@ public class GameSession {
                 state == GameState.CLEARING ? pendingClear.flashCells() : List.of(), // ANI-5: CLEARING이 아니면 빈 목록
                 mode == GameMode.ITEM ? 10 - lines % 10 : 0,
                 modifiers.effects(),
-                board.copyItemCells());
+                board.copyItemCells(),
+                lastTSpin);
     }
 
     // ── 명세 4장 파이프라인 (내부) ────────────
@@ -320,14 +360,82 @@ public class GameSession {
         if (!board.canPlace(currentBlock, row, col)) return;
 
         currentBlock.setPosition(row, col);
-        listener.onChanged(snapshot());
+        lastActionIsRotate = false;
+        onMovedOrRotated();
+        if (state == GameState.PLAYING) listener.onChanged(snapshot()); // 다 쓴 블록은 다시 닿는 순간 Lock될 수 있다
     }
 
-    // Tick과 Soft Drop 공통. 하강에 실패하면 LockPolicy 판단으로 Lock
-    private void descendOrLock() {
+    /**
+     * Tick과 Soft Drop 공통. Lock Delay가 없으면 하강 실패 즉시 Lock (LCK-2).
+     * Lock Delay가 있으면 바닥에 닿는 순간 유예 타이머를 시작하고, 유예가 끝나 Tick이 왔을 때도 못 내려가면 Lock한다 (LCK-6).
+     * timerFired: 타이머(Tick)가 부른 것인지. Soft Drop은 유예 중 Lock을 앞당기지 않는다.
+     */
+    private void descendOrLock(boolean timerFired) {
         boolean descended = tryDescend();
-        if (lockPolicy.shouldLock(!descended)) lockCurrentBlock();
+        if (descended) lastActionIsRotate = false;
+
+        if (!usesLockDelay()) {
+            if (!descended) lockCurrentBlock();
+        } else if (descended) {
+            if (isGrounded()) onGrounded();     // 방금 바닥에 닿았다
+        } else if (!lockDelayActive) {
+            onGrounded();                       // 닿아 있었지만 유예가 아직 시작되지 않았다
+        } else if (timerFired) {
+            lockCurrentBlock();                 // 유예 시간이 다 지났다
+        }
         if (state == GameState.PLAYING) listener.onChanged(snapshot());
+    }
+
+    // 무게추는 분쇄 규칙(ITW)을 그대로 따르도록 1차처럼 즉시 Lock한다
+    private boolean usesLockDelay() {
+        return lockPolicy.hasDelay() && !currentBlock.isWeight();
+    }
+
+    private boolean isGrounded() {
+        return !board.canPlace(currentBlock, currentBlock.getRow() + 1, currentBlock.getCol());
+    }
+
+    private void startLockDelay() {
+        lockDelayActive = true;
+        clock.start(lockPolicy.lockDelayMillis());
+    }
+
+    /**
+     * 바닥에서 떨어져 있던 블록이 다시 닿았다 (LCK-6). 바닥을 벗어날 때도 초기화 1회를 쓰므로,
+     * 블록당 횟수를 다 썼으면 새 유예 없이 바로 Lock한다. 이렇게 하지 않으면 바닥 가장자리에서
+     * 좌우로 오가거나 위로 킥되는 회전을 반복해 Lock을 끝없이 미룰 수 있다.
+     */
+    private void onGrounded() {
+        if (lockResets > 0 && lockResets >= lockPolicy.maxResets()) lockCurrentBlock();
+        else startLockDelay();
+    }
+
+    /**
+     * 좌우 이동·회전 성공 직후 (LCK-6). 유예 중이면 남은 횟수가 있을 때만 타이머를 처음부터 다시 센다.
+     * 이동·회전으로 바닥에서 벗어나면 초기화 1회를 쓰고 낙하 타이머로 돌아가며, 공중에서 움직여 바닥에 닿으면 onGrounded로 넘긴다.
+     */
+    private void onMovedOrRotated() {
+        if (!usesLockDelay()) return;
+        boolean grounded = isGrounded();
+        if (!lockDelayActive) {
+            if (grounded) onGrounded();
+            return;
+        }
+        if (!grounded) {
+            lockDelayActive = false;
+            lockResets++;
+            clock.start(currentFallIntervalMillis);
+        } else if (lockResets < lockPolicy.maxResets()) {
+            lockResets++;
+            clock.start(lockPolicy.lockDelayMillis());
+        }
+    }
+
+    private void resetLockState() {
+        lockDelayActive = false;
+        lockResets = 0;
+        lastActionIsRotate = false;
+        lastKickIndex = -1;
     }
 
     /** 성공하면 한 칸 내리고 +Level (SCR-1). 실패하면 아무것도 바꾸지 않는다 (SCR-4) */
@@ -404,6 +512,8 @@ public class GameSession {
 
     /** §5 LOCK. Level은 L6과 다음 Spawn의 S3에서만 바뀐다 (PIPE-1) */
     private void lockCurrentBlock() {
+        lockDelayActive = false;
+        lastTSpin = TSpinDetector.detect(board, currentBlock, lastActionIsRotate, lastKickIndex); // 보드에 기록하기 전 (TSP-2)
         modifiers.beginLock();
         Block placed = placeCurrentBlock();           // L1
         ClearPlan plan = collectClearTargets(placed); // L2
@@ -525,10 +635,12 @@ public class GameSession {
         block.setPosition(row, col);
         currentBlock = block;
         crushing = false;
+        resetLockState();
         levelPolicy.onBlockSpawned();                                              // S3
         modifiers.onSpawn();
         currentFallIntervalMillis = (int) Math.round(levelPolicy.fallIntervalMillis() * modifiers.fallMultiplier());
-        clock.start(currentFallIntervalMillis);                                    // S4
+        if (usesLockDelay() && isGrounded()) startLockDelay();                     // 쌓인 블록에 닿은 채로 나왔다 (LCK-6)
+        else clock.start(currentFallIntervalMillis);                               // S4
     }
 
     private void gameOver() {
