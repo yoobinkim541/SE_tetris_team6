@@ -16,6 +16,7 @@ import tetris.ui.Messages;
 
 public class Main {
     public static void main(String[] args) {
+        DevMode.enableFrom(args); // --dev: 개발자 모드 (P2P 로비 측정 패널)
         SwingUtilities.invokeLater(Main::launch); // Swing과 GameSession은 EDT 단일 스레드에서만 (TMR-1)
     }
 
@@ -28,7 +29,10 @@ public class Main {
         Scoreboard scoreboard = load(scoreboardRepository::load, () -> new Scoreboard(List.of()),
                 "warn.scoreboardLoad", warnings);
 
-        // 2) MainFrame 생성 (화면 크기는 생성자에서 적용)
+        // 설정 파일의 개발자 토글도 --dev와 같은 개발자 모드 스위치로 반영한다 (dev-net-overlay)
+        DevMode.setSettingEnabled(settings.isDevNetworkOverlay());
+
+        // 2) MainFrame 생성 (화면 크기는 생성자에서 적용). 창 제목의 [개발자 모드] 표시도 MainFrame이 맡는다
         MainFrame frame = new MainFrame(settings, scoreboard, settingsRepository, scoreboardRepository);
         frame.setVisible(true);
 

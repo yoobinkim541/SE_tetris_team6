@@ -241,6 +241,61 @@ public class PersistenceTest {
         }
     }
 
+    //#region 개발자 모드 연결 상태 표시 (dev-net-overlay)
+
+    @Test
+    void settings_devNetworkOverlay를_저장하고_다시_읽으면_같다() {
+        Path file = dir.resolve("settings.json");
+        Settings settings = new Settings();
+        settings.setDevNetworkOverlay(true);
+
+        assertTrue(new JsonSettingsRepository(file).save(settings));
+
+        LoadResult<Settings> result = new JsonSettingsRepository(file).load();
+        assertTrue(result.value().isDevNetworkOverlay());
+        assertTrue(result.warnings().isEmpty());
+    }
+
+    @Test
+    void settings_devNetworkOverlay가_없는_이전_파일은_꺼짐이고_경고도_없다() throws IOException {
+        Path file = write("settings.json", "{\"screenSize\": \"LARGE\", \"colorBlindMode\": true}");
+
+        LoadResult<Settings> result = new JsonSettingsRepository(file).load();
+
+        assertFalse(result.value().isDevNetworkOverlay());
+        assertEquals(ScreenSize.LARGE, result.value().getScreenSize());
+        assertTrue(result.value().isColorBlindMode());
+        assertTrue(result.warnings().isEmpty());
+    }
+
+    @Test
+    void settings_devNetworkOverlay가_불린이_아니면_그_필드만_꺼짐이고_나머지는_살린다() throws IOException {
+        Path file = write("settings.json",
+                "{\"screenSize\": \"SMALL\", \"colorBlindMode\": true, \"devNetworkOverlay\": \"yes\"}");
+
+        LoadResult<Settings> result = new JsonSettingsRepository(file).load();
+
+        assertFalse(result.value().isDevNetworkOverlay());
+        assertEquals(ScreenSize.SMALL, result.value().getScreenSize());
+        assertTrue(result.value().isColorBlindMode());
+        assertEquals(1, result.warnings().size());
+    }
+
+    @Test
+    void settings_Reset하면_devNetworkOverlay도_꺼진다() {
+        Path file = dir.resolve("settings.json");
+        Settings settings = new Settings();
+        settings.setDevNetworkOverlay(true);
+        new JsonSettingsRepository(file).save(settings);
+
+        settings.resetToDefaults();
+        new JsonSettingsRepository(file).save(settings);
+
+        assertFalse(new JsonSettingsRepository(file).load().value().isDevNetworkOverlay());
+    }
+
+    //#endregion
+
     @Test
     void settings_Reset하면_difficulty도_NORMAL로_저장된다() {
         Path file = dir.resolve("settings.json");

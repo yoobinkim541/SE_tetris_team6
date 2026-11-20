@@ -187,7 +187,7 @@ public class SpawnAndRotationTest {
     }
 
     @Test
-    void 오른쪽_벽의_세로_I는_회전에_실패하고_그대로() { // ROT-3, ROT-6 (세로 I 앵커 col 7)
+    void 오른쪽_벽의_세로_I는_벽에서_밀려나며_회전한다() { // ROT-8 (1차 ROT-3에서는 실패하던 위치), ROT-6 (세로 I 앵커 col 7)
         RecordingListener listener = new RecordingListener();
         GameSession session = new GameSession(sequence(new IBlock(), new OBlock()), new RecordingClock(), listener);
         session.start();
@@ -196,11 +196,12 @@ public class SpawnAndRotationTest {
         assertEquals(7, session.snapshot().currentBlock().getCol());
         int notified = listener.changed.size();
 
-        session.rotateRight();
+        session.rotateRight();                              // 제자리는 col 7..10이라 막히고, 킥 1번(왼쪽 1칸)으로 들어간다
 
-        assertEquals(".........i", row(session, 0));
-        assertEquals(1, session.snapshot().currentBlock().getRotation());
-        assertEquals(notified, listener.changed.size());
+        assertEquals("......iiii", row(session, 1));
+        assertEquals(2, session.snapshot().currentBlock().getRotation());
+        assertEquals(6, session.snapshot().currentBlock().getCol());
+        assertEquals(notified + 1, listener.changed.size());
     }
     //#endregion
 }

@@ -144,12 +144,12 @@ class VersusAcceptanceGuiTest {
                     var content = frame[0].getContentPane();
                     assertTrue(panel.getWidth() <= content.getWidth() && panel.getHeight() <= content.getHeight(),
                             size + " battle panel " + panel.getSize() + " fits " + content.getSize());
-                    // 두 사람이 동시에 누른다: P1 ←와 P2 D가 겹친 채 각자 한 번씩 전달된다
-                    key(panel, KeyEvent.KEY_PRESSED, KeyEvent.VK_LEFT);
-                    key(panel, KeyEvent.KEY_PRESSED, KeyEvent.VK_D);
-                    key(panel, KeyEvent.KEY_RELEASED, KeyEvent.VK_LEFT);
+                    // 두 사람이 동시에 누른다: P1 A와 P2 →가 겹친 채 각자 한 번씩 전달된다
                     key(panel, KeyEvent.KEY_PRESSED, KeyEvent.VK_A);
-                    // 누른 채로 창 포커스를 잃는다: 남은 키(D, A)를 놓고 로컬 대전은 멈춘다
+                    key(panel, KeyEvent.KEY_PRESSED, KeyEvent.VK_RIGHT);
+                    key(panel, KeyEvent.KEY_RELEASED, KeyEvent.VK_A);
+                    key(panel, KeyEvent.KEY_PRESSED, KeyEvent.VK_LEFT);
+                    // 누른 채로 창 포커스를 잃는다: 남은 키(→, ←)를 놓고 로컬 대전은 멈춘다
                     call(frame[0], "onFocusLost");
                 });
                 edt(() -> {
@@ -157,8 +157,8 @@ class VersusAcceptanceGuiTest {
                     var p2Right = sent.stream().filter(c -> c.playerId() == PlayerId.TWO && c.action() == tetris.feature.setting.GameAction.MOVE_RIGHT).toList();
                     var p2Left = sent.stream().filter(c -> c.playerId() == PlayerId.TWO && c.action() == tetris.feature.setting.GameAction.MOVE_LEFT).toList();
                     assertEquals(List.of(true, false), p1.stream().map(PlayerCommand::pressed).toList(), size + " P1");
-                    assertEquals(List.of(true, false), p2Right.stream().map(PlayerCommand::pressed).toList(), size + " P2 D released on focus loss");
-                    assertEquals(List.of(true, false), p2Left.stream().map(PlayerCommand::pressed).toList(), size + " P2 A released on focus loss");
+                    assertEquals(List.of(true, false), p2Right.stream().map(PlayerCommand::pressed).toList(), size + " P2 → released on focus loss");
+                    assertEquals(List.of(true, false), p2Left.stream().map(PlayerCommand::pressed).toList(), size + " P2 ← released on focus loss");
                     var client = (BattleClient) field(field(frame[0], "battleController"), "client");
                     MatchSnapshot[] seen = new MatchSnapshot[1];
                     try (var s = client.subscribe(snapshot -> seen[0] = snapshot)) {

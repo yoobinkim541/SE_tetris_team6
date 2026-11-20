@@ -88,7 +88,7 @@ class BattleScreenControllerTest {
                 new BattlePanel(false), s -> {}, answer::get, exits::incrementAndGet);
             key(root, KeyEvent.VK_Q, false); key(root, KeyEvent.VK_Q, true);
             assertEquals(0, exits.get());
-            key(root, KeyEvent.VK_A, false); key(root, KeyEvent.VK_A, true);
+            key(root, KeyEvent.VK_LEFT, false); key(root, KeyEvent.VK_LEFT, true);
             assertTrue(client.commands().stream().anyMatch(c -> c.playerId() == PlayerId.TWO));
             answer.set(true); key(root, KeyEvent.VK_Q, false);
             assertEquals(1, exits.get()); controller.close();

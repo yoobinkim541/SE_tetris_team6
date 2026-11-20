@@ -1,28 +1,23 @@
 # SE Tetris · Team 6
 
-3차 Sprint 8: [실제 로컬 대전·공격 삽입·승패](docs/sprint8-local.md) · [검증·리뷰와 남은 실키보드 인수](docs/sprint8-closeout.md). 메인 메뉴의 대전은 실제 두 게임 세션을 실행합니다.
+Java 21과 Swing으로 구현한 테트리스입니다. 일반 모드의 난이도 3종과 아이템 모드, 키 설정, 분류별 스코어보드에 더해 3차 요구사항의 **로컬 2인 대전과 같은 LAN의 P2P 대전**(일반·아이템·시간제한 3모드)을 제공합니다. Windows 실행 패키지는 Java 설치 없이 실행됩니다.
 
-Java 21과 Swing으로 구현한 테트리스입니다. 일반 모드의 난이도 3종과 아이템 모드, 키 설정, 분류별 스코어보드, Windows 실행 패키지를 제공합니다.
+**[Windows ZIP 바로 다운로드](https://github.com/yoobinkim541/SE_tetris_team6/releases/download/v0.5.0/SE-Tetris-windows.zip)** · **[실행 JAR 다운로드](https://github.com/yoobinkim541/SE_tetris_team6/releases/download/v0.5.0/SE-Tetris.jar)** · **[릴리스 보기](https://github.com/yoobinkim541/SE_tetris_team6/releases/tag/v0.5.0)** · [전체 릴리스](https://github.com/yoobinkim541/SE_tetris_team6/releases)
 
-3차 Sprint 7 B: [두 보드·대기열 Fake 데모와 2인 입력 사용법](docs/sprint7-b.md). 실제 엔진·네트워크 연결 전의 독립 화면 모형입니다.
+현재 다운로드 버전은 **v0.5.0 (요구사항 3 기말 평가 빌드)** 입니다. 같은 릴리스의 `SHA256SUMS.txt`로 파일을 대조할 수 있습니다. 평가 빌드의 커밋·테스트 결과·체크섬은 [릴리스 노트](https://github.com/yoobinkim541/SE_tetris_team6/releases/tag/v0.5.0)와 [#162](https://github.com/yoobinkim541/SE_tetris_team6/issues/162)에 기록합니다. 기말평가일은 **2026-12-01**입니다([릴리스 확인표](docs/release-checklist.md)).
 
-Sprint 7 마감: [A2 공격·대기열, 공통 계약 인수, AI 대리 시연·KPT와 검증 결과](docs/req3/s7-closeout.md).
+문서 바로가기
 
-평가 준비: [체크리스트 80항목 대조·보완 결과](docs/checklist-compliance-2026-10-27.md) · [Java 21 검증 결과](docs/checklist-verification-2026-10-27.json). 최소 사양 실기 검증과 프로젝트 관리 도구 확인은 별도로 남아 있습니다.
-
-아이템 평가·플레이 안내: [아이템 모드 명세서 — L/B/D/S/W 효과·점수·검증 화면](docs/item-specification.md).
-
-2차 구현 및 검증: [요구사항 v2](docs/requirements-spec-v2.md). 일반 게임 난이도는 설정에서 선택하며 아이템 모드는 메인 메뉴에서 시작합니다. 스코어보드에서 좌우 키로 네 분류를 전환합니다.
-
-**[Windows ZIP 바로 다운로드](https://github.com/yoobinkim541/SE_tetris_team6/releases/download/v0.4.0-rc.3/SE-Tetris-windows.zip)** · **[실행 JAR 다운로드](https://github.com/yoobinkim541/SE_tetris_team6/releases/download/v0.4.0-rc.3/SE-Tetris.jar)** · **[릴리스 보기](https://github.com/yoobinkim541/SE_tetris_team6/releases/tag/v0.4.0-rc.3)** · [전체 릴리스](https://github.com/yoobinkim541/SE_tetris_team6/releases)
-
-현재 다운로드 버전은 **v0.4.0-rc.3 (사전 릴리스)** 입니다. 위 링크는 해당 버전의 고정 다운로드 링크입니다. 구현·자동 검증과 별도로 실제 사용자 평가 및 교수자 확인은 남아 있습니다.
+- 3차 대전: [요구사항·인수 기준](docs/req3/requirements.md) · [결정 기록](docs/req3/decisions.md) · [아키텍처](docs/req3/architecture.md) · [네트워크 프로토콜](docs/req3/network-protocol.md) · [대전 규칙 설명·질문 답변표](docs/req3/s12-a-rules-brief.md) · [시연 동선](docs/req3/s12-b-demo.md) · [리허설 진행표](docs/req3/s12-rehearsal-runsheet.md)
+- 평가장 준비: [평가장 네트워크 안내·방화벽 스크립트](docs/req3/evaluation-network-guide.md) · [200ms 측정 절차](docs/req3/s11-lan-measurement.md)
+- 2차: [요구사항 v2](docs/requirements-spec-v2.md) · [아이템 모드 명세서 — L/B/D/S/W 효과·점수·검증 화면](docs/item-specification.md) · [체크리스트 80항목 대조](docs/checklist-compliance-2026-10-27.md)
+- 스프린트 기록: [Sprint 7 마감](docs/req3/s7-closeout.md) · [Sprint 8 로컬 대전](docs/sprint8-local.md) · [Sprint 8 마감](docs/sprint8-closeout.md) · [Sprint 9 B](docs/sprint9-b.md)
 
 ## 다운로드하고 실행하기
 
 1. Windows ZIP을 다운로드하고 압축을 모두 해제합니다.
 2. `SE Tetris/SE Tetris.exe`를 더블클릭합니다. Java 런타임과 아이콘이 포함되어 별도 Java 설치가 필요 없습니다.
-3. 메인 메뉴에서 일반 모드 또는 아이템 모드를 선택합니다. 일반 모드 난이도는 설정에서 변경합니다.
+3. 메인 메뉴에서 게임 시작(일반 모드), 아이템 모드, 대전 중 하나를 선택합니다. 일반 모드 난이도는 설정에서 변경합니다.
 
 JAR은 Java 21 이상에서 다음과 같이 실행합니다.
 
@@ -69,6 +64,52 @@ java -jar SE-Tetris.jar
 
 설정에서 키를 바꾸면 게임 화면의 조작 안내에도 반영됩니다.
 
+## 대전 모드 (요구사항 3)
+
+메인 메뉴의 **대전**에서 로컬 일반·아이템·시간제한 대전과 **P2P 대전 (같은 LAN)** 을 고릅니다. 대전 결과는 스코어보드에 기록하지 않습니다.
+
+| 모드 | 규칙 |
+|---|---|
+| 일반 대전 | 설정의 난이도로 두 보드를 동시에 진행 |
+| 아이템 대전 | 2차 아이템 규칙(NORMAL)으로 진행, 점수 2배·슬로우는 얻은 사람에게만 적용 |
+| 시간제한 대전 | 180초, 일반 블록, NORMAL. 시간이 끝나면 점수 비교, 동점은 무승부 |
+
+- **공격**: 한 번에 두 줄 이상 지우면, 지운 줄에서 방금 놓은 블록 칸만 비운 회색 줄(X 무늬)이 상대 대기열로 갑니다. 상쇄는 없고, 대기열은 최대 10줄입니다.
+- **삽입·패배**: 공격 줄은 상대의 줄 삭제·점수 정산이 끝나고 다음 블록이 나오기 전에 아래에 들어갑니다. 고정 칸이 보이는 보드 위로 밀리거나 새 블록을 놓을 수 없으면 패배하고, 양쪽이 같은 판정 프레임에 지면 무승부입니다.
+- **일시정지**: 누가 P를 눌러도 두 보드가 함께 멈추고 함께 풀립니다. 정지 동안 시간제한 시계도 멈춥니다.
+
+규칙 질문 답변표: [대전 규칙 설명](docs/req3/s12-a-rules-brief.md) · 결정 근거: [결정 기록](docs/req3/decisions.md)
+
+### 대전 조작
+
+| 화면 | 이동·Soft Drop·회전 / Hard Drop | 공통 |
+|---|---|---|
+| 로컬 왼쪽 보드 (P1) | A·D / S / W, F | P 일시정지, Q 나가기 |
+| 로컬 오른쪽 보드 (P2) | ← → / ↓ / ↑, Space | P 일시정지, Q 나가기 |
+| P2P (각자 자기 PC) | ← → / ↓ / ↑, Space | P 일시정지, Q 두 번 누르면 기권 |
+
+대전 키는 싱글 게임의 키 설정을 덮어쓰지 않습니다.
+
+### P2P 대전 (같은 LAN)
+
+1. 두 PC가 같은 서브넷에 있는지 확인합니다. 호스트 PC는 인바운드 TCP **47123** 포트를 허용해야 합니다. 방화벽 전체를 끄지 말고 `scripts/firewall-rule.ps1`로 이 포트 하나만 엽니다([평가장 네트워크 안내](docs/req3/evaluation-network-guide.md)).
+2. 호스트는 **P2P 대전 (같은 LAN) → 호스트로 대기**를 누르고, 화면에 나온 IP를 상대에게 알려 줍니다.
+3. 클라이언트는 호스트 IP를 입력해 접속합니다. 최근에 접속에 성공한 주소 5개는 목록에서 고를 수 있습니다.
+4. 대전 모드는 호스트만 고르고, 양쪽이 모두 **게임 시작**을 눌러야 경기가 시작됩니다.
+5. 경기가 끝나면 결과 화면에서 Enter로 연결된 로비로 돌아가 다시 대전할 수 있습니다.
+
+연결 상태는 heartbeat(0.5초)로 판단합니다. 왕복 200ms 초과가 3번 이어지거나 1.5초 동안 아무것도 받지 못하면 지연 안내를 띄우고, 5초 동안 받지 못하거나 상대가 연결을 끊으면 경기를 끝내고 안내합니다.
+
+### 개발자 모드
+
+실행 인자 `--dev`(또는 JVM 속성 `-Dtetris.dev=true`)로 켭니다. 켜지 않으면 화면과 동작은 일반 실행과 같습니다.
+
+- 창 제목에 `[개발자 모드]`가 붙습니다.
+- P2P 로비 아래에 RTT 측정 패널이 붙습니다. 연결 중 heartbeat 왕복 시간을 자동으로 모으고, `RTT 200회 측정`으로 PING을 200번 따로 보냅니다. `CSV 저장`을 누르면 모은 표본을 `%APPDATA%/SETetrisTeam6/dev/rtt-<시각>.csv`에 저장합니다.
+- `--dev`로 실행하면 설정 화면의 색맹 모드 아래에 `개발자: 연결 상태 표시` 항목이 보입니다(기본 꺼짐). 켜 두면 다음 실행부터 `--dev` 없이도 개발자 모드가 켜지고, 끌 수 있도록 항목도 계속 보입니다. 로비와 온라인 대전 화면에 RTT·수신 빈도 등 연결 상태 줄을 0.5초마다 표시하고, 자동 기록 표본은 최근 200개로 제한합니다.
+
+이 RTT는 앱이 주고받는 PING/PONG 기준이라 양쪽 PC의 화면 처리 대기가 포함됩니다. 소켓 수준 왕복은 `NetTool`([200ms 측정 절차](docs/req3/s11-lan-measurement.md))로 따로 잽니다.
+
 ## 아키텍처
 
 게임 규칙은 Swing에 직접 의존하지 않는 `GameSession`이 관리합니다. UI는 명령을 전달하고 세션은 `GameListener`와 복사된 `GameSnapshot`으로 상태를 전달합니다. 실제 게임은 Swing EDT에서 처리하며 테스트에서는 가짜 시계·리스너를 주입합니다.
@@ -95,13 +136,18 @@ flowchart LR
 | `feature/rule` | 가중치 생성, Next 큐, Spawn·회전·Lock·점수·레벨 정책 |
 | `feature/item` | L/B/D/S 효과, 삭제 대상 수집과 지속 효과 수명주기 |
 | `feature/setting`, `feature/score`, `feature/save` | 설정·키 맵, 기록 분류, Jackson 기반 JSON 저장 |
+| `feature/versus` | 대전 엔진(`LocalMatchEngine`): 두 세션의 판정 프레임, 공격 줄·대기열, 승패·시간제한 |
+| `feature/network` | TCP 연결(`PeerConnection`), 프레임 형식, 로비(`SocketLobbyClient`), 호스트 권위 경기 동기화, heartbeat, `NetTool`·`LagProxy` 측정 도구 |
 | `ui` | 메뉴·게임·설정·결과 화면, 렌더링·입력·Swing 타이머 |
+| `ui/versus` | 두 보드 대전 화면, 2인 입력 분배, P2P 로비·결과 화면, 개발자 모드 패널 |
+
+대전은 호스트 PC의 엔진 하나가 두 참가자의 결과를 정하고, 클라이언트는 입력을 보내고 상태를 받아 그립니다. 상세: [3차 아키텍처](docs/req3/architecture.md) · [네트워크 프로토콜](docs/req3/network-protocol.md)
 
 세션 상태는 `LOADING`, `PLAYING`, `CLEARING`, `PAUSED`, `GAME_OVER`, `ENDED`입니다. Lock 시 아이템과 완성 행의 삭제 대상을 모으고, 필요한 경우 CLEARING을 거쳐 삭제·점수·효과 소비를 처리한 뒤 다음 블록을 생성합니다. 보드와 현재 블록을 분리하고 스냅샷에 사본을 제공해 화면의 변경이 원본 상태에 영향을 주지 않게 합니다.
 
 ## 요구사항 충족 현황
 
-**기준: 2026-10-27 확인한 코드·병합 PR·기존 검증 기록.** '구현·자동 검증'은 프로젝트 명세 기준이며 교수자 승인이나 실제 사용자 평가 완료를 뜻하지 않습니다.
+**기준: 2026-11-18 확인한 코드·병합 PR·이슈 기록.** '구현·자동 검증'은 프로젝트 명세 기준이며 교수자 승인이나 실제 사용자 평가 완료를 뜻하지 않습니다.
 
 | 영역 / 규칙 | 상태 | 근거 |
 |---|---|---|
@@ -111,25 +157,25 @@ flowchart LR
 | 메뉴·삭제 연출·표시 (MOD/ANI/RND) | 구현·자동 검증 | [PR #100](https://github.com/yoobinkim541/SE_tetris_team6/pull/100), [#106](https://github.com/yoobinkim541/SE_tetris_team6/pull/106), [#107](https://github.com/yoobinkim541/SE_tetris_team6/pull/107) |
 | 설정·4분류 Top 10·JSON 호환 (SET/SBD/PER) | 구현·자동 검증 | [PR #100](https://github.com/yoobinkim541/SE_tetris_team6/pull/100), [#103](https://github.com/yoobinkim541/SE_tetris_team6/pull/103), [#104](https://github.com/yoobinkim541/SE_tetris_team6/pull/104) |
 | 비기능 테스트·LINE 70% 게이트 (§14.2/14.3, CI) | 구현·CI 성공 확인 | [PR #96](https://github.com/yoobinkim541/SE_tetris_team6/pull/96): 총 240,000회 입력, 시간·불변식 검증 |
-| 아이콘·JRE 포함 EXE·ZIP·JAR (DEP/CD) | 구현·사전 릴리스 공개 | [v0.4.0-rc.3](https://github.com/yoobinkim541/SE_tetris_team6/releases/tag/v0.4.0-rc.3), [EXE 검증 기록](docs/validation-report-2026-10-26.md) |
-| 실제 사용자 2명 평가 | 미진행 기록 | [평가 기록지](docs/user-playtest.md) |
+| 아이콘·JRE 포함 EXE·ZIP·JAR (DEP/CD) | 구현·릴리스 공개 | [v0.5.0](https://github.com/yoobinkim541/SE_tetris_team6/releases/tag/v0.5.0), [EXE 검증 기록](docs/validation-report-2026-10-26.md) |
+| 로컬 2인 대전·공격·대기열·승패 (3차) | 구현·자동 검증 | [Sprint 8 로컬 대전](docs/sprint8-local.md), [경계 검증 PR #175](https://github.com/yoobinkim541/SE_tetris_team6/pull/175), [스트레스 PR #177](https://github.com/yoobinkim541/SE_tetris_team6/pull/177) |
+| 3모드·P2P 로비·호스트 권위 경기 (3차) | 구현·자동 검증 | [PR #150](https://github.com/yoobinkim541/SE_tetris_team6/pull/150), [#167](https://github.com/yoobinkim541/SE_tetris_team6/pull/167) |
+| 다시 대전·지연·끊김·최근 IP (3차) | 구현·자동 검증 | [PR #158](https://github.com/yoobinkim541/SE_tetris_team6/pull/158), [#167](https://github.com/yoobinkim541/SE_tetris_team6/pull/167), [#174](https://github.com/yoobinkim541/SE_tetris_team6/pull/174), [#186](https://github.com/yoobinkim541/SE_tetris_team6/pull/186) |
+| 같은 LAN 입력→두 화면 200ms (3차) | 두 PC 미검증 | 단일 PC 2프로세스 600입력 최대 66.30ms([PR #183](https://github.com/yoobinkim541/SE_tetris_team6/pull/183)). 두 PC Wi-Fi heartbeat RTT p95 256.9ms로 판정 근거 부족, 유선 재측정 필요([#159](https://github.com/yoobinkim541/SE_tetris_team6/issues/159)) |
+| 평가장 접속·복구 연습, 타인 플레이, 대표 선수 (3차) | 미진행 | [#161](https://github.com/yoobinkim541/SE_tetris_team6/issues/161), [#172](https://github.com/yoobinkim541/SE_tetris_team6/issues/172), [#181](https://github.com/yoobinkim541/SE_tetris_team6/issues/181) |
+| 실제 사용자 2명 평가 (2차) | 미진행 기록 | [평가 기록지](docs/user-playtest.md) |
 | 실제 Windows IME·OS 배율·Alt+Tab 플레이 | 수동 확인 필요 | Java UI 배율·포커스 콜백 자동 검증과 별도 |
-| Swing 표현·보드 크기 해석·ZIP 제출 형식·제출일 | 교수자 확인 필요 | [문의·답변 기록](docs/professor-confirmation.md); #33 종료는 발송·승인 완료를 뜻하지 않음 |
+| 시간제한 규칙·아이템 대전 공격 해석·보드 크기·제출 형식 | 교수자 확인 필요 | [결정 기록 C장](docs/req3/decisions.md), [문의·답변 기록](docs/professor-confirmation.md) |
 
 ### 검증 기록
 
-[2026-10-26 보고서](docs/validation-report-2026-10-26.md)의 PR #100 기준입니다. 이후 PR의 테스트 증감까지 합친 최신 전체 수치가 아닙니다.
+| 검증 | 기준 | 결과 |
+|---|---|---|
+| test + JaCoCo | develop `2cacf1c` (2026-11-18 로컬) | 1,274개 / 실패 0 / 생략 21, LINE 88.28% (5,326 / 6,033) |
+| Package 워크플로 (v0.5.0-rc.2) | main `c929d01` (#191) | check·guiAcceptance·packageApp·EXE 실행 성공, 1,242개 / 실패 0 / 생략 21, LINE 88.16% |
+| 평가 번들 (`scripts/build-eval-bundle.ps1`) | v0.5.0 평가 빌드 | 결과는 [#162](https://github.com/yoobinkim541/SE_tetris_team6/issues/162)와 릴리스 노트 |
 
-| 검증 | 기록된 결과 |
-|---|---|
-| test/check | 861 실행 / 854 통과 / headless GUI 7 생략 / 실패 0 |
-| guiAcceptance | 실제 JFrame 7 통과 / 생략·실패 0 |
-| requirementsAudit | 71 통과 / 생략·실패 0 |
-| LINE coverage | 89.78% (최소 기준 70%) |
-| Java UI 배율 | 100% / 150% / 200% 통과 |
-| 패키징·EXE | JAR·ZIP 생성, 실제 창 생성·정상 종료 코드 0 |
-
-과거 보고서의 리뷰·병합·Release 미완료 표기는 작성 당시 상태입니다. PR #100은 이후 develop에 병합되었고 사전 릴리스도 공개되었습니다. 사용자 평가·교수자 확인은 위 표의 미진행 상태를 유지합니다.
+2차 시점의 전체 인수 기록(requirementsAudit 71건, Java UI 배율 100/150/200%)은 [2026-10-26 보고서](docs/validation-report-2026-10-26.md)에 있습니다. 사용자 평가·교수자 확인은 위 표의 미진행 상태를 유지합니다.
 
 ## 개발·빌드·배포
 
@@ -160,8 +206,10 @@ CI는 Linux 테스트·커버리지와 Windows 인수·패키징·EXE 실행을 
 
 Windows 저장 위치는 `%APPDATA%/SETetrisTeam6/`입니다.
 
-- `settings.json`: 화면 크기, 색맹 모드, 조작키, 난이도
+- `settings.json`: 화면 크기, 색맹 모드, 조작키, 난이도, 개발자 연결 상태 표시(`devNetworkOverlay`)
 - `scoreboard.json`: 모드·난이도별 기록
+- `recent-peers.json`: P2P 접속에 성공한 최근 주소 5개
+- `dev/rtt-<시각>.csv`: 개발자 모드에서 저장한 RTT 표본
 
 이전 형식·손상 처리 규칙: [명세 v1.2](docs/requirements-spec-v1.2.md) · [명세 v2](docs/requirements-spec-v2.md)
 

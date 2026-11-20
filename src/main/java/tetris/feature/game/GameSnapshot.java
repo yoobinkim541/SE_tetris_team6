@@ -6,6 +6,7 @@ import tetris.component.block.Block;
 import tetris.feature.item.ActiveEffect;
 import tetris.feature.item.Cell;
 import tetris.feature.item.ItemType;
+import tetris.feature.rule.TSpinType;
 
 /**
  * UI가 읽는 게임 상태 사본. 보드 배열·블록은 복사본이라 수정해도 게임에 영향이 없다.
@@ -25,12 +26,22 @@ public record GameSnapshot(
         List<Cell> clearingCells,       // CLEARING 중 흰색으로 그릴 칸. 그 외에는 빈 목록 (ANI-5)
         int nextItemLines,              // 다음 아이템까지 남은 줄 수. 일반 모드는 0 (MOD-4)
         List<ActiveEffect> effects,     // 켜져 있는 지속 효과와 남은 블록 수 (MOD-4)
-        Map<Cell, ItemType> lockedItems) { // 고정된 칸에 남은 아이템 문자. 키는 보이는 영역의 논리 좌표
+        Map<Cell, ItemType> lockedItems,   // 고정된 칸에 남은 아이템 문자. 키는 보이는 영역의 논리 좌표
+        TSpinType lastTSpin) {             // 가장 최근 Lock의 T-스핀 판정 (TSP-4)
 
     public GameSnapshot {
         clearingCells = List.copyOf(clearingCells);
         effects = List.copyOf(effects);
         lockedItems = Map.copyOf(lockedItems);
+        if (lastTSpin == null) lastTSpin = TSpinType.NONE;
+    }
+
+    /** T-스핀 정보가 없는 스냅샷 */
+    public GameSnapshot(int[][] cells, Block currentBlock, Block nextBlock, long score, int level, int lines, GameState state,
+                        GameMode mode, Difficulty difficulty, List<Cell> clearingCells, int nextItemLines, List<ActiveEffect> effects,
+                        Map<Cell, ItemType> lockedItems) {
+        this(cells, currentBlock, nextBlock, score, level, lines, state, mode, difficulty, clearingCells, nextItemLines, effects,
+                lockedItems, TSpinType.NONE);
     }
 
     /** 고정된 칸에 남은 아이템 문자가 없는 스냅샷 */

@@ -23,8 +23,8 @@ class BattleInputTest {
             var root=new JRootPane(); var commands=new ArrayList<PlayerCommand>();
             var active=new AtomicBoolean(true);
             try(var router=new BattleInputRouter(root,new BattleKeyMap(),commands::add,action -> active.get())) {
-                key(root,KeyEvent.VK_LEFT,false,0); key(root,KeyEvent.VK_LEFT,false,0);
-                key(root,KeyEvent.VK_A,false,0);
+                key(root,KeyEvent.VK_A,false,0); key(root,KeyEvent.VK_A,false,0);
+                key(root,KeyEvent.VK_LEFT,false,0);
                 assertEquals(List.of(PlayerId.ONE,PlayerId.ONE,PlayerId.TWO),commands.stream().map(PlayerCommand::playerId).toList());
                 key(root,KeyEvent.VK_UP,false,0); key(root,KeyEvent.VK_UP,false,0);
                 assertEquals(4,commands.size());
@@ -43,8 +43,8 @@ class BattleInputTest {
     @Test void duplicateChangesAreAtomicAndDoNotAlterSinglePlayerSettings() {
         var single=new tetris.feature.setting.KeyMap(); var original=single.codes();
         var keys=new BattleKeyMap();
-        assertFalse(keys.assign(PlayerId.TWO,GameAction.MOVE_LEFT,KeyEvent.VK_LEFT));
-        assertEquals(KeyEvent.VK_A,keys.keyOf(PlayerId.TWO,GameAction.MOVE_LEFT));
+        assertFalse(keys.assign(PlayerId.TWO,GameAction.MOVE_LEFT,KeyEvent.VK_A));
+        assertEquals(KeyEvent.VK_LEFT,keys.keyOf(PlayerId.TWO,GameAction.MOVE_LEFT));
         assertFalse(keys.assign(PlayerId.TWO,GameAction.MOVE_LEFT,KeyEvent.VK_P));
         assertFalse(keys.assign(PlayerId.ONE,GameAction.ROTATE,KeyEvent.VK_ESCAPE));
         assertTrue(keys.assign(PlayerId.TWO,GameAction.MOVE_LEFT,KeyEvent.VK_Z));
