@@ -10,15 +10,12 @@ flowchart LR
     GB <-->|루프백 TCP| GG["참가자 게임<br/>127.0.0.1:임시 포트"]
 ```
 
-## 접속 주소 (게임이 앞에서부터 시도)
+## 접속 주소
 
-| 순서 | 주소 | 경로 | 제한 시간 |
-|---|---|---|---|
-| 1 | `ws://tetris-direct.mywiki.pe.kr:47131/relay` | 서버 공인 IP로 바로 | 2초 |
-| 2 | `wss://tetris.mywiki.pe.kr/relay` | Cloudflare 터널 (443만 열려 있는 네트워크에서도 됨) | 8초 |
+`wss://tetris.ybkim.pe.kr/relay` (Cloudflare 터널). 서버로 들어오는 포트는 열지 않고, 서버 IP도 드러나지 않는다. 443(HTTPS)만 열린 학교·회사 네트워크에서도 접속된다.
 
 - 다른 서버로 시험할 때: `java -Dtetris.relay=ws://127.0.0.1:8765/relay -jar SE-Tetris.jar`
-- Cloudflare 경로는 한국 무료 요금제 특성상 왕복이 수백 ms까지 늘 수 있다. 1번 포트가 열려 있으면 그쪽이 훨씬 빠르다.
+- 한국에서는 Cloudflare 무료 요금제 경로 특성상 왕복이 수백 ms까지 늘 수 있다(2026-11-20 실측 약 570ms). 호스트는 자기 PC에서 판정하므로 영향이 없고, 참가자 입력이 그만큼 늦게 보인다.
 
 ## 규약 (텍스트 JSON → 이후 바이너리)
 
@@ -38,7 +35,7 @@ flowchart LR
 uv venv relay/.venv
 uv pip install --python relay/.venv/Scripts/python.exe -r relay/requirements.txt pytest
 cd relay && .venv/Scripts/python.exe -m pytest -q
-.venv/Scripts/python.exe tetris_relay.py --port 8765 --direct-port 8766
+.venv/Scripts/python.exe tetris_relay.py --port 8765
 ```
 
 ## 배포 (hermes 서버)
@@ -48,9 +45,9 @@ scp relay/{Dockerfile,.dockerignore,requirements.txt,tetris_relay.py} hermes:app
 ssh hermes 'cd ~/apps/tetris-relay && docker build -t tetris-relay:<n> . \
   && docker rm -f tetris-relay \
   && docker run -d --name tetris-relay --restart unless-stopped \
-       -p 127.0.0.1:47130:8765 -p 47131:8766 tetris-relay:<n>'
+       -p 127.0.0.1:47130:8765 tetris-relay:<n>'
 ```
 
-- Cloudflare 터널: `~/.cloudflared/ybkim-personal.yml`의 `tetris.mywiki.pe.kr → http://127.0.0.1:47130` (서비스 `cloudflared-ybkim`)
-- 바로 붙는 포트: DNS `tetris-direct.mywiki.pe.kr` (A, 프록시 끔) → 서버 공인 IP. 오라클 클라우드 보안 목록에 **TCP 47131 수신 허용**이 있어야 열린다
-- 상태 확인: `curl https://tetris.mywiki.pe.kr/health` → `ok`
+- Cloudflare 터널: `~/.cloudflared/ybkim-personal.yml`의 `tetris.ybkim.pe.kr → http://127.0.0.1:47130` (서비스 `cloudflared-ybkim`)
+- DNS: Cloudflare 대시보드 ybkim.pe.kr 영역에 `tetris` CNAME → `e2bde56f-9404-4a59-a4bd-0386d41ee639.cfargotunnel.com` (프록시 켬)
+- 상태 확인: `curl https://tetris.ybkim.pe.kr/health` → `ok`

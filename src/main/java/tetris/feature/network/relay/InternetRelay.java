@@ -14,7 +14,6 @@ import java.net.URI;
 import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.Arrays;
-import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
@@ -34,12 +33,11 @@ import tetris.feature.network.protocol.WireFormat;
  * 결과 stage는 주입한 dispatcher(앱은 EDT)에서 완료된다. 한 객체는 한 번만 쓴다. 중계 서버 코드와 배포: {@code relay/README.md}
  */
 public final class InternetRelay implements AutoCloseable {
-    /** 바로 붙는 중계 포트. 한국 안에서는 Cloudflare를 거치는 것보다 지연이 훨씬 짧다 */
-    public static final Endpoint DIRECT = new Endpoint(URI.create("ws://tetris-direct.mywiki.pe.kr:47131/relay"),
-            Duration.ofSeconds(2));
-    /** Cloudflare를 거치는 중계 주소. 학교·회사 방화벽이 443 말고 막아도 접속된다 */
-    public static final Endpoint PROXY = new Endpoint(URI.create("wss://tetris.mywiki.pe.kr/relay"),
-            Duration.ofSeconds(8));
+    /**
+     * 기본 중계 서버. Cloudflare 터널 뒤에 있어 서버로 들어오는 포트를 열지 않고, 443(HTTPS)만 열린 네트워크에서도 접속된다
+     */
+    public static final URI DEFAULT_URI = URI.create("wss://tetris.ybkim.pe.kr/relay");
+    private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(8);
     /** 다른 중계 서버를 쓸 때의 시스템 속성 (예: -Dtetris.relay=ws://127.0.0.1:8765/relay) */
     public static final String URL_PROPERTY = "tetris.relay";
     static final int RELAY_VERSION = 1;
@@ -47,15 +45,7 @@ public final class InternetRelay implements AutoCloseable {
     private static final int BUFFER_BYTES = 8 * 1024;
     private static final ObjectMapper JSON = new ObjectMapper();
 
-    /** 중계 서버 주소와 접속 제한 시간 */
-    public record Endpoint(URI uri, Duration connectTimeout) {
-        public Endpoint {
-            Objects.requireNonNull(uri, "uri");
-            Objects.requireNonNull(connectTimeout, "connectTimeout");
-        }
-    }
-
-    private final List<Endpoint> endpoints;
+    private final URI uri;
     private final Executor dispatcher;
     private final RelayTransport transport;
     private final Object lock = new Object();
@@ -70,26 +60,18 @@ public final class InternetRelay implements AutoCloseable {
     private boolean paired;
     private boolean closed;
 
-    /** 시스템 속성이 있으면 그 주소 하나, 없으면 바로 붙는 포트 → Cloudflare 순서로 시도한다 */
-    public static List<Endpoint> configuredEndpoints() {
+    /** 시스템 속성이 있으면 그 주소, 없으면 기본 중계 서버 */
+    public static URI configuredUri() {
         String value = System.getProperty(URL_PROPERTY);
-        if (value != null && !value.isBlank()) return List.of(new Endpoint(URI.create(value.trim()), PROXY.connectTimeout()));
-        return List.of(DIRECT, PROXY);
+        return value == null || value.isBlank() ? DEFAULT_URI : URI.create(value.trim());
     }
 
-    public InternetRelay(List<Endpoint> endpoints, Executor dispatcher) {
-        this(endpoints, dispatcher, new JdkRelayTransport());
+    public InternetRelay(URI uri, Executor dispatcher) {
+        this(uri, dispatcher, new JdkRelayTransport());
     }
 
-    /** 테스트용: 주소 하나 */
     public InternetRelay(URI uri, Executor dispatcher, RelayTransport transport) {
-        this(List.of(new Endpoint(uri, PROXY.connectTimeout())), dispatcher, transport);
-    }
-
-    /** endpoints: 앞에서부터 접속해 보고 실패하면 다음 주소로 넘어간다 */
-    public InternetRelay(List<Endpoint> endpoints, Executor dispatcher, RelayTransport transport) {
-        if (endpoints == null || endpoints.isEmpty()) throw new IllegalArgumentException("no relay endpoint");
-        this.endpoints = List.copyOf(endpoints);
+        this.uri = Objects.requireNonNull(uri, "uri");
         this.dispatcher = Objects.requireNonNull(dispatcher, "dispatcher");
         this.transport = Objects.requireNonNull(transport, "transport");
     }
@@ -140,21 +122,9 @@ public final class InternetRelay implements AutoCloseable {
     }
 
     private void connect(String firstMessage) {
-        connect(firstMessage, 0, null);
-    }
-
-    private void connect(String firstMessage, int index, Throwable lastError) {
-        if (index >= endpoints.size()) {
-            fail(RelayException.Reason.UNREACHABLE, lastError == null ? null : String.valueOf(lastError.getMessage()));
-            return;
-        }
-        synchronized (lock) {
-            if (closed) return;
-        }
-        Endpoint endpoint = endpoints.get(index);
-        transport.open(endpoint.uri(), endpoint.connectTimeout(), new Listener()).whenComplete((opened, error) -> {
+        transport.open(uri, CONNECT_TIMEOUT, new Listener()).whenComplete((opened, error) -> {
             if (error != null) {
-                connect(firstMessage, index + 1, error); // 이 주소가 막혀 있으면 다음 주소로
+                fail(RelayException.Reason.UNREACHABLE, String.valueOf(error.getMessage()));
                 return;
             }
             synchronized (lock) {

@@ -18,7 +18,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import functools
 import json
 import logging
 import secrets
@@ -60,8 +59,7 @@ class Relay:
 
     # ── 접속 처리 ─────────────────────────────
 
-    async def handle(self, ws: ServerConnection, trust_proxy: bool = False) -> None:
-        """trust_proxy: Cloudflare 터널 뒤 포트면 CF-Connecting-IP를 실제 IP로 믿는다. 직접 포트는 헤더를 무시한다"""
+    async def handle(self, ws: ServerConnection) -> None:
         try:
             first = await asyncio.wait_for(ws.recv(), FIRST_MESSAGE_TIMEOUT)
         except (asyncio.TimeoutError, ConnectionClosed):
@@ -74,7 +72,7 @@ class Relay:
         if request["op"] == "host":
             await self._host(ws, request["proto"])
         else:
-            await self._join(ws, request["proto"], request["code"], self._client_ip(ws, trust_proxy))
+            await self._join(ws, request["proto"], request["code"], self._client_ip(ws))
 
     @staticmethod
     def _parse(raw: object) -> dict | None:
@@ -182,8 +180,9 @@ class Relay:
                 return code
 
     @staticmethod
-    def _client_ip(ws: ServerConnection, trust_proxy: bool) -> str:
-        forwarded = ws.request.headers.get("CF-Connecting-IP") if trust_proxy and ws.request else None
+    def _client_ip(ws: ServerConnection) -> str:
+        # 서버는 127.0.0.1에만 열고 Cloudflare 터널로만 공개하므로, 터널이 붙인 실제 IP 헤더를 쓴다
+        forwarded = ws.request.headers.get("CF-Connecting-IP") if ws.request else None
         if forwarded:
             return forwarded
         remote = ws.remote_address
@@ -218,32 +217,23 @@ def process_request(connection, request):
     return None
 
 
-async def run(host: str, port: int, ready: asyncio.Future | None = None, direct_port: int | None = None) -> None:
-    """port: Cloudflare 터널이 붙는 포트. direct_port: 인터넷에서 바로 붙는 포트(지연이 더 짧다). 방 목록은 함께 쓴다"""
+async def run(host: str, port: int, ready: asyncio.Future | None = None) -> None:
     relay = Relay()
-    options = dict(process_request=process_request, max_size=MAX_MESSAGE_BYTES,
-                   ping_interval=20, ping_timeout=20, compression=None)
-    async with serve(functools.partial(relay.handle, trust_proxy=True), host, port, **options) as server:
-        if direct_port is None:
-            if ready is not None:
-                ready.set_result(server)
-            await server.serve_forever()
-            return
-        async with serve(relay.handle, host, direct_port, **options) as direct:
-            if ready is not None:
-                ready.set_result((server, direct))
-            await asyncio.gather(server.serve_forever(), direct.serve_forever())
+    async with serve(relay.handle, host, port, process_request=process_request, max_size=MAX_MESSAGE_BYTES,
+                     ping_interval=20, ping_timeout=20, compression=None) as server:
+        if ready is not None:
+            ready.set_result(server)
+        await server.serve_forever()
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="SE Tetris 인터넷 대전 중계 서버")
     parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=8765, help="Cloudflare 터널 뒤 포트")
-    parser.add_argument("--direct-port", type=int, default=None, help="인터넷에서 바로 붙는 포트")
+    parser.add_argument("--port", type=int, default=8765)
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-    log.info("listening on %s:%d%s (direct %s)", args.host, args.port, PATH, args.direct_port)
-    asyncio.run(run(args.host, args.port, direct_port=args.direct_port))
+    log.info("listening on %s:%d%s", args.host, args.port, PATH)
+    asyncio.run(run(args.host, args.port))
 
 
 if __name__ == "__main__":

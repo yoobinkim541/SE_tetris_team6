@@ -151,28 +151,3 @@ def test_health_endpoint_answers_ok():
         assert body == b"ok\n"
         await stop(task)
     run(scenario())
-
-
-def test_proxy_and_direct_ports_share_rooms_and_direct_port_ignores_forwarded_ip():
-    async def scenario():
-        ready = asyncio.get_running_loop().create_future()
-        task = asyncio.ensure_future(tetris_relay.run("127.0.0.1", 0, ready, direct_port=0))
-        proxy, direct = await ready
-        pbase = f"ws://127.0.0.1:{next(iter(proxy.sockets)).getsockname()[1]}"
-        dbase = f"ws://127.0.0.1:{next(iter(direct.sockets)).getsockname()[1]}"
-        h, room = await host(pbase)
-        j, reply = await join(dbase, room["code"])
-        assert reply == {"op": "paired"}
-        await j.send(b"x")
-        assert json.loads(await h.recv()) == {"op": "paired"}
-        assert await h.recv() == b"x"
-        for i in range(tetris_relay.FAILED_JOIN_LIMIT):
-            ws = await connect(dbase + "/relay", additional_headers={"CF-Connecting-IP": f"10.0.0.{i}"})
-            await ws.send(json.dumps({"op": "join", "relay": 1, "proto": 7, "code": "9999"}))
-            assert json.loads(await ws.recv())["reason"] == "NO_ROOM"
-        ws = await connect(dbase + "/relay", additional_headers={"CF-Connecting-IP": "10.9.9.9"})
-        await ws.send(json.dumps({"op": "join", "relay": 1, "proto": 7, "code": "9999"}))
-        assert json.loads(await ws.recv())["reason"] == "TOO_MANY_ATTEMPTS", "직접 포트에서는 위조 헤더로 제한을 피할 수 없다"
-        await h.close(); await j.close()
-        await stop(task)
-    run(scenario())
