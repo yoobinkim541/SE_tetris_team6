@@ -19,6 +19,7 @@ import tetris.feature.versus.api.BattleClient;
 import tetris.feature.versus.api.PlayerCommand;
 import tetris.feature.versus.api.PlayerId;
 import tetris.ui.Messages;
+import tetris.ui.fx.GameSounds;
 import tetris.ui.versus.BattleInputRouter;
 import tetris.ui.versus.BattleKeyMap;
 
@@ -103,6 +104,7 @@ public final class RaidScreenController implements AutoCloseable {
         if (closed) return;
         RaidSnapshot previous = current;
         current = snapshot;
+        GameSounds.SHARED.onRaid(snapshot);
         boolean newOffer = snapshot.phase() == RaidPhase.CARD_PICK && (previous == null
                 || previous.phase() != RaidPhase.CARD_PICK
                 || previous.offer().chooser() != snapshot.offer().chooser()
@@ -196,6 +198,7 @@ public final class RaidScreenController implements AutoCloseable {
             return;
         }
         if (current != null && current.phase() == RaidPhase.FINISHED) {
+            GameSounds.SHARED.menuSelect();
             panel.activateResult();
             return;
         }
@@ -255,10 +258,15 @@ public final class RaidScreenController implements AutoCloseable {
     }
 
     private void installResultKeys() {
-        install(KeyEvent.VK_LEFT, () -> panel.moveResult(-1));
-        install(KeyEvent.VK_RIGHT, () -> panel.moveResult(1));
-        install(KeyEvent.VK_UP, () -> panel.moveResult(-1));
-        install(KeyEvent.VK_DOWN, () -> panel.moveResult(1));
+        install(KeyEvent.VK_LEFT, () -> moveResult(-1));
+        install(KeyEvent.VK_RIGHT, () -> moveResult(1));
+        install(KeyEvent.VK_UP, () -> moveResult(-1));
+        install(KeyEvent.VK_DOWN, () -> moveResult(1));
+    }
+
+    private void moveResult(int delta) {
+        GameSounds.SHARED.menuMove();
+        panel.moveResult(delta);
     }
 
     private final java.util.Map<KeyStroke, Object> extra = new java.util.LinkedHashMap<>();
