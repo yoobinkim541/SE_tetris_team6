@@ -78,6 +78,7 @@ class P2pInternetLobbyTest {
         panel.hostInternetButton().doClick();
         assertEquals("host 0", lobby.calls.getFirst());
         assertTrue(panel.statusText().contains("4821"), panel.statusText());
+        assertTrue(panel.statusText().contains("예비 서버"), "숫자 4자리 코드는 예비 서버에 만든 방이다");
         assertFalse(panel.joinInternetButton().isEnabled(), "대기 중에는 다른 접속을 시작하지 않는다");
 
         lobby.pending.complete(null);

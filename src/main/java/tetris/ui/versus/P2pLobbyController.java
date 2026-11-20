@@ -484,7 +484,9 @@ public final class P2pLobbyController implements P2pLobbyPanel.Actions, AutoClos
             case INITIAL -> message.isEmpty() ? "호스트로 대기하거나 상대 IP로 접속하세요." : message;
             case HOSTING -> relay != null
                     ? (roomCode == null ? "인터넷 방을 만드는 중…"
-                            : "인터넷 방 코드 " + roomCode + " · 상대에게 알려 주세요 (10분 동안 유효)")
+                            : "인터넷 방 코드 " + roomCode + " · 상대에게 알려 주세요 (10분 동안 유효)"
+                            // 숫자 4자리는 예비 서버 코드다. 메인 서버가 안 돼 넘어갔다는 것을 알려 둔다
+                            + (roomCode.matches("\\d{4}") ? " · 예비 서버" : ""))
                     : "상대 접속 대기 중 · 내 IP " + String.join(" / ", lanAddresses.get())
                     + " · 포트 " + (localPort.getAsInt() > 0 ? localPort.getAsInt() : panel.portField().getText().trim());
             case CONNECTING -> relay != null ? "방 " + roomCode + "에 연결 중…" : "접속 중…";
