@@ -93,12 +93,14 @@ public class MoveTest {
     }
 
     @Test
-    void 바닥에서_Soft_Drop하면_점수_없이_고정된다() { // SCR-4, LCK-2 (Soft Drop 입력 즉시 Lock)
+    void 바닥에서_Soft_Drop하면_점수_없이_유예가_끝난_뒤_고정된다() { // SCR-4, LCK-6 (Soft Drop은 유예 중 Lock을 앞당기지 않는다)
         GameSession session = startedSession(new OBlock(), new TBlock());
         repeat(session::moveDown, 18);
         assertEquals(18, session.snapshot().score());
         session.moveDown();
         assertEquals(18, session.snapshot().score());
+        assertEquals("....oo....", row(session, 19));   // 아직 움직이는 블록
+        session.tick();                                  // 유예 0.5초가 지났다
         assertEquals("....OO....", row(session, 19));
     }
     //#endregion
