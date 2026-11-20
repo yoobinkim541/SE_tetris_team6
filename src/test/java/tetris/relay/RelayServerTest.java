@@ -143,6 +143,20 @@ class RelayServerTest {
     }
 
     @Test
+    void 한_바이트씩_나눠_온_JOIN도_받는다() throws Exception {
+        Socket host = open();
+        String code = hostRoom(host);
+        Socket client = open();
+        OutputStream out = client.getOutputStream();
+        for (byte b : ("JOIN v1 " + code + "\n").getBytes(StandardCharsets.UTF_8)) {
+            out.write(b);
+            out.flush();
+        }
+        assertEquals("OK", reply(client));
+        assertEquals("PAIRED", reply(host));
+    }
+
+    @Test
     void 없는_코드는_NO_ROOM이고_연결을_닫는다() throws IOException {
         Socket client = open();
         send(client, "JOIN v1 AAAAAA");
@@ -276,6 +290,21 @@ class RelayServerTest {
         Socket client = open();
         send(client, "JOIN v1 " + code);
         assertEquals("ERR NO_ROOM", reply(client));
+    }
+
+    @Test
+    void 만료된_방_정리는_나중에_만든_방을_지우지_않는다() throws Exception {
+        Socket old = open();
+        hostRoom(old);
+        advance(Duration.ofMinutes(11));
+        assertTrue(closedByPeer(old));
+        Socket fresh = open();
+        String code = hostRoom(fresh);
+        advance(Duration.ofMinutes(1));
+        assertEquals(1, server.waitingRooms());
+        Socket client = open();
+        send(client, "JOIN v1 " + code);
+        assertEquals("OK", reply(client));
     }
 
     @Test

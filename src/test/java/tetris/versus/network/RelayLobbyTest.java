@@ -32,6 +32,9 @@ import tetris.feature.versus.LocalMatchEngine;
 import tetris.feature.versus.api.BattleMode;
 import tetris.feature.versus.api.MatchClock;
 import tetris.feature.versus.api.MatchConfig;
+import tetris.feature.versus.api.PlayerCommand;
+import tetris.feature.versus.api.PlayerId;
+import tetris.feature.setting.GameAction;
 import tetris.relay.LobbyCode;
 import tetris.relay.RelayLimits;
 import tetris.relay.RelayServer;
@@ -128,21 +131,33 @@ class RelayLobbyTest {
     }
 
     @Test
-    void 인터넷_방에서도_설정_준비_시작까지_기존_흐름을_탄다() throws Exception {
+    void 인터넷_방에서도_준비_시작_결과_재대전까지_기존_흐름을_탄다() throws Exception {
         String code = hostAndGetCode();
         on(clientExec, () -> client.joinOnline(code));
-        await(hostSnaps, s -> s.state() == State.LOBBY, "host LOBBY");
+        LobbySnapshot hostLobby = await(hostSnaps, s -> s.state() == State.LOBBY, "host LOBBY");
         await(clientSnaps, s -> s.state() == State.LOBBY, "client LOBBY");
-
         on(hostExec, () -> { host.selectConfig(MatchConfig.of(BattleMode.CLASSIC)); return null; });
-        LobbySnapshot configured = await(clientSnaps, s -> s.config() != null, "client got config");
-        long revision = configured.configRevision();
-        on(clientExec, () -> { client.ready(revision, true); return null; });
-        on(hostExec, () -> { host.ready(revision, true); return null; });
+        long revision = await(clientSnaps, s -> s.config() != null, "client got config").configRevision();
 
-        await(hostSnaps, s -> s.state() == State.STARTING || s.state() == State.PLAYING, "host started");
-        await(clientSnaps, s -> s.state() == State.STARTING || s.state() == State.PLAYING, "client started");
-        assertTrue(on(clientExec, () -> client.battleClient().isPresent()));
+        for (int round = 1; round <= 2; round++) {
+            on(clientExec, () -> { client.ready(revision, true); return null; });
+            await(hostSnaps, LobbySnapshot::peerReady, "host sees client ready");
+            on(hostExec, () -> { host.ready(revision, true); return null; });
+            await(hostSnaps, s -> s.state() == State.STARTING, "host STARTING");
+            await(clientSnaps, s -> s.state() == State.PLAYING, "client PLAYING");
+            on(hostExec, () -> host.battleClient().orElseThrow());
+
+            on(hostExec, () -> { host.battleClient().orElseThrow()
+                    .send(new PlayerCommand(PlayerId.ONE, GameAction.QUIT, true, 0)); return null; });
+            await(hostSnaps, s -> s.state() == State.RESULT, "host RESULT " + round);
+            await(clientSnaps, s -> s.state() == State.RESULT, "client RESULT " + round);
+
+            on(hostExec, () -> { host.returnToLobby(); return null; });
+            on(clientExec, () -> { client.returnToLobby(); return null; });
+            LobbySnapshot again = await(hostSnaps, s -> s.state() == State.LOBBY, "host back to LOBBY " + round);
+            await(clientSnaps, s -> s.state() == State.LOBBY, "client back to LOBBY " + round);
+            assertEquals(hostLobby.peerIdentity(), again.peerIdentity(), "같은 연결로 다시 대전한다");
+        }
     }
 
     @Test
