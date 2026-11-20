@@ -3,12 +3,14 @@ package tetris.ui.versus;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
 import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 import tetris.feature.network.EstablishException;
+import tetris.feature.network.EstablishFailure;
 import tetris.feature.network.LanAddresses;
 import tetris.feature.network.lobby.LinkHealth;
 import tetris.feature.network.lobby.LobbyClient;
@@ -18,6 +20,7 @@ import tetris.feature.network.lobby.LobbySnapshot.State;
 import tetris.feature.versus.api.BattleClient;
 import tetris.feature.versus.api.BattleMode;
 import tetris.feature.versus.api.MatchConfig;
+import tetris.relay.LobbyCode;
 
 /**
  * P2P 로비 화면의 동작 (S9-B2). LobbyClient 구독과 화면 이동을 맡는다. EDT 전용.
@@ -56,6 +59,10 @@ public final class P2pLobbyController implements P2pLobbyPanel.Actions, AutoClos
     private final Supplier<List<String>> lanAddresses;
     private final LobbyClient.Subscription subscription;
     private final LobbyClient.Subscription healthSubscription;
+    private final LobbyClient.Subscription roomCodeSubscription;
+    /** challenge: 지금(또는 마지막) 연결이 인터넷 방인지, 대기 중 로비 코드 */
+    private boolean online;
+    private Optional<String> roomCode = Optional.empty();
     private final List<String> recent = new ArrayList<>();
     private LinkHealth health = LinkHealth.NONE;
     private String connectingTo;
@@ -99,6 +106,7 @@ public final class P2pLobbyController implements P2pLobbyPanel.Actions, AutoClos
         panel.setRecentPeers(recent);
         this.subscription = lobby.subscribe(this::onSnapshot);
         this.healthSubscription = lobby.subscribeHealth(this::onHealth);
+        this.roomCodeSubscription = lobby.subscribeRoomCode(this::onRoomCode);
     }
 
     /** 최근 접속 IP (최신순) */
@@ -131,6 +139,7 @@ public final class P2pLobbyController implements P2pLobbyPanel.Actions, AutoClos
         Integer port = parsePort(portText);
         if (port == null) return;
         clearMessage();
+        online = false;
         track(() -> lobby.host(port), "호스트 대기");
     }
 
@@ -145,8 +154,35 @@ public final class P2pLobbyController implements P2pLobbyPanel.Actions, AutoClos
             return;
         }
         clearMessage();
+        online = false;
         connectingTo = host;
         track(() -> lobby.connect(host, port), "접속");
+    }
+
+    @Override
+    public void hostOnline() {
+        if (closed || current.state() != State.INITIAL) return;
+        clearMessage();
+        online = true;
+        track(lobby::hostOnline, "인터넷 방 만들기");
+    }
+
+    @Override
+    public void joinOnline(String codeText) {
+        if (closed || current.state() != State.INITIAL) return;
+        String text = codeText == null ? "" : codeText.trim();
+        if (text.isEmpty()) {
+            showMessage("친구에게 받은 코드를 입력하세요. 예: K7Q-M2X");
+            return;
+        }
+        Optional<String> code = LobbyCode.normalize(text);
+        if (code.isEmpty()) {
+            showMessage("코드는 영문·숫자 6자리입니다. 예: K7Q-M2X");
+            return;
+        }
+        clearMessage();
+        online = true;
+        track(() -> lobby.joinOnline(code.get()), "코드로 입장");
     }
 
     @Override
@@ -268,12 +304,20 @@ public final class P2pLobbyController implements P2pLobbyPanel.Actions, AutoClos
             }
             case LOST -> {
                 error = true;
-                message = "상대와 연결이 끊어졌습니다. 같은 LAN인지, 방화벽을 확인한 뒤 다시 접속하세요.";
+                message = online
+                        ? "상대와 연결이 끊어졌습니다. 인터넷 연결을 확인한 뒤 인터넷 방을 다시 만드세요."
+                        : "상대와 연결이 끊어졌습니다. 같은 LAN인지, 방화벽을 확인한 뒤 다시 접속하세요.";
             }
             default -> {
             }
         }
         navigation.healthChanged(next);
+        render();
+    }
+
+    private void onRoomCode(Optional<String> code) {
+        if (closed) return;
+        roomCode = Objects.requireNonNull(code);
         render();
     }
 
@@ -310,12 +354,19 @@ public final class P2pLobbyController implements P2pLobbyPanel.Actions, AutoClos
             if (closed || mine != attempt || error == null) return;
             Throwable cause = error instanceof CompletionException && error.getCause() != null ? error.getCause() : error;
             if (cause instanceof CancellationException) return;
-            showMessage(failureText(cause));
+            showMessage(failureText(cause, online));
         });
     }
 
-    static String failureText(Throwable cause) {
+    /** online이면 LAN 점검 안내 대신 인터넷 방에 맞는 안내를 보인다 */
+    static String failureText(Throwable cause, boolean online) {
         if (cause instanceof EstablishException e) {
+            if (online && e.reason() == EstablishFailure.TIMEOUT) {
+                return "응답이 없습니다. 인터넷 연결을 확인한 뒤 다시 시도하세요.";
+            }
+            if (online && e.reason() == EstablishFailure.INVALID_ADDRESS) {
+                return "코드는 영문·숫자 6자리입니다. 예: K7Q-M2X";
+            }
             return switch (e.reason()) {
                 case INVALID_ADDRESS -> "IP 주소 형식이 올바르지 않습니다. 예: 192.168.0.10";
                 case PORT_IN_USE -> "이 포트는 이미 사용 중입니다. 다른 포트를 입력하세요.";
@@ -359,9 +410,12 @@ public final class P2pLobbyController implements P2pLobbyPanel.Actions, AutoClos
     private String status() {
         return switch (current.state()) {
             case INITIAL -> message.isEmpty() ? "호스트로 대기하거나 상대 IP로 접속하세요." : message;
-            case HOSTING -> "상대 접속 대기 중 · 내 IP " + String.join(" / ", lanAddresses.get())
+            case HOSTING -> online
+                    ? roomCode.map(c -> "인터넷 방 대기 중 · 코드 " + LobbyCode.display(c) + " (친구에게 알려 주세요)")
+                            .orElse("인터넷 방 만드는 중…")
+                    : "상대 접속 대기 중 · 내 IP " + String.join(" / ", lanAddresses.get())
                     + " · 포트 " + (localPort.getAsInt() > 0 ? localPort.getAsInt() : panel.portField().getText().trim());
-            case CONNECTING -> "접속 중…";
+            case CONNECTING -> online ? "인터넷 방에 들어가는 중…" : "접속 중…";
             case LOBBY -> withLag((message.isEmpty() ? "" : message + " ")
                     + (current.role() == Role.HOST ? "모드를 고르고 게임 시작을 누르세요." : "호스트가 모드를 고릅니다. 게임 시작을 누르세요."));
             case STARTING, PLAYING -> withLag("경기 진행 중");
@@ -381,6 +435,7 @@ public final class P2pLobbyController implements P2pLobbyPanel.Actions, AutoClos
         attempt++;
         subscription.close();
         healthSubscription.close();
+        roomCodeSubscription.close();
         lobby.close();
     }
 }

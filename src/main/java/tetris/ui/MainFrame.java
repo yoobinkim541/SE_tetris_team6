@@ -176,7 +176,7 @@ public class MainFrame extends JFrame {
                 new MenuItem("로컬 " + BattleModes.label(BattleMode.CLASSIC), () -> startBattle(BattleMode.CLASSIC)),
                 new MenuItem("로컬 " + BattleModes.label(BattleMode.ITEM), () -> startBattle(BattleMode.ITEM)),
                 new MenuItem("로컬 " + BattleModes.label(BattleMode.TIMED), () -> startBattle(BattleMode.TIMED)),
-                new MenuItem("P2P 대전 (같은 LAN)", this::openP2pLobby),
+                new MenuItem("P2P 대전 (LAN·인터넷)", this::openP2pLobby),
                 new MenuItem("메인 메뉴", () -> showScreen(Screen.MAIN_MENU))));
         addScreen(Screen.BATTLE_MODES, modes);
         battleResultPanel = new BattleResultPanel(this::openBattleModes, () -> showScreen(Screen.MAIN_MENU));

@@ -22,7 +22,8 @@ import tetris.feature.versus.api.BattleMode;
 
 /**
  * P2P 접속·로비 화면 (S9-B2, R3-MENU, R3-HOST, R3-READY). 상태를 그리기만 하고 동작은 {@link Actions}로 넘긴다.
- * 호스트 대기/접속, IP·포트 입력, 접속 상태, 호스트만 바꿀 수 있는 모드, 양쪽 "게임 시작"(준비), 취소·뒤로를 보여 준다. EDT 전용.
+ * 호스트 대기/접속, IP·포트 입력, 접속 상태, 호스트만 바꿀 수 있는 모드, 양쪽 "게임 시작"(준비), 취소·뒤로를 보여 준다.
+ * challenge 브랜치는 중계 서버를 거치는 인터넷 방 만들기·코드로 입장 줄을 더한다. EDT 전용.
  */
 public final class P2pLobbyPanel extends JPanel {
     /** 화면 버튼이 부르는 동작. P2pLobbyController가 구현한다 */
@@ -31,6 +32,10 @@ public final class P2pLobbyPanel extends JPanel {
         void connect(String address, String port);
         void selectMode(BattleMode mode);
         void toggleReady();
+        /** challenge: 중계 서버에 인터넷 방을 만든다 */
+        void hostOnline();
+        /** challenge: 친구에게 받은 로비 코드로 인터넷 방에 들어간다 */
+        void joinOnline(String code);
         void cancelOrBack();
     }
 
@@ -40,6 +45,9 @@ public final class P2pLobbyPanel extends JPanel {
     private final JComboBox<String> recentBox = new JComboBox<>();
     private final JButton hostButton = new JButton("호스트로 대기");
     private final JButton connectButton = new JButton("접속");
+    private final JButton onlineHostButton = new JButton("인터넷 방 만들기");
+    private final JTextField codeField = new JTextField("", 8);
+    private final JButton joinCodeButton = new JButton("코드로 입장");
     private final JComboBox<BattleMode> modeBox = new JComboBox<>(BattleMode.values());
     private final JLabel statusLabel = label("", 17, true);
     private final JLabel peerLabel = label("", 15, false);
@@ -76,10 +84,12 @@ public final class P2pLobbyPanel extends JPanel {
 
         // 좁은 창에서도 잘리지 않도록 "이름 | 입력 | 버튼" 격자로 둔다. 긴 안내는 줄바꿈한다
         int y = 0;
-        addWide(label("P2P 대전 (같은 LAN)", 26, true), y++);
+        addWide(label("P2P 대전", 26, true), y++);
         addRow(label("포트", 16, false), portField, hostButton, y++);
         addRow(label("상대 IP", 16, false), addressField, connectButton, y++);
         addRow(label("최근 IP", 16, false), recentBox, label("(고르면 입력됨)", 13, false), y++);
+        addRow(label("인터넷", 16, false), onlineHostButton, label("(코드를 친구에게)", 13, false), y++);
+        addRow(label("코드", 16, false), codeField, joinCodeButton, y++);
         addWide(statusLabel, y++);
         addWide(peerLabel, y++);
         addRow(label("모드", 16, false), modeBox, label("(호스트만 선택)", 13, false), y++);
@@ -88,7 +98,8 @@ public final class P2pLobbyPanel extends JPanel {
         addWide(hint, y);
 
         // 작은 창에서 입력 줄이 넘치지 않도록 버튼 좌우 여백을 줄인다
-        for (JButton button : new JButton[]{hostButton, connectButton, readyButton, backButton}) {
+        for (JButton button : new JButton[]{hostButton, connectButton, onlineHostButton, joinCodeButton,
+                readyButton, backButton}) {
             button.setMargin(new Insets(2, 8, 2, 8));
         }
         addComponentListener(new java.awt.event.ComponentAdapter() {
@@ -96,6 +107,9 @@ public final class P2pLobbyPanel extends JPanel {
         });
         hostButton.addActionListener(e -> actions.host(portField.getText()));
         connectButton.addActionListener(e -> actions.connect(addressField.getText(), portField.getText()));
+        onlineHostButton.addActionListener(e -> actions.hostOnline());
+        joinCodeButton.addActionListener(e -> actions.joinOnline(codeField.getText()));
+        codeField.addActionListener(e -> actions.joinOnline(codeField.getText()));
         recentBox.addActionListener(e -> {
             if (!rendering && recentBox.getSelectedItem() instanceof String address && !address.isEmpty()) {
                 addressField.setText(address);
@@ -206,6 +220,9 @@ public final class P2pLobbyPanel extends JPanel {
             addressField.setEnabled(initial);
             hostButton.setEnabled(initial);
             connectButton.setEnabled(initial);
+            onlineHostButton.setEnabled(initial);
+            codeField.setEnabled(initial);
+            joinCodeButton.setEnabled(initial);
             recentBox.setEnabled(initial && recentBox.getItemCount() > 0);
             if (lobby.config() != null) modeBox.setSelectedItem(lobby.config().mode());
             modeBox.setEnabled(inLobby && lobby.role() == Role.HOST);
@@ -259,6 +276,9 @@ public final class P2pLobbyPanel extends JPanel {
     public JTextField addressField() { return addressField; }
     public JButton hostButton() { return hostButton; }
     public JButton connectButton() { return connectButton; }
+    public JButton onlineHostButton() { return onlineHostButton; }
+    public JTextField codeField() { return codeField; }
+    public JButton joinCodeButton() { return joinCodeButton; }
     public JComboBox<BattleMode> modeBox() { return modeBox; }
     public JButton readyButton() { return readyButton; }
     public JButton backButton() { return backButton; }
