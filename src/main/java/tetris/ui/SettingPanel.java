@@ -25,7 +25,7 @@ import tetris.feature.setting.ControlStyle;
  */
 public class SettingPanel extends JPanel {
     private enum Item {
-        SCREEN_SIZE, DIFFICULTY, CONTROL_KEYS, COLOR_BLIND, CONTROL_STYLE, EFFECTS, DEV_NET_OVERLAY, RESET_SCOREBOARD, RESET_SETTINGS
+        SCREEN_SIZE, DIFFICULTY, CONTROL_KEYS, COLOR_BLIND, CONTROL_STYLE, EFFECTS, SFX, BGM, DEV_NET_OVERLAY, RESET_SCOREBOARD, RESET_SETTINGS
     }
 
     private static final Item[] ALL_ITEMS = Item.values();
@@ -111,6 +111,8 @@ public class SettingPanel extends JPanel {
             }
             case CONTROL_STYLE -> changeControlStyle(1);
             case EFFECTS -> changeEffects(1);
+            case SFX -> toggleSfx();
+            case BGM -> toggleBgm();
             case DEV_NET_OVERLAY -> {
                 settings.setDevNetworkOverlay(!settings.isDevNetworkOverlay());
                 applyChange("");
@@ -212,6 +214,8 @@ public class SettingPanel extends JPanel {
             case DIFFICULTY -> changeDifficulty(delta);
             case CONTROL_STYLE -> changeControlStyle(delta);
             case EFFECTS -> changeEffects(delta);
+            case SFX -> toggleSfx();
+            case BGM -> toggleBgm();
             default -> { }
         }
     }
@@ -239,6 +243,16 @@ public class SettingPanel extends JPanel {
     private void changeEffects(int delta) {
         if (delta == 0) return;
         settings.setEffectsHigh(!settings.isEffectsHigh());
+        applyChange("");
+    }
+
+    private void toggleSfx() {
+        settings.setSfxEnabled(!settings.isSfxEnabled());
+        applyChange("");
+    }
+
+    private void toggleBgm() {
+        settings.setBgmEnabled(!settings.isBgmEnabled());
         applyChange("");
     }
 
@@ -349,6 +363,10 @@ public class SettingPanel extends JPanel {
                         "◀ " + Messages.get("style." + settings.getControlStyle().name()) + " ▶"};
                 case EFFECTS -> new String[] {Messages.get("settings.effects"),
                         "◀ " + Messages.get(settings.isEffectsHigh() ? "settings.effects.high" : "settings.effects.low") + " ▶"};
+                case SFX -> new String[] {Messages.get("settings.sfx"),
+                        Messages.get(settings.isSfxEnabled() ? "settings.enabled" : "settings.disabled")};
+                case BGM -> new String[] {Messages.get("settings.bgm"),
+                        Messages.get(settings.isBgmEnabled() ? "settings.enabled" : "settings.disabled")};
                 case DEV_NET_OVERLAY -> new String[] {Messages.get("settings.devNetOverlay"),
                         Messages.get(settings.isDevNetworkOverlay() ? "settings.on" : "settings.off")};
                 case RESET_SCOREBOARD -> new String[] {Messages.get("settings.resetScoreboard"), ""};

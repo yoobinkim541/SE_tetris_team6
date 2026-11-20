@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.List;
 import javax.swing.JPanel;
 import tetris.ui.fx.AssetStore;
+import tetris.ui.fx.GameSounds;
 import tetris.ui.fx.StarfieldBackground;
 
 /** 시작 메뉴: SE Tetris 제목 + 메뉴 항목 (게임 시작 / 설정 / 스코어보드 / 게임 종료). 기존 LandingScreen + MenuScreen 통합. */
@@ -45,11 +46,13 @@ public class MainMenuPanel extends JPanel {
     /** delta = -1(위) / +1(아래). 끝에서 순환 */
     public void moveSelection(int delta) {
         selected = Theme.cycle(selected, delta, items.size());
+        GameSounds.SHARED.menuMove();
         repaint();
     }
 
     /** Enter: 선택된 항목의 action 실행 */
     public void activateSelected() {
+        GameSounds.SHARED.menuSelect();
         warnings.clear(); // 경고는 메뉴를 처음 떠날 때까지만 보여준다
         repaint();
         items.get(selected).action().run();

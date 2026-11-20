@@ -7,6 +7,7 @@ import java.util.function.Supplier;
 import javax.swing.JRootPane;
 import tetris.feature.setting.GameAction;
 import tetris.feature.versus.api.*;
+import tetris.ui.fx.GameSounds;
 
 /** Owns the UI subscription and root input bindings for exactly one local match. EDT confined. */
 public final class BattleScreenController implements AutoCloseable {
@@ -21,6 +22,8 @@ public final class BattleScreenController implements AutoCloseable {
     private boolean closed;
     private long sequence;
     private boolean online;
+    /** P2P면 이 PC의 참가자. null이면 로컬 대전이라 두 보드 모두 조작음 */
+    private PlayerId soundFocus;
     private boolean forfeitArmed;
     private BattlePanel panel;
     private BattleKeyMap keys;
@@ -42,11 +45,17 @@ public final class BattleScreenController implements AutoCloseable {
         var controller = new BattleScreenController(root, client, keys, panel, onResult,
                 (Supplier<PlayerId>) () -> null, () -> { });
         controller.online = true;
+        controller.soundFocus = null;
         controller.panel = panel;
         controller.keys = keys;
         controller.forfeitTimeout = new javax.swing.Timer(FORFEIT_CONFIRM_MILLIS, e -> controller.disarmForfeit());
         controller.forfeitTimeout.setRepeats(false);
         return controller;
+    }
+
+    /** P2P에서 이 PC가 조작하는 참가자. 로컬 대전은 호출하지 않는다 */
+    public void setSoundFocus(PlayerId player) {
+        soundFocus = player;
     }
 
     /** 온라인 기권 확인 대기 시간 */
@@ -91,6 +100,7 @@ public final class BattleScreenController implements AutoCloseable {
                 if (closed) return;
                 MatchSnapshot previous = current;
                 current = snapshot;
+                GameSounds.SHARED.onBattle(previous, snapshot, soundFocus);
                 router.resetForMatch(snapshot.matchId());
                 if (previous != null && previous.phase() != snapshot.phase()) router.clearGameplayKeys();
                 panel.setSnapshot(snapshot);

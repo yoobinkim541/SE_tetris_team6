@@ -57,6 +57,7 @@ import tetris.feature.raid.api.RaidClient;
 import tetris.feature.raid.api.RaidConfig;
 import tetris.feature.raid.api.RaidMode;
 import tetris.ui.raid.RaidScreenController;
+import tetris.ui.fx.GameSounds;
 import tetris.ui.versus.*;
 
 /**
@@ -173,6 +174,7 @@ public class MainFrame extends JFrame {
         this.scoreboardRepository = scoreboardRepository;
 
         tetris.ui.fx.StarfieldBackground.setEffectsHigh(settings.isEffectsHigh());
+        GameSounds.SHARED.apply(settings);
         Runnable mainMenu = () -> showScreen(Screen.MAIN_MENU);
         mainMenuPanel = new MainMenuPanel(mainMenuItems(
                 this::showSoloMenu,
@@ -252,8 +254,19 @@ public class MainFrame extends JFrame {
                 && !(screen == Screen.RAID && battleOnline)) closeP2p();
         currentScreen = screen;
         cards.show(root, screen.name());
+        syncMusic(screen);
         if (screen == Screen.NAME_INPUT) nameInputPanel.focusField();
         else screens.get(screen).requestFocusInWindow();
+    }
+
+    /** 메뉴는 bgm_menu, 레이드·대전은 bgm_raid. 싱글은 조작음이 잦아 배경음을 멈춘다 */
+    private void syncMusic(Screen screen) {
+        switch (screen) {
+            case RAID -> GameSounds.SHARED.enterRaid();
+            case BATTLE -> GameSounds.SHARED.enterBattle();
+            case GAME -> GameSounds.SHARED.enterGame();
+            default -> GameSounds.SHARED.enterMenu();
+        }
     }
 
     /** 셀 크기 적용: pack() 후 중앙 배치. 화면에 안 맞으면 셀 크기를 자동 축소 (RND-3) */
@@ -292,7 +305,7 @@ public class MainFrame extends JFrame {
     }
 
     private GameSession createSession(GameMode mode) {
-        return newSession(mode, settings.getDifficulty(), settings.getControlStyle(), new Random(), new SwingGameClock(this::onTick), gamePanel);
+        return newSession(mode, settings.getDifficulty(), settings.getControlStyle(), new Random(), new SwingGameClock(this::onTick), GameSounds.SHARED.listening(gamePanel));
     }
 
     /**
@@ -529,6 +542,7 @@ public class MainFrame extends JFrame {
                     onlineResultPanel.setSnapshot(snapshot, label, viewer);
                     showScreen(Screen.P2P_RESULT);
                 }));
+        battleController.setSoundFocus(viewer);
         debugOverlay.refresh(); // 이제 대전 화면도 같은 줄을 받는다
     }
 
@@ -584,6 +598,7 @@ public class MainFrame extends JFrame {
         // 설정의 개발자 토글을 개발자 모드 스위치에 반영한다 (dev-net-overlay). --dev로 켠 상태는 그대로 유지된다
         DevMode.setSettingEnabled(settings.isDevNetworkOverlay());
         tetris.ui.fx.StarfieldBackground.setEffectsHigh(settings.isEffectsHigh());
+        GameSounds.SHARED.apply(settings);
         updateTitle();
         debugOverlay.refresh(); // 설정에서 끄면 열려 있는 화면의 줄이 바로 사라지고 타이머가 멈춘다
         if (settings.getScreenSize() != appliedScreenSize) applyScreenSize(settings.getScreenSize());

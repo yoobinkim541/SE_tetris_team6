@@ -47,6 +47,8 @@ public class JsonSettingsRepository implements SettingsRepository {
         root.put("difficulty", settings.getDifficulty().name());
         root.put("controlStyle", settings.getControlStyle().name());
         root.put("effects", settings.isEffectsHigh() ? "high" : "low");
+        root.put("sfx", settings.isSfxEnabled());
+        root.put("bgm", settings.isBgmEnabled());
         ObjectNode keys = root.putObject("keys");
         settings.getKeyMap().codes().forEach((action, keyCode) -> keys.put(action.name(), keyCode));
         return file.write(root);
@@ -62,6 +64,8 @@ public class JsonSettingsRepository implements SettingsRepository {
         applyDifficulty(root.get("difficulty"), settings, warnings);
         applyControlStyle(root.get("controlStyle"), settings, warnings);
         applyEffects(root.get("effects"), settings, warnings);
+        applySfx(root.get("sfx"), settings, warnings);
+        applyBgm(root.get("bgm"), settings, warnings);
         applyKeys(root.get("keys"), settings, warnings);
         return new LoadResult<>(settings, warnings);
     }
@@ -139,6 +143,23 @@ public class JsonSettingsRepository implements SettingsRepository {
             }
         }
         warnings.add("연출 설정이 올바르지 않아 기본값(높음)을 사용합니다.");
+    }
+
+    /** 없으면 경고 없이 켜짐. 불린이 아니면 켜짐으로 두고 경고 한 번 */
+    private static void applySfx(JsonNode node, Settings settings, List<String> warnings) {
+        applyEnabled(node, settings::setSfxEnabled, "효과음 설정이 올바르지 않아 기본값(켜짐)을 사용합니다.", warnings);
+    }
+
+    /** 없으면 경고 없이 켜짐. 불린이 아니면 켜짐으로 두고 경고 한 번 */
+    private static void applyBgm(JsonNode node, Settings settings, List<String> warnings) {
+        applyEnabled(node, settings::setBgmEnabled, "배경음 설정이 올바르지 않아 기본값(켜짐)을 사용합니다.", warnings);
+    }
+
+    private static void applyEnabled(JsonNode node, java.util.function.Consumer<Boolean> set, String warning,
+                                     List<String> warnings) {
+        if (isAbsent(node)) return;
+        if (node.isBoolean()) set.accept(node.asBoolean());
+        else warnings.add(warning);
     }
 
     /** 중복·누락·예약키가 하나라도 있으면 keys 전체를 기본값으로 둔다. 예전 파일에 없는 반시계·홀드는 기본키로 채운다 */

@@ -87,6 +87,10 @@ public class Messages {
         TEXT.put("settings.effects", "연출");
         TEXT.put("settings.effects.high", "높음");
         TEXT.put("settings.effects.low", "낮음");
+        TEXT.put("settings.sfx", "효과음");
+        TEXT.put("settings.bgm", "배경음");
+        TEXT.put("settings.enabled", "켬");
+        TEXT.put("settings.disabled", "끔");
         TEXT.put("settings.on", "ON");
         TEXT.put("settings.off", "OFF");
         TEXT.put("settings.pressKey", "새 키를 누르세요 (Esc 취소)");
