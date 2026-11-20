@@ -8,6 +8,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 import tetris.feature.game.Difficulty;
+import tetris.feature.setting.ControlStyle;
 import tetris.feature.setting.GameAction;
 import tetris.feature.versus.api.BattleMode;
 import tetris.feature.versus.api.MatchConfig;
@@ -36,7 +37,8 @@ public final class MatchPayloads {
         ObjectNode payload = WireFormat.MAPPER.createObjectNode()
                 .put("mode", config.mode().name())
                 .put("difficulty", config.difficulty().name())
-                .put("timeLimitMillis", config.timeLimitMillis());
+                .put("timeLimitMillis", config.timeLimitMillis())
+                .put("controlStyle", config.controlStyle().name());
         return new Message(MessageType.CONFIG, null, configRevision, payload);
     }
 
@@ -45,7 +47,9 @@ public final class MatchPayloads {
         BattleMode mode = enumField(payload, "mode", BattleMode.class);
         Difficulty difficulty = enumField(payload, "difficulty", Difficulty.class);
         long timeLimit = longField(payload, "timeLimitMillis");
-        return construct(() -> new MatchConfig(mode, difficulty, timeLimit));
+        ControlStyle style = payload.has("controlStyle") && !payload.get("controlStyle").isNull()
+                ? enumField(payload, "controlStyle", ControlStyle.class) : ControlStyle.MODERN;
+        return construct(() -> new MatchConfig(mode, difficulty, timeLimit, style));
     }
     //#endregion
 
@@ -105,6 +109,9 @@ public final class MatchPayloads {
         int[][] items = view.items();
         // 아이템 대전에서만 싣는다. 없으면 받는 쪽이 빈 표시로 만든다 (일반·시간제한 STATE 크기 유지)
         if (Arrays.stream(items).flatMapToInt(Arrays::stream).anyMatch(v -> v != 0)) node.set("items", gridJson(items));
+        if (view.hold().length > 0) node.set("hold", gridJson(view.hold()));
+        if (Arrays.stream(view.ghost()).flatMapToInt(Arrays::stream).anyMatch(v -> v != 0)) node.set("ghost", gridJson(view.ghost()));
+        if (!view.previews().isEmpty()) node.set("previews", shapesJson(view.previews()));
         return node;
     }
 
@@ -115,7 +122,30 @@ public final class MatchPayloads {
         List<int[]> pending = List.of(gridField(node, "pendingRows"));
         int[][] items = node.has("items") ? gridField(node, "items")
                 : new int[VersusRules.BOARD_ROWS][VersusRules.BOARD_COLS];
-        return construct(() -> new PlayerView(cells, next, score, pending, items));
+        int[][] hold = node.has("hold") ? gridField(node, "hold") : new int[0][];
+        int[][] ghost = node.has("ghost") ? gridField(node, "ghost")
+                : new int[VersusRules.BOARD_ROWS][VersusRules.BOARD_COLS];
+        List<int[][]> previews = node.has("previews") ? shapesField(node, "previews") : List.of();
+        return construct(() -> new PlayerView(cells, next, score, pending, items, hold, ghost, previews));
+    }
+
+    private static ArrayNode shapesJson(List<int[][]> shapes) {
+        ArrayNode node = WireFormat.MAPPER.createArrayNode();
+        for (int[][] shape : shapes) node.add(gridJson(shape));
+        return node;
+    }
+
+    private static List<int[][]> shapesField(JsonNode parent, String field) throws ProtocolException {
+        JsonNode node = parent.get(field);
+        if (node == null || !node.isArray()) throw new ProtocolException(ErrorCode.INVALID_FIELD, field);
+        List<int[][]> shapes = new ArrayList<>();
+        for (JsonNode shape : node) {
+            if (!shape.isArray()) throw new ProtocolException(ErrorCode.INVALID_FIELD, field);
+            ObjectNode wrapper = WireFormat.MAPPER.createObjectNode();
+            wrapper.set("shape", shape);
+            shapes.add(gridField(wrapper, "shape"));
+        }
+        return shapes;
     }
     //#endregion
 

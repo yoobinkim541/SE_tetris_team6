@@ -24,13 +24,14 @@ class BattleKeyGuideTest {
         assertEquals("↓", BattleKeyMap.keyLabel(KeyEvent.VK_DOWN));
         assertEquals(KeyEvent.getKeyText(KeyEvent.VK_SPACE), BattleKeyMap.keyLabel(KeyEvent.VK_SPACE));
         var keys = new BattleKeyMap();
-        assertEquals(List.of("← →  이동", "↑  회전", "↓  내리기", KeyEvent.getKeyText(KeyEvent.VK_SPACE) + "  즉시 낙하"),
+        assertEquals(List.of("← →  이동", "↑  회전", "오른쪽 Ctrl  반시계", "↓  내리기",
+                KeyEvent.getKeyText(KeyEvent.VK_SPACE) + "  즉시 낙하", "오른쪽 Shift  홀드"),
                 keys.playerLines(PlayerId.TWO));
         assertEquals("A D  이동", keys.playerLines(PlayerId.ONE).getFirst());
         assertTrue(keys.assign(PlayerId.TWO, GameAction.ROTATE, KeyEvent.VK_Z));
         assertEquals("Z  회전", keys.playerLines(PlayerId.TWO).get(1));
-        assertEquals("일시정지 P · 나가기 Q", keys.sharedLine());
-        assertEquals("일시정지 P · 기권 Q 두 번", BattleKeyMap.online().sharedLine());
+        assertEquals("일시정지 P · 나가기 Esc", keys.sharedLine());
+        assertEquals("일시정지 P · 기권 Esc 두 번", BattleKeyMap.online().sharedLine());
         assertFalse(keys.guide().contains("Left"), "안내에 영어 방향키 이름을 쓰지 않는다");
     }
 

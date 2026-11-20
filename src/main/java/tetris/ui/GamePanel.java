@@ -1,7 +1,9 @@
 package tetris.ui;
 
+import java.awt.AlphaComposite;
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Composite;
 import java.awt.Dimension;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
@@ -141,6 +143,7 @@ public class GamePanel extends JPanel implements GameListener {
         int boardY = padding;
 
         drawBoard(g2, boardX, boardY);
+        drawTSpin(g2, boardX, boardY);
         drawInfo(g2, boardX + cellSize * Board.WIDTH + padding, boardY);
     }
 
@@ -173,6 +176,7 @@ public class GamePanel extends JPanel implements GameListener {
             g.fillRect(x + cell.col() * cellSize, y + cell.row() * cellSize, cellSize, cellSize);
         }
         if (current == null) return;
+        drawGhost(g, snapshot.ghostBlock(), x, y);
         int[][] shape = current.getShape();
         for (int r = 0; r < shape.length; r++) {
             for (int c = 0; c < shape[r].length; c++) {
@@ -183,6 +187,23 @@ public class GamePanel extends JPanel implements GameListener {
         }
     }
 
+    // 가장 최근 Lock이 T-스핀이면 보드 위쪽에 표시한다 (TSP-4). 다음 Lock에서 판정이 바뀌면 사라진다
+    private void drawTSpin(Graphics2D g, int x, int y) {
+        if (snapshot == null || !snapshot.lastTSpin().isTSpin()) return;
+        String text = snapshot.lastTSpin() == tetris.feature.rule.TSpinType.MINI ? "T-SPIN MINI" : "T-SPIN!";
+        int fontSize = Math.max(10, cellSize * 4 / 5);
+        g.setFont(Theme.text(fontSize, true));
+        int boardWidth = cellSize * Board.WIDTH;
+        while (g.getFontMetrics().stringWidth(text) > boardWidth - cellSize && fontSize > 6)
+            g.setFont(Theme.text(--fontSize, true));
+        int textX = x + (boardWidth - g.getFontMetrics().stringWidth(text)) / 2;
+        int textY = y + cellSize * 3;
+        g.setColor(Theme.PANEL);
+        g.drawString(text, textX + 1, textY + 1); // 블록 위에서도 읽히도록 그림자
+        g.setColor(Theme.ACCENT);
+        g.drawString(text, textX, textY);
+    }
+
     private void drawInfo(Graphics2D g, int x, int y) {
         int width = cellSize * INFO_COLUMNS;
         boolean compact = cellSize <= 20;
@@ -191,10 +212,22 @@ public class GamePanel extends JPanel implements GameListener {
 
         y = drawLabel(g, Messages.get("game.next"), x, y, labelSize);
         int boxHeight = cellSize * NEXT_BOX_ROWS;
-        g.setColor(Theme.PANEL);
-        g.fillRect(x, y, width, boxHeight);
-        if (snapshot != null && snapshot.nextBlock() != null) drawNext(g, snapshot.nextBlock(), x, y, width, boxHeight);
-        y += boxHeight + cellSize / 2;
+        boolean modernPreview = snapshot != null && snapshot.nextBlocks().size() > 1;
+        if (modernPreview) {
+            y = drawHold(g, snapshot.holdBlock(), x, y, width, labelSize);
+            boxHeight = cellSize * 2;
+            for (Block preview : snapshot.nextBlocks()) {
+                g.setColor(Theme.PANEL);
+                g.fillRect(x, y, width, boxHeight);
+                drawNext(g, preview, x, y, width, boxHeight);
+                y += boxHeight + cellSize / 4;
+            }
+        } else {
+            g.setColor(Theme.PANEL);
+            g.fillRect(x, y, width, boxHeight);
+            if (snapshot != null && snapshot.nextBlock() != null) drawNext(g, snapshot.nextBlock(), x, y, width, boxHeight);
+            y += boxHeight + cellSize / 2;
+        }
 
         long score = snapshot == null ? 0 : snapshot.score();
         int level = snapshot == null ? 1 : snapshot.level();
@@ -346,6 +379,38 @@ public class GamePanel extends JPanel implements GameListener {
                 drawCell(g, startX + (c - minCol) * cellSize, startY + (r - minRow) * cellSize, cellSize, next.getType(), next.itemCellAt(r, c).orElse(null));
             }
         }
+    }
+
+    /** 착지 미리보기. 색맹 모드는 윤곽만 그려 고정 칸과 헷갈리지 않게 한다 (GST-2) */
+    private void drawGhost(Graphics2D g, Block ghost, int originX, int originY) {
+        if (ghost == null) return;
+        int[][] shape = ghost.getShape();
+        Composite previous = g.getComposite();
+        if (!colorBlindMode) g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, 0.35f));
+        for (int r = 0; r < shape.length; r++) {
+            for (int c = 0; c < shape[r].length; c++) {
+                int row = ghost.getRow() + r;
+                if (shape[r][c] == 0 || row < 0) continue;
+                int x = originX + (ghost.getCol() + c) * cellSize;
+                int y = originY + row * cellSize;
+                if (colorBlindMode) {
+                    g.setColor(palette.color(ghost.getType(), true));
+                    g.drawRect(x + 2, y + 2, cellSize - 5, cellSize - 5);
+                } else {
+                    drawCell(g, x, y, cellSize, ghost.getType(), null);
+                }
+            }
+        }
+        g.setComposite(previous);
+    }
+
+    private int drawHold(Graphics2D g, Block hold, int x, int y, int width, int labelSize) {
+        y = drawLabel(g, Messages.get("game.hold"), x, y, labelSize);
+        int boxHeight = cellSize * 2;
+        g.setColor(Theme.PANEL);
+        g.fillRect(x, y, width, boxHeight);
+        if (hold != null) drawNext(g, hold, x, y, width, boxHeight);
+        return y + boxHeight + cellSize / 4;
     }
 
     /** 현재 블록·고정 블록·Next 공용: 색 + 문자를 항상 함께 그린다 (RND-4, RND-5) */

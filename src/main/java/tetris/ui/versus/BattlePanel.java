@@ -245,8 +245,15 @@ public final class BattlePanel extends JPanel {
         g.setColor(mine ? new Color(0x8BD3FF) : Color.WHITE); g.setFont(new Font(Font.DIALOG,Font.BOLD,22));
         g.drawString(boardTitle(id, viewer)+"  점수 "+player.score(),x,70);
         if (mine) { g.drawRect(x-3,87,10*27+5,20*27+5); g.setColor(Color.WHITE); }
-        renderer.paint(g,player.cells(),player.items(),x,90,27);
-        g.drawString("다음",x+288,114); renderer.paint(g,player.next(),x+288,130,22);
+        renderer.paintGhost(g, player.ghost(), x, 90, 27);
+        renderer.paint(g, player.cells(), player.items(), x, 90, 27);
+        g.setColor(Color.WHITE);
+        g.drawString("홀드", x + 288, 100);
+        renderer.paint(g, player.hold().length == 0 ? new int[0][] : player.hold(), x + 288, 108, 16);
+        g.drawString("다음", x + 288, 180);
+        java.util.List<int[][]> previews = player.previews().isEmpty()
+                ? java.util.List.<int[][]>of(player.next()) : player.previews();
+        for (int i = 0; i < previews.size(); i++) renderer.paint(g, previews.get(i), x + 288, 188 + i * 52, 14);
         var queue = player.pendingRows();
         g.setColor(Color.WHITE); g.drawString("공격 대기 "+queue.size()+"/"+VersusRules.MAX_PENDING_ROWS,x+288,260);
         for(int r=0;r<VersusRules.MAX_PENDING_ROWS;r++) {

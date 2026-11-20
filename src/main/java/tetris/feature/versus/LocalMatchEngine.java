@@ -13,6 +13,7 @@ import tetris.feature.rule.BlockGenerator;
 import tetris.feature.rule.WeightedBlockGenerator;
 import tetris.feature.item.Cell;
 import tetris.feature.item.ItemType;
+import tetris.feature.setting.AutoRepeat;
 import tetris.feature.setting.GameAction;
 import tetris.feature.versus.api.*;
 
@@ -30,6 +31,7 @@ public final class LocalMatchEngine implements MatchEngine {
     private final AttackRows[] outgoing = {AttackRows.NONE, AttackRows.NONE};
     private final java.util.List<EnumSet<GameAction>> held = java.util.List.of(
             EnumSet.noneOf(GameAction.class), EnumSet.noneOf(GameAction.class));
+    private final AutoRepeat[] repeats = {new AutoRepeat(), new AutoRepeat()};
     private final long[] lastSequence = {-1, -1};
     private final ArrayDeque<PlayerCommand> commands = new ArrayDeque<>();
     private long pulseTime;
@@ -42,6 +44,7 @@ public final class LocalMatchEngine implements MatchEngine {
     private boolean timed;
     private long deadline = Long.MAX_VALUE;
     private long pausedAt;
+    private boolean modern;
 
     public LocalMatchEngine() { this(MatchClock.system(), null); }
 
@@ -66,6 +69,7 @@ public final class LocalMatchEngine implements MatchEngine {
         phase = MatchPhase.PLAYING; result = null; commands.clear(); Arrays.fill(lastSequence, -1);
         timed = config.mode().timed();
         deadline = timed ? pulseTime + config.timeLimitMillis() : Long.MAX_VALUE;
+        modern = config.controlStyle().modern();
         GameMode sessionMode = config.mode().itemsEnabled() ? GameMode.ITEM : GameMode.CLASSIC;
         for (PlayerId player : PlayerId.values()) {
             int i = player.ordinal(); held.get(i).clear(); pending[i].clear(); outgoing[i] = AttackRows.NONE;
@@ -78,8 +82,9 @@ public final class LocalMatchEngine implements MatchEngine {
             }, new SpawnBoundary() {
                 @Override public void onLockResolved(LockResult lock) { outgoing[i] = lock.attack(); }
                 @Override public boolean deferSpawn() { return true; }
-            });
+            }, config.controlStyle());
             sessions[i].start();
+            repeats[i].clear();
         }
         updateSnapshot();
     }
@@ -92,14 +97,23 @@ public final class LocalMatchEngine implements MatchEngine {
         if (command.sequence() <= lastSequence[i]) return;
         // D-05: anything that reaches the authority at or after the deadline is ignored.
         if (timed && phase == MatchPhase.PLAYING && time.nowMillis() >= deadline) {
-            if (!command.pressed()) held.get(i).remove(command.action());
+            if (!command.pressed()) {
+                held.get(i).remove(command.action());
+                repeats[i].release(command.action());
+            }
             return;
         }
         lastSequence[i] = command.sequence();
         // Latch physical transitions before deferring gameplay. Otherwise a duplicate
         // press followed by release could be replayed as a fresh press next pulse.
-        if (!command.pressed()) held.get(i).remove(command.action());
-        else if (!command.action().isRepeatable() && !held.get(i).add(command.action())) return;
+        // 모던은 누르고 있는 동안의 추가 press를 버리고 엔진 타이머가 반복한다 (DAS-1).
+        if (!command.pressed()) {
+            held.get(i).remove(command.action());
+            repeats[i].release(command.action());
+        } else if (modern && command.action().isRepeatable()) {
+            if (!held.get(i).add(command.action())) return;
+            repeats[i].press(command.action(), time.nowMillis());
+        } else if (!command.action().isRepeatable() && !held.get(i).add(command.action())) return;
         commands.addLast(command);
     }
 
@@ -141,19 +155,17 @@ public final class LocalMatchEngine implements MatchEngine {
             if (blocked[i] || sessions[i].isSpawnPending()) {
                 blocked[i] = true; deferred.addLast(command); continue;
             }
-            if (sessions[i].getState() != GameState.PLAYING) continue;
-            switch (action) {
-                case MOVE_LEFT -> sessions[i].moveLeft();
-                case MOVE_RIGHT -> sessions[i].moveRight();
-                case SOFT_DROP -> sessions[i].moveDown();
-                case ROTATE -> sessions[i].rotateRight();
-                case HARD_DROP -> sessions[i].hardDrop();
-                default -> throw new IllegalStateException("unexpected gameplay action");
+            if (sessions[i].getState() == GameState.CLEARING && modern && isBuffered(action)) {
+                apply(i, action);
+                continue;
             }
+            if (sessions[i].getState() != GameState.PLAYING) continue;
+            apply(i, action);
         }
         if (phase != MatchPhase.FINISHED) {
             commands.addAll(deferred);
             if (phase == MatchPhase.PLAYING) settleSpawnBoundaries();
+            if (modern && phase == MatchPhase.PLAYING) repeatHeldKeys();
             // D-06: a top-out settled in this pulse already finished the match before the deadline check.
             if (phase == MatchPhase.PLAYING && pulseTime >= deadline) finishTimeUp();
             if (phase != MatchPhase.FINISHED) { revision++; updateSnapshot(); }
@@ -178,6 +190,7 @@ public final class LocalMatchEngine implements MatchEngine {
     private void togglePause() {
         // Keep the shared-key latch until release; drop gameplay held keys at the pause boundary.
         for (var keys : held) keys.removeIf(a -> a != GameAction.PAUSE && a != GameAction.QUIT);
+        for (var repeat : repeats) repeat.clear();
         if (phase == MatchPhase.PLAYING) {
             if (pulseTime >= deadline) return; // the match ends in this pulse; nothing left to freeze
             for (var session : sessions) session.pause(); phase = MatchPhase.PAUSED; pausedAt = pulseTime;
@@ -204,6 +217,7 @@ public final class LocalMatchEngine implements MatchEngine {
         phase = MatchPhase.FINISHED; result = outcome; commands.clear();
         for (var clock : clocks) clock.stop();
         for (var keys : held) keys.clear();
+        for (var repeat : repeats) repeat.clear();
         revision++; updateSnapshot();
     }
 
@@ -230,13 +244,61 @@ public final class LocalMatchEngine implements MatchEngine {
                 }
             }
         }
-        Block next = state.nextBlock();
-        int[][] nextCells = next == null ? new int[0][] : next.getShape();
-        if (next != null) {
-            nextCells = Arrays.stream(nextCells).map(row -> Arrays.stream(row)
-                    .map(value -> value == 0 ? 0 : next.getType().cellValue()).toArray()).toArray(int[][]::new);
+        java.util.List<int[][]> previews = new java.util.ArrayList<>();
+        for (Block preview : state.nextBlocks()) previews.add(shapeCells(preview));
+        int[][] nextCells = previews.isEmpty() ? shapeCells(state.nextBlock()) : previews.get(0);
+        return new MatchSnapshot.PlayerView(cells, nextCells, state.score(), pending[i].rows(), items,
+                shapeCells(state.holdBlock()), ghostCells(state.ghostBlock()), previews);
+    }
+
+    private void apply(int i, GameAction action) {
+        switch (action) {
+            case MOVE_LEFT -> sessions[i].moveLeft();
+            case MOVE_RIGHT -> sessions[i].moveRight();
+            case SOFT_DROP -> sessions[i].moveDown();
+            case ROTATE -> sessions[i].rotateRight();
+            case ROTATE_CCW -> sessions[i].rotateLeft();
+            case HARD_DROP -> sessions[i].hardDrop();
+            case HOLD -> sessions[i].hold();
+            default -> throw new IllegalStateException("unexpected gameplay action");
         }
-        return new MatchSnapshot.PlayerView(cells, nextCells, state.score(), pending[i].rows(), items);
+    }
+
+    private static boolean isBuffered(GameAction action) {
+        return action == GameAction.ROTATE || action == GameAction.ROTATE_CCW
+                || action == GameAction.HOLD || action == GameAction.HARD_DROP;
+    }
+
+    private void repeatHeldKeys() {
+        for (int i = 0; i < 2; i++) {
+            boolean ready = sessions[i].getState() == GameState.PLAYING && !sessions[i].isSpawnPending();
+            for (GameAction action : repeats[i].poll(pulseTime)) {
+                if (ready) apply(i, action);
+            }
+        }
+    }
+
+    private static int[][] shapeCells(Block block) {
+        if (block == null) return new int[0][];
+        int[][] shape = block.getShape();
+        int[][] cells = new int[shape.length][];
+        for (int r = 0; r < shape.length; r++) {
+            cells[r] = new int[shape[r].length];
+            for (int c = 0; c < shape[r].length; c++) cells[r][c] = shape[r][c] == 0 ? 0 : block.getType().cellValue();
+        }
+        return cells;
+    }
+
+    private static int[][] ghostCells(Block ghost) {
+        int[][] grid = new int[VersusRules.BOARD_ROWS][VersusRules.BOARD_COLS];
+        if (ghost == null) return grid;
+        int[][] shape = ghost.getShape();
+        for (int r = 0; r < shape.length; r++) for (int c = 0; c < shape[r].length; c++) {
+            int row = ghost.getRow() + r, col = ghost.getCol() + c;
+            if (shape[r][c] != 0 && row >= 0 && row < VersusRules.BOARD_ROWS && col >= 0 && col < VersusRules.BOARD_COLS)
+                grid[row][col] = ghost.getType().cellValue();
+        }
+        return grid;
     }
 
     @Override public MatchSnapshot snapshot() {

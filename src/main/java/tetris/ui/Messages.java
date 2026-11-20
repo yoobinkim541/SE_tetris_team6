@@ -69,6 +69,7 @@ public class Messages {
         TEXT.put("settings.difficulty", "난이도");
         TEXT.put("settings.controlKeys", "조작키");
         TEXT.put("settings.colorBlind", "색맹 모드");
+        TEXT.put("settings.controlStyle", "조작 방식");
         TEXT.put("settings.devNetOverlay", "개발자: 연결 상태 표시");
         TEXT.put("settings.resetScoreboard", "스코어보드 초기화");
         TEXT.put("settings.resetSettings", "설정 초기화");
@@ -81,6 +82,8 @@ public class Messages {
         TEXT.put("settings.saveFailed", "설정을 저장하지 못했습니다 (이번 실행에만 적용됩니다)");
         TEXT.put("settings.scoreboardCleared", "스코어보드를 초기화했습니다");
         TEXT.put("settings.settingsReset", "설정을 기본값으로 되돌렸습니다");
+        TEXT.put("style.CLASSIC", "클래식(명세)");
+        TEXT.put("style.MODERN", "모던");
 
         TEXT.put("size.SMALL", "Small");
         TEXT.put("size.MEDIUM", "Medium");
@@ -94,9 +97,12 @@ public class Messages {
         TEXT.put("action.MOVE_RIGHT", "오른쪽 이동");
         TEXT.put("action.SOFT_DROP", "소프트 드롭");
         TEXT.put("action.ROTATE", "회전");
+        TEXT.put("action.ROTATE_CCW", "반시계 회전");
         TEXT.put("action.HARD_DROP", "하드 드롭");
+        TEXT.put("action.HOLD", "홀드");
         TEXT.put("action.PAUSE", "일시정지");
         TEXT.put("action.QUIT", "게임 끝내기");
+        TEXT.put("game.hold", "홀드");
 
         TEXT.put("guide.move", "이동");
         TEXT.put("guide.mainMenu", "↑/↓ 이동   Enter 선택");
@@ -162,8 +168,8 @@ public class Messages {
                     keyName(keyMap, GameAction.MOVE_LEFT) + "/" + keyName(keyMap, GameAction.MOVE_RIGHT)
                             + "  " + get("guide.move"),
                     gameKeyLine(keyMap, GameAction.SOFT_DROP),
-                    gameKeyLine(keyMap, GameAction.ROTATE),
-                    gameKeyLine(keyMap, GameAction.HARD_DROP),
+                    gameKeyLine(keyMap, GameAction.ROTATE) + " / " + keyName(keyMap, GameAction.ROTATE_CCW),
+                    gameKeyLine(keyMap, GameAction.HARD_DROP) + " / " + keyName(keyMap, GameAction.HOLD),
                     gameKeyLine(keyMap, GameAction.PAUSE),
                     gameKeyLine(keyMap, GameAction.QUIT));
         };

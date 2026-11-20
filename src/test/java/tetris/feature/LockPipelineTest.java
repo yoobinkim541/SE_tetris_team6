@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static tetris.feature.GameTestSupport.sequence;
 import static tetris.feature.GameTestSupport.startedSession;
 
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import tetris.component.block.Block;
 import tetris.component.block.IBlock;
@@ -81,10 +82,10 @@ public class LockPipelineTest {
     }
 
     @Test
-    void 하강에_실패하면_즉시_Lock() { // LCK-2
+    void 하강에_실패하면_즉시_Lock() { // LCK-2 (1차 정책)
         ImmediateLockPolicy policy = new ImmediateLockPolicy();
-        assertTrue(policy.shouldLock(true));
-        assertFalse(policy.shouldLock(false));
+        assertFalse(policy.hasDelay());
+        assertEquals(0, policy.maxResets());
     }
     //#endregion
 
@@ -105,7 +106,7 @@ public class LockPipelineTest {
         assertEquals("....OO....", AsciiBoard.row(s, 18));   // 고정 칸은 대문자
         assertEquals("....OO....", AsciiBoard.row(s, 19));
         assertEquals("....t.....", AsciiBoard.row(s, 0));    // 다음 블록 Spawn
-        assertEquals(2, clock.starts.size());                 // Spawn마다 타이머 재시작 (S4)
+        assertEquals(List.of(1000, 500, 1000), clock.starts); // Spawn(S4) → 착지 유예 0.5초 (LCK-6) → 다음 Spawn
     }
 
     @Test

@@ -4,8 +4,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import tetris.feature.game.Difficulty;
 import tetris.feature.setting.GameAction;
+import tetris.feature.setting.KeyMap;
 import tetris.feature.setting.ScreenSize;
 import tetris.feature.setting.Settings;
+import tetris.feature.setting.ControlStyle;
 
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -43,6 +45,7 @@ public class JsonSettingsRepository implements SettingsRepository {
         root.put("colorBlindMode", settings.isColorBlindMode());
         root.put("devNetworkOverlay", settings.isDevNetworkOverlay());
         root.put("difficulty", settings.getDifficulty().name());
+        root.put("controlStyle", settings.getControlStyle().name());
         ObjectNode keys = root.putObject("keys");
         settings.getKeyMap().codes().forEach((action, keyCode) -> keys.put(action.name(), keyCode));
         return file.write(root);
@@ -56,6 +59,7 @@ public class JsonSettingsRepository implements SettingsRepository {
         applyColorBlindMode(root.get("colorBlindMode"), settings, warnings);
         applyDevNetworkOverlay(root.get("devNetworkOverlay"), settings, warnings);
         applyDifficulty(root.get("difficulty"), settings, warnings);
+        applyControlStyle(root.get("controlStyle"), settings, warnings);
         applyKeys(root.get("keys"), settings, warnings);
         return new LoadResult<>(settings, warnings);
     }
@@ -104,13 +108,35 @@ public class JsonSettingsRepository implements SettingsRepository {
         warnings.add("난이도 설정이 올바르지 않아 기본값(Normal)을 사용합니다.");
     }
 
-    /** 중복·누락·예약키가 하나라도 있으면 keys 전체를 기본값으로 둔다. 검증은 KeyMap이 한다 */
+    /** 없으면 경고 없이 모던. 값이 이상하면 모던으로 두고 경고 한 번 (colorBlindMode와 같은 방식) */
+    private static void applyControlStyle(JsonNode node, Settings settings, List<String> warnings) {
+        if (isAbsent(node)) return;
+        if (node.isTextual()) {
+            try {
+                settings.setControlStyle(ControlStyle.valueOf(node.asText()));
+                return;
+            } catch (IllegalArgumentException unknown) {
+                // 아래에서 경고한다
+            }
+        }
+        warnings.add("조작 방식 설정이 올바르지 않아 기본값(모던)을 사용합니다.");
+    }
+
+    /** 중복·누락·예약키가 하나라도 있으면 keys 전체를 기본값으로 둔다. 예전 파일에 없는 반시계·홀드는 기본키로 채운다 */
     private static void applyKeys(JsonNode node, Settings settings, List<String> warnings) {
         if (isAbsent(node)) return;
-
-        if (!settings.getKeyMap().tryReplaceAll(readKeyCodes(node))) {
+        Map<GameAction, Integer> codes = readKeyCodes(node);
+        fillMissingModernKeys(codes);
+        if (!settings.getKeyMap().tryReplaceAll(codes)) {
             warnings.add("조작키 설정이 올바르지 않아 기본 조작키를 사용합니다.");
         }
+    }
+
+    /** 예전 설정 파일에는 없는 기능만 기본키로 채운다. 나머지 누락은 그대로 둬서 전체 검증이 실패하게 한다 */
+    private static void fillMissingModernKeys(Map<GameAction, Integer> codes) {
+        KeyMap defaults = new KeyMap();
+        if (!codes.containsKey(GameAction.ROTATE_CCW)) codes.put(GameAction.ROTATE_CCW, defaults.keyOf(GameAction.ROTATE_CCW));
+        if (!codes.containsKey(GameAction.HOLD)) codes.put(GameAction.HOLD, defaults.keyOf(GameAction.HOLD));
     }
 
     private static Map<GameAction, Integer> readKeyCodes(JsonNode keysNode) {
