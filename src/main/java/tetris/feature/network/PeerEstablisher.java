@@ -11,6 +11,8 @@ import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.time.Duration;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.function.Consumer;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
@@ -24,6 +26,8 @@ import tetris.feature.network.protocol.Message;
 import tetris.feature.network.protocol.MessageType;
 import tetris.feature.network.protocol.PeerRole;
 import tetris.feature.network.protocol.ProtocolException;
+import tetris.relay.LobbyCode;
+import tetris.relay.RelayLine;
 
 /**
  * 호스트 소켓 대기, 클라이언트 소켓 접속, HELLO 역할 핸드셰이크, 타임아웃·취소를 담당한다 (S8-C1).
@@ -105,6 +109,132 @@ public final class PeerEstablisher {
         InetSocketAddress endpoint = new InetSocketAddress(target, parsed.port());
         startDaemon("peer-connect-" + WORKER_IDS.incrementAndGet(), () -> connectOnce(state, endpoint));
         return new Attempt(state);
+    }
+
+    /**
+     * challenge: 중계 서버에 방을 만들고 친구를 기다린다. 받은 로비 코드는 dispatcher에서 {@code onRoomCode}로 알린다.
+     * 친구가 들어오면(PAIRED) 그 소켓으로 기존 HELLO 핸드셰이크를 이어 간다.
+     */
+    public Attempt hostRelay(InetSocketAddress relay, Consumer<String> onRoomCode) {
+        Objects.requireNonNull(relay, "relay");
+        Objects.requireNonNull(onRoomCode, "onRoomCode");
+        AttemptState state = new AttemptState(dispatcher, timeout, PeerRole.HOST, -1, null, new Socket());
+        startDaemon("relay-host-" + WORKER_IDS.incrementAndGet(), () -> hostRelayOnce(state, relay, onRoomCode));
+        return new Attempt(state);
+    }
+
+    /** challenge: 로비 코드로 중계 서버의 방에 들어간다. 코드 형식 오류는 스레드 없이 즉시 실패한다 */
+    public Attempt joinRelay(InetSocketAddress relay, String code) {
+        Objects.requireNonNull(relay, "relay");
+        Optional<String> normalized = LobbyCode.normalize(code);
+        if (normalized.isEmpty()) {
+            return Attempt.failedImmediately(
+                    new EstablishException(EstablishFailure.INVALID_ADDRESS, "lobby code " + code));
+        }
+        AttemptState state = new AttemptState(dispatcher, timeout, PeerRole.CLIENT, -1, null, new Socket());
+        state.displayPeer = relayDisplay(normalized.get());
+        startDaemon("relay-join-" + WORKER_IDS.incrementAndGet(),
+                () -> joinRelayOnce(state, relay, normalized.get()));
+        return new Attempt(state);
+    }
+
+    private static String relayDisplay(String code) {
+        return "인터넷 · " + LobbyCode.display(code);
+    }
+
+    private int timeoutMillis() {
+        return (int) Math.min(Integer.MAX_VALUE, Math.max(1L, timeout.toMillis()));
+    }
+
+    /** 중계 서버 접속. 실패면 시도를 끝내고 false */
+    private boolean connectRelay(AttemptState state, InetSocketAddress relay) {
+        try {
+            state.rawSocket.connect(relay, timeoutMillis());
+            state.rawSocket.setSoTimeout(timeoutMillis());
+            return true;
+        } catch (IOException e) {
+            closeQuietly(state.rawSocket);
+            state.failFromWorker(EstablishFailure.RELAY_UNAVAILABLE, String.valueOf(e.getMessage()), e);
+            return false;
+        }
+    }
+
+    private void hostRelayOnce(AttemptState state, InetSocketAddress relay, Consumer<String> onRoomCode) {
+        if (!connectRelay(state, relay)) return;
+        Socket socket = state.rawSocket;
+        String code;
+        try {
+            RelayLine.write(socket.getOutputStream(), "HOST v1");
+            String reply = RelayLine.read(socket.getInputStream());
+            if (!reply.startsWith("ROOM ")) {
+                failRelayReply(state, reply);
+                return;
+            }
+            Optional<String> parsed = LobbyCode.normalize(reply.substring(5));
+            if (parsed.isEmpty()) {
+                failRelayReply(state, reply);
+                return;
+            }
+            code = parsed.get();
+        } catch (SocketTimeoutException e) {
+            closeQuietly(socket);
+            state.failFromWorker(EstablishFailure.TIMEOUT, "relay did not answer HOST", e);
+            return;
+        } catch (IOException e) {
+            closeQuietly(socket);
+            state.failFromWorker(EstablishFailure.RELAY_UNAVAILABLE, String.valueOf(e.getMessage()), e);
+            return;
+        }
+        state.displayPeer = relayDisplay(code);
+        state.notifyRoomCode(onRoomCode, code);
+        try {
+            socket.setSoTimeout(0); // 친구를 기다리는 동안은 서버의 대기 만료에 맡긴다
+            String paired = RelayLine.read(socket.getInputStream());
+            if (!paired.equals("PAIRED")) {
+                failRelayReply(state, paired);
+                return;
+            }
+        } catch (IOException e) {
+            closeQuietly(socket);
+            state.failFromWorker(EstablishFailure.ROOM_EXPIRED, "relay closed the waiting room", e);
+            return;
+        }
+        state.beginHandshake(socket);
+    }
+
+    private void joinRelayOnce(AttemptState state, InetSocketAddress relay, String code) {
+        if (!connectRelay(state, relay)) return;
+        Socket socket = state.rawSocket;
+        try {
+            RelayLine.write(socket.getOutputStream(), "JOIN v1 " + code);
+            String reply = RelayLine.read(socket.getInputStream());
+            if (!reply.equals("OK")) {
+                failRelayReply(state, reply);
+                return;
+            }
+            socket.setSoTimeout(0); // 이후 읽기 시간 초과는 PeerConnection이 오류로 끊으므로 해제한다
+        } catch (SocketTimeoutException e) {
+            closeQuietly(socket);
+            state.failFromWorker(EstablishFailure.TIMEOUT, "relay did not answer JOIN", e);
+            return;
+        } catch (IOException e) {
+            closeQuietly(socket);
+            state.failFromWorker(EstablishFailure.RELAY_UNAVAILABLE, String.valueOf(e.getMessage()), e);
+            return;
+        }
+        state.beginHandshake(socket);
+    }
+
+    private static void failRelayReply(AttemptState state, String reply) {
+        closeQuietly(state.rawSocket);
+        EstablishFailure reason = switch (reply) {
+            case "ERR NO_ROOM" -> EstablishFailure.NO_ROOM;
+            case "ERR ROOM_FULL" -> EstablishFailure.ROOM_FULL;
+            case "ERR SLOW_DOWN" -> EstablishFailure.SLOW_DOWN;
+            case "ERR FULL" -> EstablishFailure.SERVER_FULL;
+            default -> EstablishFailure.PROTOCOL_ERROR;
+        };
+        state.failFromWorker(reason, "relay replied " + reply, null);
     }
 
     private void acceptOnce(AttemptState state) {
@@ -222,6 +352,20 @@ public final class PeerEstablisher {
         private ScheduledFuture<?> timeoutFuture;
         /** dispatcher 스레드에서만 접근한다 */
         private PeerLink establishedLink;
+        /** challenge: 중계 경유면 화면에 보일 상대 이름("인터넷 · K7Q-M2X"). 직접 연결이면 null */
+        volatile String displayPeer;
+
+        /** 로비 코드를 dispatcher에서 알린다. 이미 취소·실패한 시도면 알리지 않는다 */
+        void notifyRoomCode(Consumer<String> onRoomCode, String code) {
+            if (settled.get()) return;
+            try {
+                dispatcher.execute(() -> {
+                    if (!settled.get()) onRoomCode.accept(code);
+                });
+            } catch (RuntimeException rejected) {
+                // dispatcher가 멈췄으면 알릴 곳이 없다
+            }
+        }
 
         AttemptState(
                 Executor dispatcher,
@@ -341,7 +485,7 @@ public final class PeerEstablisher {
                 }
                 cancelTimeoutLocked();
                 conn = this.connection;
-                peerAddress = this.rawSocket.getInetAddress().getHostAddress();
+                peerAddress = displayPeer != null ? displayPeer : this.rawSocket.getInetAddress().getHostAddress();
             }
             PeerLink link = new PeerLink(role, peerAddress, conn);
             this.establishedLink = link;

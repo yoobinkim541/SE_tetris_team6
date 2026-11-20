@@ -13,5 +13,17 @@ public enum EstablishFailure {
     /** 핸드셰이크 규칙 위반 (같은 역할, HELLO 전 다른 메시지, 잘못된 프레임 등) */
     PROTOCOL_ERROR,
     /** 그 외 소켓 입출력 실패 또는 핸드셰이크 중 연결 종료 */
-    IO_ERROR
+    IO_ERROR,
+    /** challenge: 중계 서버에 접속할 수 없다 */
+    RELAY_UNAVAILABLE,
+    /** challenge: 그 로비 코드의 방이 없다 */
+    NO_ROOM,
+    /** challenge: 이미 짝지어진 방이다 */
+    ROOM_FULL,
+    /** challenge: 없는 코드를 너무 자주 시도했다 */
+    SLOW_DOWN,
+    /** challenge: 중계 서버의 방이 가득 찼다 */
+    SERVER_FULL,
+    /** challenge: 친구가 오기 전에 서버가 대기 방을 닫았다 */
+    ROOM_EXPIRED
 }

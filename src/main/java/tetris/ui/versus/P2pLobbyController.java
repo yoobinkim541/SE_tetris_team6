@@ -323,6 +323,12 @@ public final class P2pLobbyController implements P2pLobbyPanel.Actions, AutoClos
                 case TIMEOUT -> "응답이 없습니다. 같은 LAN인지, 방화벽 허용을 확인하세요.";
                 case PROTOCOL_ERROR -> "상대 프로그램 버전이 다르거나 응답이 올바르지 않습니다.";
                 case IO_ERROR -> "연결 중 오류가 났습니다. 다시 시도하세요.";
+                case RELAY_UNAVAILABLE -> "중계 서버에 연결할 수 없습니다. 인터넷 연결을 확인하세요.";
+                case NO_ROOM -> "그 코드의 방이 없습니다. 코드를 확인하세요.";
+                case ROOM_FULL -> "이미 대전 중인 방입니다.";
+                case SLOW_DOWN -> "잠시 후 다시 시도하세요.";
+                case SERVER_FULL -> "서버가 혼잡합니다. 잠시 후 다시 시도하세요.";
+                case ROOM_EXPIRED -> "방이 만료되었습니다. 다시 만드세요.";
             };
         }
         return "연결 실패: " + cause.getMessage();
