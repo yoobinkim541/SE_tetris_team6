@@ -372,8 +372,9 @@ public class SettingPanel extends JPanel {
 
         if (!notice.isEmpty()) {
             g2.setFont(Theme.text(Math.max(14, unit * 4 / 5), true));
-            g2.setColor(noticeIsError ? Theme.WARNING : tetris.ui.theme.UiKit.CYAN);
-            tetris.ui.theme.UiKit.drawInBox(g2, notice,
+            g2.setColor(java.awt.Color.WHITE);
+            String shown = noticeIsError && !notice.startsWith("⚠") ? "⚠ " + notice : notice;
+            tetris.ui.theme.UiKit.drawInBox(g2, shown,
                     new java.awt.Rectangle(pad, y, w - pad * 2, unit * 2), tetris.ui.theme.UiKit.Align.CENTER);
         }
 

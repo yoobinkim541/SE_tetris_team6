@@ -138,11 +138,12 @@ public class MainMenuPanel extends JPanel {
 
         int warnSize = Math.max(10, unit * 3 / 4);
         g2.setFont(Theme.text(warnSize, false));
-        g2.setColor(Theme.WARNING);
+        g2.setColor(java.awt.Color.WHITE);
         int y = h - unit * 4 - warnings.size() * Math.max(8, unit);
         for (String warning : warnings) {
             g2.setFont(Theme.text(warnSize, false));
-            tetris.ui.theme.UiKit.drawInBox(g2, warning,
+            String shown = warning.startsWith("⚠") ? warning : "⚠ " + warning;
+            tetris.ui.theme.UiKit.drawInBox(g2, shown,
                     new java.awt.Rectangle(unit, y - warnSize, w - unit * 2, warnSize + 4),
                     tetris.ui.theme.UiKit.Align.CENTER);
             y += Math.max(8, unit);

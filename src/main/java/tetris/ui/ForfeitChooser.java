@@ -125,7 +125,7 @@ public final class ForfeitChooser {
                 UiKit.drawInBox(g, labels[i], buttons[i], UiKit.Align.CENTER);
             }
             g.setFont(GameTheme.text(12, false));
-            g.setColor(new Color(0xC9D2EA));
+            g.setColor(Color.WHITE);
             GameTheme.drawCentered(g, "← → 선택, Enter 확정, Esc 취소", getWidth() / 2, 176);
         }
     }

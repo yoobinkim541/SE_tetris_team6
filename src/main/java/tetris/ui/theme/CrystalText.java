@@ -105,7 +105,8 @@ public final class CrystalText {
             layer.setStroke(new BasicStroke(Math.max(1.25f, font.getSize() / 18f),
                     BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
             layer.draw(shape);
-            layer.setColor(selected ? Color.WHITE : new Color(0xEAF6FF));
+            // 메뉴·제목 글자는 모두 흰색. 선택 상태는 글자 색이 아니라 버튼 그림·화살표·크기로 보인다
+            layer.setColor(Color.WHITE);
             layer.fill(shape);
         } finally {
             layer.dispose();

@@ -15,8 +15,9 @@ final class Theme {
     static final Color BACKGROUND = new Color(0x1B1E24);
     static final Color PANEL = new Color(0x262A33);
     static final Color GRID = new Color(0x323744);
-    static final Color TEXT = new Color(0xE8E8E8);
-    static final Color DIM_TEXT = new Color(0x9AA0AA);
+    /** 메뉴형 화면의 글자는 모두 흰색. 위계는 색이 아니라 크기·굵기로 나눈다 */
+    static final Color TEXT = Color.WHITE;
+    static final Color DIM_TEXT = Color.WHITE;
     static final Color ACCENT = new Color(0xFFC94D);
     static final Color HIGHLIGHT_ROW = new Color(0x3D4A63);
     static final Color WARNING = new Color(0xFF8A65);

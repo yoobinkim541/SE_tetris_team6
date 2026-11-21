@@ -172,7 +172,8 @@ public class ScoreBoardPanel extends JPanel {
             }
             if (i < 3) drawMedal(g2, rankX - unit, baseline - unit / 2, i);
             g2.setFont(Theme.font(entry.name(), unit, false));
-            g2.setColor(i == highlightIndex ? Theme.ACCENT : Theme.TEXT);
+            // 강조 행은 배경과 굵은 테두리로 구분하고 글자는 흰색 그대로
+            g2.setColor(Theme.TEXT);
             tetris.ui.theme.UiKit.drawInBox(g2, String.valueOf(i + 1),
                     new java.awt.Rectangle(rankX, row.y, unit * 2, row.height), tetris.ui.theme.UiKit.Align.RIGHT);
             tetris.ui.theme.UiKit.drawInBox(g2, entry.name(),
