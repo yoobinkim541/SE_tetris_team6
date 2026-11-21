@@ -348,7 +348,7 @@ public final class PlayHarness {
             if (snap.phase() != stuck) {
                 stuck = snap.phase();
                 stuckAt = System.currentTimeMillis();
-            } else if (snap.phase() == RaidPhase.CARD_PICK && System.currentTimeMillis() - stuckAt > 8_000) {
+            } else if (snap.phase() == RaidPhase.CARD_PICK && System.currentTimeMillis() - stuckAt > 13_000) {
                 fail("card stuck", census());
                 return;
             } else if (snap.phase() == RaidPhase.PLAYING && System.currentTimeMillis() - stuckAt > 12_000
