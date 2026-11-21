@@ -942,7 +942,7 @@ public final class RaidPanel extends JPanel {
             layer.translate(window.x + window.width / 2.0, bottom);
             layer.scale(breath, breath);
             layer.translate(-(window.x + window.width / 2.0), -bottom);
-            float alpha = motion.defeatAlpha();
+            float alpha = restPose ? 1f : motion.defeatAlpha();
             if (alpha < 0.99f) layer.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, Math.max(0.08f, alpha)));
             if (image == null) paintBossFallback(layer, boss.id(), x, y, Math.min(drawW, 180));
             else layer.drawImage(image, x, y, null);

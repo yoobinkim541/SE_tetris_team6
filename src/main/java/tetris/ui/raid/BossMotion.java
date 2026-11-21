@@ -40,6 +40,7 @@ final class BossMotion {
             shown = id;
             shownLevel = level;
             trail = hp;
+            defeat = -1;
             if (events != null) {
                 for (RaidEvent event : events) {
                     if (event.type() == RaidEvent.Type.BOSS_SPAWN) intro = INTRO_FRAMES;
@@ -62,7 +63,10 @@ final class BossMotion {
                         spawnShards();
                     }
                 }
-                case BOSS_SPAWN -> intro = INTRO_FRAMES;
+                case BOSS_SPAWN -> {
+                    intro = INTRO_FRAMES;
+                    defeat = -1;
+                }
                 default -> {
                 }
             }
@@ -77,7 +81,10 @@ final class BossMotion {
             intro--;
             if (!StarfieldBackground.lowEffects() && intro % 2 == 0) puff();
         }
-        if (defeat > 0) defeat--;
+        if (defeat > 0) {
+            defeat--;
+            if (defeat == 0) defeat = -1;
+        }
         for (Dust bit : dust) if (bit != null && bit.life > 0) bit.tick();
         if (defeat >= 0 && !StarfieldBackground.lowEffects()) {
             for (Shard shard : shards) if (shard != null && shard.life > 0) shard.tick();

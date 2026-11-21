@@ -82,6 +82,8 @@ public class MainFrame extends JFrame {
     private final JPanel root = new JPanel(cards);
     private final tetris.ui.input.Stage stage = new tetris.ui.input.Stage(root);
     private boolean appliedFullscreen;
+    private boolean changingChrome;
+    private long ignoreFocusLossUntil;
     private final KeyEventDispatcher fullscreenKeys = this::onFullscreenKey;
     private final Map<Screen, JComponent> screens = new EnumMap<>(Screen.class);
     private final MainMenuPanel mainMenuPanel;
@@ -234,8 +236,17 @@ public class MainFrame extends JFrame {
         setResizable(false);
         addWindowListener(new WindowAdapter() {
             @Override
+            public void windowOpened(WindowEvent e) {
+                if (settings.isFullscreen()) setBounds(monitorBounds());
+                restoreFocus();
+            }
+            @Override
             public void windowDeactivated(WindowEvent e) {
-                onFocusLost();
+                SwingUtilities.invokeLater(() -> {
+                    if (changingChrome || System.nanoTime() < ignoreFocusLossUntil) return;
+                    if (isActive()) return;
+                    onFocusLost();
+                });
             }
             @Override public void windowClosing(WindowEvent e) { closeBattle(); closeP2p(); closeRaid(); }
         });
@@ -292,12 +303,18 @@ public class MainFrame extends JFrame {
         applyLogicalCell(fitCellSize(size.cellPixels()));
         pack();
         setLocationRelativeTo(null);
+        restoreFocus();
     }
 
     /** F11·Alt+Enter. Esc는 그대로 둔다 */
     public void toggleFullscreen() {
+        boolean wasPlaying = currentScreen == Screen.GAME && (session.getState() == GameState.PLAYING
+                || session.getState() == GameState.CLEARING);
         settings.setFullscreen(!settings.isFullscreen());
         onSettingsChanged();
+        if (wasPlaying) SwingUtilities.invokeLater(() -> {
+            if (session.getState() == GameState.PAUSED) session.resume();
+        });
     }
 
     public boolean isFullscreen() {
@@ -326,11 +343,36 @@ public class MainFrame extends JFrame {
 
     private void setBorderless(boolean borderless, Rectangle bounds) {
         boolean show = isVisible();
-        if (isDisplayable() && isUndecorated() != borderless) super.dispose();
-        if (!isDisplayable()) setUndecorated(borderless);
-        setResizable(false);
-        if (bounds != null) setBounds(bounds);
-        if (show && !isVisible()) setVisible(true);
+        changingChrome = true;
+        ignoreFocusLossUntil = System.nanoTime() + 800_000_000L;
+        Rectangle target = bounds == null ? null : new Rectangle(bounds);
+        try {
+            if (isDisplayable() && isUndecorated() != borderless) super.dispose();
+            if (isDisplayable() && isUndecorated() != borderless) {
+                setVisible(false);
+                super.dispose();
+            }
+            if (!isDisplayable()) setUndecorated(borderless);
+            setExtendedState(NORMAL);
+            setResizable(true);
+            if (target != null) setBounds(target);
+            if (show && !isVisible()) setVisible(true);
+            if (target != null && isDisplayable()) setBounds(target);
+            setResizable(false);
+            if (target != null && isDisplayable()) setBounds(target);
+        } catch (RuntimeException failure) {
+            tetris.feature.save.ErrorLog.shared().report("fullscreen", failure);
+            if (show && !isVisible()) {
+                try {
+                    setVisible(true);
+                } catch (RuntimeException ignored) {
+                    failure.addSuppressed(ignored);
+                }
+            }
+        } finally {
+            changingChrome = false;
+            ignoreFocusLossUntil = System.nanoTime() + 800_000_000L;
+        }
     }
 
     private Rectangle monitorBounds() {
@@ -400,6 +442,16 @@ public class MainFrame extends JFrame {
     /** 시작할 때 읽은 저장 파일 경고를 Main Menu에 1회 표시 */
     public void showWarnings(List<String> warnings) {
         mainMenuPanel.showWarnings(warnings);
+    }
+
+    /** EDT 예외 안내. 게임을 멈추지 않고 한 줄만 띄운다 */
+    public void reportFailure(Throwable error) {
+        if (error == null) return;
+        if (!SwingUtilities.isEventDispatchThread()) {
+            SwingUtilities.invokeLater(() -> reportFailure(error));
+            return;
+        }
+        stage.setNotice("오류가 기록되었습니다. 게임은 계속됩니다.");
     }
 
     // ── 화면 흐름 ────────────────────────────
@@ -529,6 +581,7 @@ public class MainFrame extends JFrame {
 
     /** 창 포커스 이탈: 게임 중이면 자동 Pause, 눌림 상태 초기화 (PAU-3, KEY-8) */
     private void onFocusLost() {
+        if (changingChrome || System.nanoTime() < ignoreFocusLossUntil) return;
         keyBindings.clearPressedKeys();
         if (currentScreen == Screen.BATTLE && battleController != null) battleController.focusLost();
         if (currentScreen == Screen.RAID && raidController != null) raidController.focusLost();

@@ -33,6 +33,7 @@ public final class Stage extends JPanel {
     private int logicalH = 1;
     private String backdrop;
     private Runnable pauseAction;
+    private String notice = "";
     private final Rectangle pauseBox = new Rectangle();
     private AffineTransform paint = new AffineTransform();
 
@@ -78,6 +79,12 @@ public final class Stage extends JPanel {
         repaint();
     }
 
+    /** 예외 안내. 화면 전체를 덮지 않는 한 줄이다 */
+    public void setNotice(String text) {
+        notice = text == null ? "" : text;
+        repaint();
+    }
+
     public Fit fit() {
         return Fit.contain(Math.max(1, getWidth()), Math.max(1, getHeight()), logicalW, logicalH);
     }
@@ -106,6 +113,7 @@ public final class Stage extends JPanel {
             paintWide(g2);
             layoutPause();
             paintPause(g2);
+            paintNotice(g2);
         } finally {
             g2.dispose();
         }
@@ -187,6 +195,18 @@ public final class Stage extends JPanel {
         int y = pauseBox.y + (pauseBox.height - barH) / 2;
         g.fillRoundRect(x, y, barW, barH, 2, 2);
         g.fillRoundRect(x + barW + gap, y, barW, barH, 2, 2);
+    }
+
+    private void paintNotice(Graphics2D g) {
+        if (notice.isEmpty() || getWidth() < 80) return;
+        g.setFont(tetris.ui.theme.GameTheme.text(13, false));
+        int width = Math.min(getWidth() - 24, g.getFontMetrics().stringWidth(notice) + 24);
+        int x = (getWidth() - width) / 2;
+        int y = getHeight() - 36;
+        g.setColor(new Color(8, 12, 28, 210));
+        g.fillRoundRect(x, y, width, 26, 10, 10);
+        g.setColor(Color.WHITE);
+        g.drawString(notice, x + 12, y + 18);
     }
 
     private boolean pauseHit(MouseEvent e) {

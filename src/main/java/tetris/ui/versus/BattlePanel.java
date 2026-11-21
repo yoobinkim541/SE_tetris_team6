@@ -193,8 +193,6 @@ public final class BattlePanel extends JPanel {
             if (scale <= 0) return;
             g.translate(designOrigin(getWidth(), 960, scale), designOrigin(getHeight(), 720, scale));
             g.scale(scale, scale);
-            g.setColor(new Color(8, 10, 22, 150));
-            g.fillRect(0, 0, 960, 720);
             paintModeCapsule(g);
             if (!connectionNotice.isEmpty()) {
                 g.setFont(tetris.ui.theme.GameTheme.fontFor(connectionNotice, 13, false));
