@@ -243,12 +243,13 @@ public final class RelayServer implements Closeable {
         }
         conn.room = room;
         String line = listed ? "ROOM " + room.code + " " + room.id : "ROOM " + room.code;
+        // 답을 보내기 전에 핸드셰이크를 끝낸다. 답을 받은 상대가 움직인 뒤 sweep이 돌면
+        // 아직 핸드셰이크 중인 연결로 보고 방금 만든 방을 닫을 수 있다
+        finishPending(conn);
         if (!reply(conn, line)) {
-            finishPending(conn);
             closeRoom(room, "host write failed");
             return;
         }
-        finishPending(conn);
         log("room " + room.code + (listed ? " listed" : " waiting"));
         pump(conn, room, true);
     }
@@ -349,14 +350,15 @@ public final class RelayServer implements Closeable {
             failHandshake(conn, error);
             return;
         }
+        // host()와 같은 이유로 핸드셰이크 종료와 활동 시각 기록을 답보다 먼저 한다
+        finishPending(conn);
+        room.touch(nanoClock.getAsLong());
         // 클라이언트에 OK를 먼저 써야 호스트가 PAIRED를 받고 보낸 첫 프레임보다 OK가 앞선다
         boolean ok = reply(conn, "OK") && reply(room.host, "PAIRED");
-        finishPending(conn);
         if (!ok) {
             closeRoom(room, "pair write failed");
             return;
         }
-        room.touch(nanoClock.getAsLong());
         log("room " + room.code + " paired");
         pump(conn, room, false);
     }
