@@ -27,13 +27,15 @@ public final class CrystalText {
 
     private static final class Plate {
         final BufferedImage image;
-        final int baseline;
-        final float centerOff;
+        final float centerOff; // 기준선에서 글자 모양 세로 중심까지 (글꼴 좌표)
+        final float inkX;      // 그림 안에서 글자 모양의 가로 중심
+        final float inkY;      // 그림 안에서 글자 모양의 세로 중심
 
-        Plate(BufferedImage image, int baseline, float centerOff) {
+        Plate(BufferedImage image, float centerOff, float inkX, float inkY) {
             this.image = image;
-            this.baseline = baseline;
             this.centerOff = centerOff;
+            this.inkX = inkX;
+            this.inkY = inkY;
         }
     }
 
@@ -68,10 +70,10 @@ public final class CrystalText {
         int h = Math.round(plate.image.getHeight() * grow);
         float sx = w / (float) plate.image.getWidth();
         float sy = h / (float) plate.image.getHeight();
-        float inkX = plate.image.getWidth() / 2f + 0.5f;
-        float inkY = plate.baseline + plate.centerOff + 0.5f;
-        int x = Math.round(centerX + 0.5f - inkX * sx);
-        int y = Math.round(baseline + plate.centerOff + 0.5f - inkY * sy);
+        // 글자 모양의 실제 중심을 (centerX, 기준선 + centerOff)에 맞춘다. 커져도 중심은 그대로다.
+        // 예전에는 그림 폭의 절반에 0.5px를 더한 값을 중심으로 써서 0.5~1px 치우쳤다
+        int x = Math.round(centerX - plate.inkX * sx);
+        int y = Math.round(baseline + plate.centerOff - plate.inkY * sy);
         Object hint = g.getRenderingHint(RenderingHints.KEY_INTERPOLATION);
         g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
         g.drawImage(plate.image, x, y, w, h, null);
@@ -112,7 +114,9 @@ public final class CrystalText {
             layer.dispose();
         }
         float centerOff = (float) (bounds.getY() + bounds.getHeight() / 2.0);
-        Plate plate = new Plate(image, Math.round(ty), centerOff);
+        float inkX = (float) (tx + bounds.getCenterX());
+        float inkY = (float) (ty + bounds.getCenterY());
+        Plate plate = new Plate(image, centerOff, inkX, inkY);
         CACHE.put(key, plate);
         return plate;
     }
