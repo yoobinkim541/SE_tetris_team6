@@ -56,7 +56,7 @@ public final class BoardRenderer {
                 if (colorBlind) {
                     tetris.ui.fx.A11yColors.paintGhostCell(layer, px, py, size, true);
                 } else {
-                    paintCell(layer, ghost[r][c], px, py, size);
+                    paintCell(layer, ghost[r][c], px, py, size, false);
                 }
             }
         } finally { layer.dispose(); }
@@ -71,43 +71,63 @@ public final class BoardRenderer {
         } finally { board.dispose(); }
     }
     private void paintItem(Graphics2D g, char symbol, int x, int y, int size) {
-        int inset = Math.max(1, size/8);
-        g.setColor(Color.WHITE); g.fillRect(x+inset,y+inset,size-2*inset,size-2*inset);
-        g.setColor(Color.BLACK); g.drawRect(x+inset,y+inset,size-2*inset-1,size-2*inset-1);
+        tetris.ui.theme.GemTiles.paint(g, x, y, size, Color.WHITE);
         if (size < 9) return;
         g.setFont(new Font(Font.MONOSPACED,Font.BOLD,Math.max(8,size*2/3)));
         String text = String.valueOf(symbol);
         g.drawString(text,x+(size-g.getFontMetrics().stringWidth(text))/2,y+(size+g.getFontMetrics().getAscent())/2-2);
     }
+    public void paintFitted(Graphics2D g, int[][] shape, int x, int y, int width, int height) {
+        if (shape == null || width <= 1 || height <= 1) return;
+        tetris.ui.theme.PieceFit fit = tetris.ui.theme.PieceFit.of(shape, x, y, width, height, 0);
+        if (fit.rows == 0) return;
+        var clip = g.getClip();
+        g.clipRect(x, y, width, height);
+        try {
+            for (int r = 0; r < shape.length; r++) {
+                if (shape[r] == null) continue;
+                for (int c = 0; c < shape[r].length; c++) {
+                    if (shape[r][c] == 0) continue;
+                    paintCell(g, shape[r][c],
+                            fit.originX + (c - fit.minCol) * fit.cell,
+                            fit.originY + (r - fit.minRow) * fit.cell, fit.cell);
+                }
+            }
+        } finally {
+            g.setClip(clip);
+        }
+    }
+
     public void paintCell(Graphics2D g, int value, int x, int y, int size) {
+        paintCell(g, value, x, y, size, true);
+    }
+
+    private void paintCell(Graphics2D g, int value, int x, int y, int size, boolean glyph) {
         if (size <= 0) return;
         if (value < 0 || value > VersusRules.ATTACK_CELL) throw new IllegalArgumentException("unknown cell");
         boolean attack = value == VersusRules.ATTACK_CELL;
         Color fill = value == 0 ? new Color(0x262A33) : attack ? new Color(0x929AA5)
             : palette.color(BlockType.values()[value-1],colorBlind);
-        g.setColor(fill); g.fillRect(x,y,size,size);
-        g.setColor(new Color(0x323744)); g.drawRect(x,y,size-1,size-1);
-        if (!attack && value != 0 && size >= 11) paintSheen(g, x, y, size, fill);
+        if (value == 0) {
+            g.setColor(fill);
+            g.fillRect(x, y, size, size);
+            g.setColor(new Color(0x323744));
+            g.drawRect(x, y, size - 1, size - 1);
+            return;
+        }
+        tetris.ui.theme.GemTiles.paint(g, x, y, size, fill);
+        if (!glyph) return;
         if (attack) {
             g.setColor(Color.BLACK);
-            // A cross remains visible at small sizes and distinguishes gray W without color.
             int inset = Math.max(2,size/4);
             g.drawLine(x+inset,y+inset,x+size-inset-1,y+size-inset-1);
             g.drawLine(x+size-inset-1,y+inset,x+inset,y+size-inset-1);
-        } else if (value != 0 && size >= 11) {
-            g.setColor(palette.textColor(fill)); g.setFont(new Font(Font.MONOSPACED,Font.BOLD,Math.max(9,size*2/3)));
-            String letter = BlockType.values()[value-1].name();
+        } else if (size >= 8) {
+            g.setColor(palette.textColor(fill));
+            g.setFont(new Font(Font.MONOSPACED,Font.BOLD,Math.max(8,size*2/3)));
+            String letter = String.valueOf(BlockType.values()[value-1].letter());
             g.drawString(letter,x+(size-g.getFontMetrics().stringWidth(letter))/2,y+(size+g.getFontMetrics().getAscent())/2-2);
         }
     }
 
-    /** 가장자리 2px는 그대로 두고 윗면에만 빛을 얹는다. 대기열 표본 픽셀을 바꾸지 않는다 */
-    private static void paintSheen(Graphics2D g, int x, int y, int size, Color fill) {
-        int inset = 3;
-        g.setColor(new Color(
-                Math.min(254, fill.getRed() + 36),
-                Math.min(254, fill.getGreen() + 36),
-                Math.max(1, Math.min(254, fill.getBlue() + 16))));
-        g.drawLine(x + inset, y + inset, x + size - inset - 1, y + inset);
-    }
 }

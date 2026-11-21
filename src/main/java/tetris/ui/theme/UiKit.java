@@ -174,7 +174,7 @@ public final class UiKit {
         if (width <= 2 || height <= 2) return;
         NineSlice slice = cyan ? TAB_C : TAB_M;
         if (slice.available()) {
-            slice.paint(g, x, y, width, height);
+            slice.paint(g, x, y, width, height, tabCorner(width, height));
             return;
         }
         Color glow = cyan ? CYAN : MAGENTA;
@@ -232,6 +232,35 @@ public final class UiKit {
         g.fillRoundRect(x, y, width, height, height, height);
         g.setColor(withAlpha(CYAN, 180));
         g.drawRoundRect(x, y, width - 1, height - 1, height, height);
+    }
+
+    /** 이름 칸. 에셋 캡슐의 뾰족한 끝 대신 둥근 유리 알약 */
+    public static void paintGlassCapsule(Graphics2D g, int x, int y, int width, int height) {
+        if (width <= 2 || height <= 2) return;
+        int arc = height;
+        g.setColor(new Color(CYAN.getRed(), CYAN.getGreen(), CYAN.getBlue(), 70));
+        g.fillRoundRect(x - 3, y - 3, width + 6, height + 6, arc + 6, arc + 6);
+        g.setColor(new Color(8, 16, 36, 214));
+        g.fillRoundRect(x, y, width, height, arc, arc);
+        g.setStroke(new BasicStroke(1.8f));
+        g.setColor(withAlpha(CYAN, 230));
+        g.drawRoundRect(x, y, width - 1, height - 1, arc, arc);
+        g.setStroke(new BasicStroke(1f));
+        g.setColor(new Color(255, 255, 255, 46));
+        g.drawRoundRect(x + 3, y + 3, width - 7, Math.max(4, height / 2), arc, arc);
+    }
+
+    /** 탭 9등분 모서리. 가운데에 제목 띠가 남도록 줄인다 */
+    public static int tabCorner(int width, int height) {
+        int side = Math.min(Math.max(width, 1), Math.max(height, 1));
+        return Math.max(8, Math.min(48, side / 5));
+    }
+
+    /** 제목이 모서리 장식에 닿지 않는 최소 여백 */
+    public static int tabTitleInset(int width, int height) {
+        int corner = tabCorner(width, height);
+        int inset = Math.max(12, corner / 2 + 4);
+        return Math.min(inset, Math.max(8, Math.min(width, height) / 4));
     }
 
     public static void paintGauge(Graphics2D g, int x, int y, int width, int height, float filled, Color fill) {
@@ -424,7 +453,7 @@ public final class UiKit {
 
     /** 버튼 안 글자를 가운데에 둔다 */
     public static void drawCentered(Graphics2D g, String text, int centerX, int baseline) {
-        g.drawString(text, centerX - g.getFontMetrics().stringWidth(text) / 2, baseline);
+        GameTheme.drawCentered(g, text, centerX, baseline);
     }
 
     public static RoundRectangle2D buttonShape(int x, int y, int width, int height) {

@@ -35,6 +35,8 @@ public final class RaidCapture {
         capture("cards", panel(false, RaidSamples.phase(RaidMode.COOP, RaidPhase.CARD_PICK)), medium.width, medium.height);
         capture("result", panel(false, RaidSamples.phase(RaidMode.COOP, RaidPhase.FINISHED)), medium.width, medium.height);
         capture("coop-small", panel(false, aliveCoop()), small.width, small.height);
+        capture("solo-small", panel(false, RaidSamples.playing(RaidMode.SOLO)), small.width, small.height);
+        capture("race-small", panel(false, race()), small.width, small.height);
         capture("coop-large", panel(false, aliveCoop()), large.width, large.height);
         capture("coop-colorblind", panel(true, aliveCoop()), medium.width, medium.height);
     }
@@ -42,7 +44,7 @@ public final class RaidCapture {
     private static RaidPanel panel(boolean colorBlind, RaidSnapshot snapshot) {
         RaidPanel panel = new RaidPanel(colorBlind);
         panel.setSnapshot(snapshot);
-        panel.setGuide("P1 A D 이동 - R 필살");
+        panel.setGuide("P1 A D 이동 · R 필살");
         panel.setCardSelection(1);
         return panel;
     }

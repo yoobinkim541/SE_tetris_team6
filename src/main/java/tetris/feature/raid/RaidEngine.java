@@ -375,6 +375,7 @@ public final class RaidEngine {
         for (int row : cleared) if (LuckyGrid.rowHas(fighter.lucky, row)) crit = true;
         if (cleared.length > 0) fighter.lucky = LuckyGrid.dropRows(fighter.lucky, cleared);
         boolean tSpin = lines > 0 && fighter.session.getLastTSpin() != TSpinType.NONE;
+        if (fighter.session.getLastTSpin().isTSpin()) fighter.tSpinLocks++;
         if (tSpin) events.add(new RaidEvent(RaidEvent.Type.TSPIN, player, 0));
         if (lines > 0) {
             fighter.combo++;
@@ -875,7 +876,7 @@ public final class RaidEngine {
         int[][] next = shown.isEmpty() ? shapeCells(state.nextBlock()) : shown.get(0);
         int[][] items = new int[VersusRules.BOARD_ROWS][VersusRules.BOARD_COLS];
         MatchSnapshot.PlayerView board = new MatchSnapshot.PlayerView(cells, next, state.score(), fighter.pending.rows(),
-                items, shapeCells(state.holdBlock()), ghostCells(state.ghostBlock()), shown);
+                items, shapeCells(state.holdBlock()), ghostCells(state.ghostBlock()), shown, fighter.tSpinLocks);
         List<RaidSnapshot.Effect> effects = new ArrayList<>();
         for (EffectState effect : fighter.effects) {
             if (effect.remaining <= 0 && effect.pattern != PatternId.CLOUD) continue;
@@ -1264,6 +1265,7 @@ public final class RaidEngine {
         int reviveProgress;
         long lastClearAt = -1;
         long ultimateAt = -1;
+        int tSpinLocks;
 
         Fighter(GameSession session, DueTimeClock clock) {
             this.session = session;

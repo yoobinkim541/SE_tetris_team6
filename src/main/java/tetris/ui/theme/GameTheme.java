@@ -2,9 +2,12 @@ package tetris.ui.theme;
 
 import java.awt.Font;
 import java.awt.FontFormatException;
+import java.awt.Graphics2D;
 import java.awt.GraphicsEnvironment;
+import java.awt.font.TextAttribute;
 import java.io.IOException;
 import java.io.InputStream;
+import java.text.AttributedString;
 
 /**
  * 화면 공통 서체와 크기 토큰. Do Hyeon은 제목·메뉴·라벨, Orbitron은 숫자.
@@ -67,6 +70,73 @@ public final class GameTheme {
     public static boolean canDisplay(String text, int size, boolean preferDigits) {
         String value = text == null ? "" : text;
         return fontFor(value, size, preferDigits).canDisplayUpTo(value) == -1;
+    }
+
+    /**
+     * 고른 글꼴이 못 그리는 글자만 논리 글꼴로 바꾼다. 테스트는 이 글꼴의 {@code canDisplay}를 본다.
+     */
+    public static Font runFont(String text, int index, int size, boolean preferDigits) {
+        Font chosen = primary(text, size, preferDigits);
+        if (text == null || index < 0 || index >= text.length() || chosen.canDisplay(text.charAt(index))) return chosen;
+        Font alt = fallback(chosen);
+        return alt.canDisplay(text.charAt(index)) ? alt : chosen;
+    }
+
+    public static void draw(Graphics2D g, String text, int x, int baseline) {
+        if (g == null || text == null || text.isEmpty()) return;
+        Font chosen = g.getFont() == null ? text(14, false) : g.getFont();
+        if (chosen.canDisplayUpTo(text) == -1) {
+            g.drawString(text, x, baseline);
+            return;
+        }
+        AttributedString styled = new AttributedString(text);
+        Font alt = fallback(chosen);
+        int i = 0;
+        while (i < text.length()) {
+            boolean ok = chosen.canDisplay(text.charAt(i));
+            int j = i + 1;
+            while (j < text.length() && chosen.canDisplay(text.charAt(j)) == ok) j++;
+            styled.addAttribute(TextAttribute.FONT, ok ? chosen : alt, i, j);
+            i = j;
+        }
+        g.drawString(styled.getIterator(), x, baseline);
+    }
+
+    public static int width(Graphics2D g, String text) {
+        if (g == null || text == null || text.isEmpty()) return 0;
+        Font chosen = g.getFont() == null ? text(14, false) : g.getFont();
+        if (chosen.canDisplayUpTo(text) == -1) return g.getFontMetrics(chosen).stringWidth(text);
+        Font alt = fallback(chosen);
+        int measured = 0;
+        int i = 0;
+        while (i < text.length()) {
+            boolean ok = chosen.canDisplay(text.charAt(i));
+            int j = i + 1;
+            while (j < text.length() && chosen.canDisplay(text.charAt(j)) == ok) j++;
+            measured += g.getFontMetrics(ok ? chosen : alt).stringWidth(text.substring(i, j));
+            i = j;
+        }
+        return measured;
+    }
+
+    public static void drawCentered(Graphics2D g, String text, int centerX, int baseline) {
+        draw(g, text, centerX - width(g, text) / 2, baseline);
+    }
+
+    public static void drawRight(Graphics2D g, String text, int rightX, int baseline) {
+        draw(g, text, rightX - width(g, text), baseline);
+    }
+
+    private static Font primary(String text, int size, boolean preferDigits) {
+        int safe = Math.max(1, size);
+        if (preferDigits && text != null && numericOnly(text)) return digits(safe);
+        return text(safe, false);
+    }
+
+    private static Font fallback(Font chosen) {
+        int style = chosen == null ? Font.PLAIN : chosen.getStyle();
+        int size = chosen == null ? 12 : chosen.getSize();
+        return new Font(Font.DIALOG, style, Math.max(1, size));
     }
 
     public static Font title(int windowHeight) {

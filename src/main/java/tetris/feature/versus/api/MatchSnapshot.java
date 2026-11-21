@@ -42,9 +42,10 @@ public record MatchSnapshot(String matchId, long revision, PlayerView one, Playe
      * @param hold        홀드 블록 모양. 비어 있으면 길이 0 (HLD-1)
      * @param ghost       20x10 착지 미리보기. 0이 아닌 칸만 고스트 (GST-1)
      * @param previews    Next 미리보기, 최대 3개. 비어 있으면 next 하나만 그린다 (NXT-2)
+     * @param tSpinLocks  이 판에서 T-스핀으로 잠근 횟수. 반복해도 늘어나 효과음을 한 번씩 낸다
      */
     public record PlayerView(int[][] cells, int[][] next, long score, List<int[]> pendingRows, int[][] items,
-                             int[][] hold, int[][] ghost, List<int[][]> previews) {
+                             int[][] hold, int[][] ghost, List<int[][]> previews, int tSpinLocks) {
         /** 아이템·홀드·고스트가 없는 화면 정보 (일반·시간제한 대전) */
         public PlayerView(int[][] cells, int[][] next, long score, List<int[]> pendingRows) {
             this(cells, next, score, pendingRows, new int[VersusRules.BOARD_ROWS][VersusRules.BOARD_COLS]);
@@ -52,7 +53,13 @@ public record MatchSnapshot(String matchId, long revision, PlayerView one, Playe
 
         /** 홀드·고스트·추가 넥스트가 없는 화면 정보 */
         public PlayerView(int[][] cells, int[][] next, long score, List<int[]> pendingRows, int[][] items) {
-            this(cells, next, score, pendingRows, items, new int[0][], emptyGhost(), List.of());
+            this(cells, next, score, pendingRows, items, new int[0][], emptyGhost(), List.of(), 0);
+        }
+
+        /** T-스핀 횟수가 없는 화면 정보 */
+        public PlayerView(int[][] cells, int[][] next, long score, List<int[]> pendingRows, int[][] items,
+                          int[][] hold, int[][] ghost, List<int[][]> previews) {
+            this(cells, next, score, pendingRows, items, hold, ghost, previews, 0);
         }
 
         public PlayerView {
@@ -71,6 +78,7 @@ public record MatchSnapshot(String matchId, long revision, PlayerView one, Playe
             List<int[][]> copied = new ArrayList<>();
             for (int[][] shape : previews) copied.add(copyShape(shape, "preview"));
             previews = List.copyOf(copied);
+            if (tSpinLocks < 0) throw new IllegalArgumentException("negative tSpinLocks");
         }
 
         @Override

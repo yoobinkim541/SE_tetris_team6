@@ -113,9 +113,10 @@ public class NameInputPanel extends JPanel {
         @Override
         protected void paintComponent(java.awt.Graphics g) {
             java.awt.Graphics2D g2 = Theme.smooth(g);
-            tetris.ui.theme.UiKit.paintCapsule(g2, 0, 0, getWidth(), getHeight());
+            tetris.ui.theme.UiKit.paintGlassCapsule(g2, 0, 0, getWidth(), getHeight());
             super.paintComponent(g);
             if (isFocusOwner()) return;
+            if (tetris.ui.theme.UiKit.pulse() < 0.45f) return;
             java.awt.FontMetrics metrics = g2.getFontMetrics(getFont());
             int textWidth = metrics.stringWidth(getText());
             int caretX = (getWidth() - textWidth) / 2 + textWidth + 2;

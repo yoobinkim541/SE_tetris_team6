@@ -45,6 +45,7 @@ public final class LocalMatchEngine implements MatchEngine {
     private long deadline = Long.MAX_VALUE;
     private long pausedAt;
     private boolean modern;
+    private final int[] tSpinLocks = new int[2];
 
     public LocalMatchEngine() { this(MatchClock.system(), null); }
 
@@ -73,6 +74,7 @@ public final class LocalMatchEngine implements MatchEngine {
         GameMode sessionMode = config.mode().itemsEnabled() ? GameMode.ITEM : GameMode.CLASSIC;
         for (PlayerId player : PlayerId.values()) {
             int i = player.ordinal(); held.get(i).clear(); pending[i].clear(); outgoing[i] = AttackRows.NONE;
+            tSpinLocks[i] = 0;
             clocks[i] = new DueTimeClock(() -> pulseTime);
             BlockGenerator generator = generators == null
                     ? new WeightedBlockGenerator(config.difficulty().weights(), new Random()) : generators.apply(player);
@@ -80,7 +82,10 @@ public final class LocalMatchEngine implements MatchEngine {
                 @Override public void onChanged(GameSnapshot state) { }
                 @Override public void onGameOver(GameSnapshot state) { } // collected after both Spawn attempts
             }, new SpawnBoundary() {
-                @Override public void onLockResolved(LockResult lock) { outgoing[i] = lock.attack(); }
+                @Override public void onLockResolved(LockResult lock) {
+                    outgoing[i] = lock.attack();
+                    if (sessions[i].getLastTSpin().isTSpin()) tSpinLocks[i]++;
+                }
                 @Override public boolean deferSpawn() { return true; }
             }, config.controlStyle());
             sessions[i].start();
@@ -248,7 +253,7 @@ public final class LocalMatchEngine implements MatchEngine {
         for (Block preview : state.nextBlocks()) previews.add(shapeCells(preview));
         int[][] nextCells = previews.isEmpty() ? shapeCells(state.nextBlock()) : previews.get(0);
         return new MatchSnapshot.PlayerView(cells, nextCells, state.score(), pending[i].rows(), items,
-                shapeCells(state.holdBlock()), ghostCells(state.ghostBlock()), previews);
+                shapeCells(state.holdBlock()), ghostCells(state.ghostBlock()), previews, tSpinLocks[i]);
     }
 
     private void apply(int i, GameAction action) {

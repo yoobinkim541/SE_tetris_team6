@@ -30,6 +30,18 @@ import tetris.ui.fx.SoundId;
 /** 효과음 선택과 설정 파일의 sfx·bgm. 재생 장치는 녹음기로 바꿔 끼운다 */
 class GameSoundsTest {
     @Test
+    void battleTSpinPlaysOncePerLock() {
+        Tape tape = new Tape();
+        GameSounds sounds = new GameSounds(tape);
+        sounds.onBattle(battle(1, 0), battle(2, 1), null);
+        assertEquals(1, count(tape, SoundId.TSPIN));
+        sounds.onBattle(battle(2, 1), battle(3, 2), null);
+        assertEquals(2, count(tape, SoundId.TSPIN));
+        sounds.onBattle(battle(3, 2), battle(4, 2), null);
+        assertEquals(2, count(tape, SoundId.TSPIN));
+    }
+
+    @Test
     void fourLineClearPlaysTetris() {
         Tape tape = new Tape();
         GameSounds sounds = new GameSounds(tape);
@@ -134,12 +146,26 @@ class GameSoundsTest {
         assertEquals("끔", Messages.get("settings.disabled"));
     }
 
+    private static MatchSnapshot battle(long revision, int tSpinLocks) {
+        int[][] cells = new int[20][10];
+        var one = new MatchSnapshot.PlayerView(cells, new int[0][], 0, List.of(), new int[20][10],
+                new int[0][], new int[20][10], List.of(), tSpinLocks);
+        var two = new MatchSnapshot.PlayerView(cells, new int[0][], 0, List.of());
+        return new MatchSnapshot("battle", revision, one, two, -1,
+                tetris.feature.versus.api.MatchPhase.PLAYING, null);
+    }
+
+    private static int count(Tape tape, SoundId id) {
+        int n = 0;
+        for (SoundId played : tape.played) if (played == id) n++;
+        return n;
+    }
+
     private static GameSnapshot single(int lines) {
         return new GameSnapshot(new int[0][], null, null, 0, 1, lines, GameState.PLAYING,
                 GameMode.CLASSIC, Difficulty.NORMAL, List.of(), 0, List.of(), Map.of(),
                 TSpinType.NONE, null, List.of(), null);
     }
-
     private static RaidSnapshot raid(RaidEvent event) {
         MatchSnapshot.PlayerView board = new MatchSnapshot.PlayerView(new int[20][10], new int[0][], 0, List.of());
         RaidSnapshot.PlayerView player = new RaidSnapshot.PlayerView(board, true, new int[20][10], List.of(), 0, 8, 0);

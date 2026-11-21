@@ -233,8 +233,8 @@ public final class GameSounds {
     }
 
     private void diffBoard(MatchSnapshot.PlayerView prev, MatchSnapshot.PlayerView next) {
+        if (next.tSpinLocks() > prev.tSpinLocks()) play(SoundId.TSPIN);
         int cleared = fullRows(prev.cells()) - fullRows(next.cells());
-        if (cleared > 0 && next.score() > prev.score()) playClear(Math.min(4, cleared));
         if (!sameShape(prev.hold(), next.hold())) {
             play(SoundId.HOLD);
             return;

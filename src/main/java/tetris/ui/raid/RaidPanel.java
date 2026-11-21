@@ -328,15 +328,15 @@ public final class RaidPanel extends JPanel {
     }
 
     private void composeRace() {
-        int cell = 23;
+        int cell = 22;
         int boardW = cell * 10;
         int boardH = cell * 20;
         int margin = 8;
         int colGap = 10;
         int colW = (VW - margin * 2 - colGap) / 2;
-        int headerH = 84;
-        int previewH = 46;
-        int top = 36;
+        int headerH = 78;
+        int previewH = 72;
+        int top = 32;
         int boardY = top + headerH + previewH + 8;
         scene.cell = cell;
         scene.boardY = boardY;
@@ -459,10 +459,9 @@ public final class RaidPanel extends JPanel {
             String holdLabel = colorBlind ? (index == 0 ? "■ 홀드" : "● 홀드") : "홀드";
             labelTab(g, holdLabel, hold);
             var held = player.board().hold();
-            int cell = Math.max(8, Math.min(12, (hold.width - 8) / 4));
-            int pieceY = hold.y + 16;
-            if (!sealed) boards.paint(g, held.length == 0 ? new int[0][] : held, hold.x + 4, pieceY, cell);
-            else paintLock(g, hold.x + 4, pieceY, Math.max(16, hold.width - 8), Math.max(18, hold.height - 22));
+            Rectangle slot = pieceSlot(hold);
+            if (!sealed) boards.paintFitted(g, held.length == 0 ? new int[0][] : held, slot.x, slot.y, slot.width, slot.height);
+            else paintLock(g, slot.x, slot.y, slot.width, slot.height);
         }
         if (next.width <= 0) return;
         UiKit.paintTab(g, index == 0, next.x, next.y, next.width, next.height);
@@ -471,25 +470,94 @@ public final class RaidPanel extends JPanel {
         if (player.board().previews().isEmpty()) shapes.add(player.board().next());
         else shapes.addAll(player.board().previews());
         shapes.addAll(player.extendedPreviews());
-        int cell = Math.max(7, Math.min(11, (next.width - 8) / 4));
-        boolean row = next.height < cell * 4 + 18;
-        int pieceTop = next.y + 16;
+        Rectangle slot = pieceSlot(next);
+        Rectangle[] pieces = previewSlots(slot, shapes);
         for (int i = 0; i < shapes.size(); i++) {
-            int x = row ? next.x + 4 + i * (cell * 4 + 4) : next.x + (next.width - cell * 4) / 2;
-            int y = row ? pieceTop : pieceTop + i * (cell * 3 + 2);
-            if (row && x + cell * 4 > next.x + next.width) break;
-            if (!row && y + cell * 2 > next.y + next.height) break;
-            if (sealed && i > 0) paintLock(g, x, y, cell * 4, Math.max(12, cell * 2));
-            else boards.paint(g, shapes.get(i), x, y, cell);
-            if (i == 0 && index == 0) mark(cueNext, x + cell, y, cell, cell * 4);
+            Rectangle piece = pieces[i];
+            if (sealed && i > 0) paintLock(g, piece.x, piece.y, piece.width, piece.height);
+            else boards.paintFitted(g, shapes.get(i), piece.x, piece.y, piece.width, piece.height);
+            if (i == 0 && index == 0) mark(cueNext, piece.x, piece.y, Math.max(1, piece.width / 2), piece.height);
         }
     }
 
+    /** 바로 다음은 큰 칸, 나머지는 열·행 수에 비례한 작은 칸. 방향은 데이터 그대로 */
+    private static Rectangle[] previewSlots(Rectangle slot, java.util.List<int[][]> shapes) {
+        int n = shapes.size();
+        Rectangle[] out = new Rectangle[n];
+        if (n == 0) return out;
+        if (n == 1) {
+            out[0] = new Rectangle(slot);
+            return out;
+        }
+        boolean row = slot.width >= slot.height;
+        int[] weight = new int[n];
+        int rest = 0;
+        for (int i = 0; i < n; i++) {
+            int[] span = occupiedSpan(shapes.get(i));
+            weight[i] = Math.max(1, row ? span[0] : span[1]);
+            if (i > 0) rest += weight[i];
+        }
+        int main = row ? slot.width : slot.height;
+        int first = Math.max(main / 2, main * weight[0] / Math.max(1, weight[0] + rest));
+        first = Math.min(first, main - 8 * (n - 1));
+        first = Math.max(1, first);
+        if (row) {
+            out[0] = new Rectangle(slot.x, slot.y, Math.max(1, first - 2), slot.height);
+            int remain = slot.width - first;
+            int x = slot.x + first;
+            int consumed = 0;
+            for (int i = 1; i < n; i++) {
+                int w = i == n - 1 ? remain - consumed : Math.max(1, remain * weight[i] / Math.max(1, rest));
+                out[i] = new Rectangle(x + consumed, slot.y, Math.max(1, w - 2), slot.height);
+                consumed += w;
+            }
+        } else {
+            out[0] = new Rectangle(slot.x, slot.y, slot.width, Math.max(1, first - 2));
+            int remain = slot.height - first;
+            int y = slot.y + first;
+            int consumed = 0;
+            for (int i = 1; i < n; i++) {
+                int h = i == n - 1 ? remain - consumed : Math.max(1, remain * weight[i] / Math.max(1, rest));
+                out[i] = new Rectangle(slot.x, y + consumed, slot.width, Math.max(1, h - 2));
+                consumed += h;
+            }
+        }
+        return out;
+    }
+
+    private static int[] occupiedSpan(int[][] shape) {
+        int minRow = Integer.MAX_VALUE;
+        int maxRow = -1;
+        int minCol = Integer.MAX_VALUE;
+        int maxCol = -1;
+        if (shape != null) {
+            for (int r = 0; r < shape.length; r++) {
+                if (shape[r] == null) continue;
+                for (int c = 0; c < shape[r].length; c++) {
+                    if (shape[r][c] == 0) continue;
+                    minRow = Math.min(minRow, r);
+                    maxRow = Math.max(maxRow, r);
+                    minCol = Math.min(minCol, c);
+                    maxCol = Math.max(maxCol, c);
+                }
+            }
+        }
+        if (maxRow < 0) return new int[] {1, 1};
+        return new int[] {maxCol - minCol + 1, maxRow - minRow + 1};
+    }
+
+    private static Rectangle pieceSlot(Rectangle tab) {
+        int inset = UiKit.tabTitleInset(tab.width, tab.height);
+        int top = inset + 16;
+        return new Rectangle(tab.x + 4, tab.y + top, Math.max(1, tab.width - 8), Math.max(1, tab.height - top - 4));
+    }
+
     private void labelTab(Graphics2D g, String text, Rectangle box) {
-        int size = fit(g, text, box.width - 4, 11, 8, false);
+        int inset = UiKit.tabTitleInset(box.width, box.height);
+        int size = fit(g, text, Math.max(8, box.width - inset * 2), 11, 8, false);
         g.setFont(GameTheme.text(size, true));
         g.setColor(TEXT);
-        UiKit.drawCentered(g, text, box.x + box.width / 2, box.y + 12);
+        UiKit.drawCentered(g, text, box.x + box.width / 2, box.y + inset + g.getFontMetrics().getAscent());
     }
 
     private void paintEffects(Graphics2D g, RaidSnapshot.PlayerView player, int index) {
@@ -847,8 +915,8 @@ public final class RaidPanel extends JPanel {
         g.setFont(GameTheme.digits(18));
         g.setColor(colorBlind ? A11yColors.YELLOW : new Color(0xFFE27A));
         UiKit.drawCentered(g, String.format("%.1f", offer.remainingMillis() / 1000.0), VW / 2, panelY + 56);
-        String hint = "초 - 좌우 이동, 하드 드롭 확정";
-        g.setFont(GameTheme.fontFor(hint, 12, false));
+        String hint = "초 · 좌우 이동, 하드 드롭 확정";
+        g.setFont(GameTheme.text(12, false));
         g.setColor(DIM);
         UiKit.drawCentered(g, hint, VW / 2, panelY + 74);
         int cardW = 172;
@@ -879,9 +947,7 @@ public final class RaidPanel extends JPanel {
         g.setFont(GameTheme.fontFor(card.displayName(), nameSize, false));
         g.setColor(TEXT);
         UiKit.drawCentered(g, card.displayName(), x + w / 2, y + h - 62);
-        g.setFont(GameTheme.fontFor(card.description(), 11, false));
-        g.setColor(DIM);
-        drawWrapped(g, card.description(), x + inset, y + h - 46, textW);
+        drawDescription(g, card.description(), x + inset, y + h - 46, textW);
         if (!selected) return;
         g.setFont(GameTheme.text(18, true));
         g.setColor(A11yColors.selected(colorBlind));
@@ -975,9 +1041,9 @@ public final class RaidPanel extends JPanel {
         g.setColor(TEXT);
         int y = box.y + 16;
         for (String line : lines) {
-            String drawn = line.replace('\u00B7', '-');
-            g.setFont(GameTheme.fontFor(drawn, size, false));
-            while (drawn.length() > 4 && g.getFontMetrics().stringWidth(drawn) > box.width - 24) {
+            String drawn = line;
+            g.setFont(GameTheme.text(size, false));
+            while (drawn.length() > 4 && GameTheme.width(g, drawn) > box.width - 24) {
                 drawn = drawn.substring(0, drawn.length() - 1);
             }
             UiKit.drawCentered(g, drawn, VW / 2, y);
@@ -1143,7 +1209,7 @@ public final class RaidPanel extends JPanel {
         lines.add("남은 시간");
         lines.add("P1이 카드를 고릅니다");
         lines.add("P2가 카드를 고릅니다");
-        lines.add("초 - 좌우 이동, 하드 드롭 확정");
+        lines.add("초 · 좌우 이동, 하드 드롭 확정");
         lines.add("선수를 빼앗김");
         lines.add("부활 3/8");
         lines.add("대기 1");
@@ -1157,14 +1223,14 @@ public final class RaidPanel extends JPanel {
         lines.add("레이드 종료");
         lines.add("레이드를 끝낼까요?");
         lines.add("점수는 저장되지 않습니다");
-        lines.add("P1 A D 이동 - R 필살");
+        lines.add("P1 A D 이동 · R 필살");
         return lines;
 
     }
 
-    /** 고른 글꼴이 못 그리는 가운뎃점은 하이픈으로 바꾼다 */
+    /** 화면에 그대로 쓰는 문구 */
     public static String shown(String text) {
-        return text == null ? "" : text.replace('\u00B7', '-');
+        return text == null ? "" : text;
     }
 
     private void paintMixed(Graphics2D g, String text, int centerX, int baseline, int size) {
@@ -1216,15 +1282,19 @@ public final class RaidPanel extends JPanel {
         return size;
     }
 
-    private static void drawWrapped(Graphics2D g, String text, int x, int y, int width) {
+    private static void drawDescription(Graphics2D g, String text, int x, int y, int width) {
         if (text == null || text.isEmpty()) return;
-        FontMetrics metrics = g.getFontMetrics();
-        String rest = text;
-        for (int line = 0; line < 2 && !rest.isEmpty(); line++) {
-            int count = rest.length();
-            while (count > 1 && metrics.stringWidth(rest.substring(0, count)) > width) count--;
-            UiKit.drawCentered(g, rest.substring(0, count), x + width / 2, y + line * 13);
-            rest = rest.substring(count).stripLeading();
+        int size = 11;
+        g.setFont(GameTheme.text(size, false));
+        java.util.List<String> lines = tetris.ui.theme.TextWrap.lines(text, g.getFontMetrics(), width, 2);
+        if (tetris.ui.theme.TextWrap.overflows(lines, g.getFontMetrics(), width, 2)) {
+            size = 10;
+            g.setFont(GameTheme.text(size, false));
+            lines = tetris.ui.theme.TextWrap.lines(text, g.getFontMetrics(), width, 2);
+        }
+        g.setColor(DIM);
+        for (int i = 0; i < Math.min(2, lines.size()); i++) {
+            UiKit.drawCentered(g, lines.get(i), x + width / 2, y + i * (size + 3));
         }
     }
 

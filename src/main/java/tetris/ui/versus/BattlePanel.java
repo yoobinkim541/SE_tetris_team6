@@ -413,14 +413,19 @@ public final class BattlePanel extends JPanel {
         int boxH = 70;
         tetris.ui.theme.UiKit.paintTab(g, id == PlayerId.ONE, board.x, boxY, boxW, boxH);
         tetris.ui.theme.UiKit.paintTab(g, id != PlayerId.ONE, board.x + boxW + 8, boxY, boxW, boxH);
-        g.setFont(tetris.ui.theme.GameTheme.fontFor("홀드", 14, true));
-        g.setColor(Color.WHITE);
-        center(g, "홀드", board.x + boxW / 2, boxY - 2);
-        center(g, "다음", board.x + boxW + 8 + boxW / 2, boxY - 2);
-        renderer.paint(g, player.hold().length == 0 ? new int[0][] : player.hold(), board.x + 8, boxY + 22, 12);
+        labelTab(g, "홀드", board.x, boxY, boxW, boxH);
+        labelTab(g, "다음", board.x + boxW + 8, boxY, boxW, boxH);
+        java.awt.Rectangle holdSlot = previewSlot(board.x, boxY, boxW, boxH);
+        java.awt.Rectangle nextSlot = previewSlot(board.x + boxW + 8, boxY, boxW, boxH);
+        renderer.paintFitted(g, player.hold(), holdSlot.x, holdSlot.y, holdSlot.width, holdSlot.height);
         java.util.List<int[][]> previews = player.previews().isEmpty()
                 ? java.util.List.<int[][]>of(player.next()) : player.previews();
-        if (!previews.isEmpty()) renderer.paint(g, previews.get(0), board.x + boxW + 16, boxY + 22, 12);
+        if (!previews.isEmpty()) {
+            int slotW = Math.max(1, nextSlot.width / previews.size());
+            for (int i = 0; i < previews.size(); i++) {
+                renderer.paintFitted(g, previews.get(i), nextSlot.x + i * slotW, nextSlot.y, Math.max(1, slotW - 2), nextSlot.height);
+            }
+        }
         renderer.paintGhost(g, player.ghost(), board.x, board.y, BOARD_CELL);
         renderer.paintPlayfield(g, player.cells(), player.items(), board.x, board.y, BOARD_CELL);
         java.awt.Rectangle queue = attackQueueBounds(id);
@@ -438,5 +443,21 @@ public final class BattlePanel extends JPanel {
                     id == PlayerId.ONE ? tetris.ui.theme.UiKit.CYAN : tetris.ui.theme.UiKit.MAGENTA,
                     board.x + board.width / 2, board.y + 48);
         }
+    }
+
+    private static void labelTab(Graphics2D g, String text, int x, int y, int width, int height) {
+        int inset = tetris.ui.theme.UiKit.tabTitleInset(width, height);
+        int size = 13;
+        g.setFont(tetris.ui.theme.GameTheme.text(size, true));
+        while (size > 9 && g.getFontMetrics().stringWidth(text) > width - inset * 2) {
+            g.setFont(tetris.ui.theme.GameTheme.text(--size, true));
+        }
+        g.setColor(Color.WHITE);
+        center(g, text, x + width / 2, y + inset + g.getFontMetrics().getAscent());
+    }
+
+    private static java.awt.Rectangle previewSlot(int x, int y, int width, int height) {
+        int top = tetris.ui.theme.UiKit.tabTitleInset(width, height) + 16;
+        return new java.awt.Rectangle(x + 4, y + top, Math.max(1, width - 8), Math.max(1, height - top - 4));
     }
 }

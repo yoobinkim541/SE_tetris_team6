@@ -118,6 +118,7 @@ public final class MatchPayloads {
         if (view.hold().length > 0) node.set("hold", gridJson(view.hold()));
         if (Arrays.stream(view.ghost()).flatMapToInt(Arrays::stream).anyMatch(v -> v != 0)) node.set("ghost", gridJson(view.ghost()));
         if (!view.previews().isEmpty()) node.set("previews", shapesJson(view.previews()));
+        node.put("tSpinLocks", view.tSpinLocks());
         return node;
     }
 
@@ -132,7 +133,8 @@ public final class MatchPayloads {
         int[][] ghost = node.has("ghost") ? gridField(node, "ghost")
                 : new int[VersusRules.BOARD_ROWS][VersusRules.BOARD_COLS];
         List<int[][]> previews = node.has("previews") ? shapesField(node, "previews") : List.of();
-        return construct(() -> new PlayerView(cells, next, score, pending, items, hold, ghost, previews));
+        int tSpinLocks = node.has("tSpinLocks") ? Math.toIntExact(longField(node, "tSpinLocks")) : 0;
+        return construct(() -> new PlayerView(cells, next, score, pending, items, hold, ghost, previews, tSpinLocks));
     }
 
     private static ArrayNode shapesJson(List<int[][]> shapes) {

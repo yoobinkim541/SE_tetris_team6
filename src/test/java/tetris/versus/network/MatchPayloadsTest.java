@@ -169,6 +169,17 @@ public class MatchPayloadsTest {
 
         assertSameSnapshot(snapshot, MatchPayloads.readState(overWire(MatchPayloads.stateMessage(snapshot))));
     }
+
+    @Test
+    void STATE는_T스핀_잠금_횟수를_전달한다() throws ProtocolException {
+        PlayerView spun = new PlayerView(board(1), new int[][] {{1, 1, 1}}, 40, List.of(),
+                new int[VersusRules.BOARD_ROWS][VersusRules.BOARD_COLS], new int[0][],
+                new int[VersusRules.BOARD_ROWS][VersusRules.BOARD_COLS], List.of(), 2);
+        MatchSnapshot snapshot = new MatchSnapshot("m-spin", 7, spun, view(2, 0, 0), -1, MatchPhase.PLAYING, null);
+        MatchSnapshot received = MatchPayloads.readState(overWire(MatchPayloads.stateMessage(snapshot)));
+        assertEquals(2, received.one().tSpinLocks());
+        assertEquals(0, received.two().tSpinLocks());
+    }
     //#endregion
 
     //#region 받은 payload 검증

@@ -98,7 +98,9 @@ public class GamePanel extends JPanel implements GameListener {
     /** 지금 그리는 다음 조각의 (localRow, localCol) 칸. 감사 테스트가 이 좌표를 읽는다 */
     public java.awt.Rectangle nextCellBounds(int localRow, int localCol) {
         Block next = snapshot == null ? null : snapshot.nextBlock();
-        return tetris.ui.theme.SoloLayout.of(cellSize).centeredCell(firstNextBox(), next, localRow, localCol, cellSize);
+        Rectangle box = firstNextBox();
+        int pieceCell = tetris.ui.theme.PieceFit.cellSize(next == null ? null : next.getShape(), box.width, box.height, cellSize);
+        return tetris.ui.theme.SoloLayout.of(cellSize).centeredCell(box, next, localRow, localCol, pieceCell);
     }
 
     public java.awt.Rectangle effectsBounds() {
@@ -363,14 +365,21 @@ public class GamePanel extends JPanel implements GameListener {
     }
 
     private int tabTitleHeight() {
-        return Math.max(20, cellSize / 2 + 8);
+        tetris.ui.theme.SoloLayout layout = tetris.ui.theme.SoloLayout.of(cellSize);
+        int inset = tetris.ui.theme.UiKit.tabTitleInset(layout.hold.width, layout.hold.height);
+        return inset + Math.max(12, Math.min(16, cellSize / 2)) + 4;
     }
 
     private void drawTabLabel(Graphics2D g, String label, Rectangle tab) {
-        int size = Math.max(12, Math.min(16, cellSize / 2));
+        int inset = tetris.ui.theme.UiKit.tabTitleInset(tab.width, tab.height);
+        int size = Math.max(11, Math.min(16, cellSize / 2));
         g.setFont(Theme.font(label, size, true));
+        int limit = Math.max(8, tab.width - inset * 2);
+        while (size > 9 && g.getFontMetrics().stringWidth(label) > limit) {
+            g.setFont(Theme.font(label, --size, true));
+        }
         g.setColor(Color.WHITE);
-        Theme.drawCentered(g, label, tab.x + tab.width / 2, tab.y + size + 8);
+        Theme.drawCentered(g, label, tab.x + tab.width / 2, tab.y + inset + g.getFontMetrics().getAscent());
     }
 
     private void drawStatus(Graphics2D g, tetris.ui.theme.SoloLayout layout) {
@@ -420,14 +429,22 @@ public class GamePanel extends JPanel implements GameListener {
     }
 
     private void drawPiece(Graphics2D g, Block piece, Rectangle box) {
+        if (piece == null || box.width <= 1 || box.height <= 1) return;
         int[][] shape = piece.getShape();
-        tetris.ui.theme.SoloLayout layout = tetris.ui.theme.SoloLayout.of(cellSize);
-        for (int r = 0; r < shape.length; r++) {
-            for (int c = 0; c < shape[r].length; c++) {
-                if (shape[r][c] == 0) continue;
-                Rectangle cell = layout.centeredCell(box, piece, r, c, cellSize);
-                drawCell(g, cell.x, cell.y, cellSize, piece.getType(), piece.itemCellAt(r, c).orElse(null));
+        tetris.ui.theme.PieceFit fit = tetris.ui.theme.PieceFit.of(shape, box.x, box.y, box.width, box.height, cellSize);
+        if (fit.rows == 0) return;
+        var clip = g.getClip();
+        g.clipRect(box.x, box.y, box.width, box.height);
+        try {
+            for (int r = 0; r < shape.length; r++) {
+                for (int c = 0; c < shape[r].length; c++) {
+                    if (shape[r][c] == 0) continue;
+                    drawCell(g, fit.originX + (c - fit.minCol) * fit.cell, fit.originY + (r - fit.minRow) * fit.cell,
+                            fit.cell, piece.getType(), piece.itemCellAt(r, c).orElse(null));
+                }
             }
+        } finally {
+            g.setClip(clip);
         }
     }
 
@@ -604,15 +621,11 @@ public class GamePanel extends JPanel implements GameListener {
 
     private void drawCell(Graphics2D g, int x, int y, int size, BlockType type, tetris.feature.item.ItemType item) {
         Color color = item == null ? palette.color(type, colorBlindMode) : Color.WHITE;
-        g.setColor(color);
-        g.fillRect(x, y, size, size);
-        if (item == null) UiKit.paintGemInset(g, x, y, size, color);
-        g.setColor(color.darker());
-        g.drawRect(x, y, size - 1, size - 1);
+        tetris.ui.theme.GemTiles.paint(g, x, y, size, color);
 
         g.setFont(Theme.blockLetter(size * 3 / 5));
         g.setColor(item == null ? palette.textColor(color) : Color.BLACK);
-        String letter = item != null ? String.valueOf(item.symbol()) : type == BlockType.W ? "W" : "O";
+        String letter = item != null ? String.valueOf(item.symbol()) : String.valueOf(type.letter());
         int textX = x + (size - g.getFontMetrics().stringWidth(letter)) / 2;
         int textY = y + (size - g.getFontMetrics().getHeight()) / 2 + g.getFontMetrics().getAscent();
         g.drawString(letter, textX, textY);

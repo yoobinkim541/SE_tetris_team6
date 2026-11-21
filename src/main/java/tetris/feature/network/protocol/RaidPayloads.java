@@ -198,6 +198,7 @@ public final class RaidPayloads {
             node.set("ghost", gridJson(board.ghost()));
         }
         if (!board.previews().isEmpty()) node.set("previews", shapesJson(board.previews()));
+        node.put("tSpinLocks", board.tSpinLocks());
         node.put("alive", player.alive());
         if (Arrays.stream(player.lucky()).flatMapToInt(Arrays::stream).anyMatch(value -> value != 0)) {
             node.set("lucky", gridJson(player.lucky()));
@@ -228,8 +229,9 @@ public final class RaidPayloads {
         int[][] ghost = node.has("ghost") ? gridField(node, "ghost")
                 : new int[VersusRules.BOARD_ROWS][VersusRules.BOARD_COLS];
         List<int[][]> previews = node.has("previews") ? shapesField(node, "previews") : List.of();
+        int tSpinLocks = node.has("tSpinLocks") ? intField(node, "tSpinLocks") : 0;
         MatchSnapshot.PlayerView board = construct(() -> new MatchSnapshot.PlayerView(
-                cells, next, score, pending, items, hold, ghost, previews));
+                cells, next, score, pending, items, hold, ghost, previews, tSpinLocks));
         boolean alive = booleanField(node, "alive");
         int[][] lucky = node.has("lucky") ? gridField(node, "lucky")
                 : new int[VersusRules.BOARD_ROWS][VersusRules.BOARD_COLS];

@@ -53,12 +53,11 @@ final class Theme {
     }
 
     static void drawCentered(Graphics2D g, String text, int centerX, int baselineY) {
-        FontMetrics metrics = g.getFontMetrics();
-        g.drawString(text, centerX - metrics.stringWidth(text) / 2, baselineY);
+        GameTheme.drawCentered(g, text, centerX, baselineY);
     }
 
     static void drawRight(Graphics2D g, String text, int rightX, int baselineY) {
-        g.drawString(text, rightX - g.getFontMetrics().stringWidth(text), baselineY);
+        GameTheme.drawRight(g, text, rightX, baselineY);
     }
 
     /** 세로 메뉴. 선택 항목은 강조색과 화살로 그린다. 반환: 마지막 항목 아래 y */

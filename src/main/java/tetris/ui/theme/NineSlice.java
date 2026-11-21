@@ -48,17 +48,27 @@ public final class NineSlice {
 
     /** 캐시에 같은 크기 그림이 있으면 그 인스턴스. 테스트가 재할당이 없는지 본다 */
     public BufferedImage scaled(int width, int height) {
+        return scaled(width, height, Integer.MAX_VALUE);
+    }
+
+    private BufferedImage scaled(int width, int height, int maxCorner) {
         if (width <= 0 || height <= 0 || source() == null) return null;
+        int corner = maxCorner == Integer.MAX_VALUE ? 0 : Math.max(0, maxCorner);
         long key = (((long) width) << 32) | (height & 0xffffffffL);
+        if (corner > 0) key ^= ((long) corner) << 48;
         BufferedImage cached = cache.get(key);
         if (cached != null) return cached;
-        BufferedImage made = axis == Axis.HORIZONTAL ? sliceHorizontal(width, height) : sliceNine(width, height);
+        BufferedImage made = axis == Axis.HORIZONTAL ? sliceHorizontal(width, height) : sliceNine(width, height, corner);
         cache.put(key, made);
         return made;
     }
 
     public void paint(Graphics2D g, int x, int y, int width, int height) {
-        BufferedImage image = scaled(width, height);
+        paint(g, x, y, width, height, Integer.MAX_VALUE);
+    }
+
+    public void paint(Graphics2D g, int x, int y, int width, int height, int maxCorner) {
+        BufferedImage image = scaled(width, height, maxCorner);
         if (image != null) g.drawImage(image, x, y, null);
     }
 
@@ -70,11 +80,12 @@ public final class NineSlice {
         return source;
     }
 
-    private BufferedImage sliceNine(int width, int height) {
+    private BufferedImage sliceNine(int width, int height, int maxCorner) {
         int sw = source.getWidth();
         int sh = source.getHeight();
         int sc = Math.min(cap, Math.min(sw, sh) / 2);
         int dc = Math.min(sc, Math.min(width, height) / 2);
+        if (maxCorner > 0) dc = Math.min(dc, maxCorner);
         if (sc <= 0 || dc <= 0) return scaleWhole(width, height);
         BufferedImage out = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
         Graphics2D g = out.createGraphics();
