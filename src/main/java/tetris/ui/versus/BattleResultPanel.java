@@ -35,16 +35,16 @@ public final class BattleResultPanel extends JPanel {
         Objects.requireNonNull(primaryLabel); Objects.requireNonNull(onModes); Objects.requireNonNull(onMain);
         if ((extraLabel == null) != (onExtra == null)) throw new IllegalArgumentException("extra label and action go together");
         setLayout(new GridBagLayout());
-        setBackground(new Color(0x1B1E24));
+        setOpaque(false);
         setPreferredSize(new Dimension(960, 720));
-        summary.setFont(new Font(Font.DIALOG, Font.BOLD, 30)); summary.setForeground(Color.WHITE);
-        scores.setFont(new Font(Font.DIALOG, Font.PLAIN, 24)); scores.setForeground(Color.WHITE);
+        summary.setFont(tetris.ui.theme.GameTheme.text(30, true)); summary.setForeground(Color.WHITE);
+        scores.setFont(tetris.ui.theme.GameTheme.digits(24)); scores.setForeground(tetris.ui.theme.UiKit.CYAN);
         var content = new JPanel(new GridLayout(0, 1, 0, 24)); content.setOpaque(false);
         content.add(summary); content.add(scores);
         var actions = new JPanel(new FlowLayout(FlowLayout.CENTER, 24, 0)); actions.setOpaque(false);
-        if (extraLabel != null) actions.add(new JButton(navigation(extraLabel, onExtra)));
-        actions.add(new JButton(navigation(primaryLabel, onModes)));
-        actions.add(new JButton(navigation("메인 메뉴", onMain)));
+        if (extraLabel != null) actions.add(styled(new JButton(navigation(extraLabel, onExtra))));
+        actions.add(styled(new JButton(navigation(primaryLabel, onModes))));
+        actions.add(styled(new JButton(navigation("메인 메뉴", onMain))));
         content.add(actions);
         var hint = new JLabel(extraLabel == null ? "Enter: " + primaryLabel + "   Esc: 메인 메뉴"
                 : "Enter: " + extraLabel + "   L: " + primaryLabel + "   Esc: 메인 메뉴", SwingConstants.CENTER);
@@ -57,6 +57,18 @@ public final class BattleResultPanel extends JPanel {
             bind(KeyEvent.VK_ENTER, "modes", onModes);
         }
         bind(KeyEvent.VK_ESCAPE, "main", onMain);
+    }
+    @Override
+    protected void paintComponent(Graphics g) {
+        tetris.ui.theme.UiKit.paintScene((Graphics2D) g, getWidth(), getHeight());
+    }
+
+    private static JButton styled(JButton button) {
+        button.setFont(tetris.ui.theme.GameTheme.text(16, true));
+        button.setForeground(Color.WHITE);
+        button.setBackground(new Color(0x142038));
+        button.setFocusable(false);
+        return button;
     }
 
     public void setSnapshot(MatchSnapshot snapshot) {

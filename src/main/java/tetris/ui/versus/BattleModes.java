@@ -2,6 +2,7 @@ package tetris.ui.versus;
 
 import java.util.Objects;
 import tetris.feature.game.Difficulty;
+import tetris.feature.setting.ControlStyle;
 import tetris.feature.versus.api.BattleMode;
 import tetris.feature.versus.api.MatchConfig;
 
@@ -20,7 +21,13 @@ public final class BattleModes {
 
     /** 일반 대전은 설정 난이도, 아이템은 아이템 규칙(NORMAL), 시간제한은 180초·일반 블록·NORMAL */
     public static MatchConfig localConfig(BattleMode mode, Difficulty difficulty) {
+        return localConfig(mode, difficulty, ControlStyle.MODERN);
+    }
+
+    /** 조작 방식은 이 PC 설정. P2P에서는 호스트가 같은 값을 CONFIG에 싣는다 */
+    public static MatchConfig localConfig(BattleMode mode, Difficulty difficulty, ControlStyle style) {
         Objects.requireNonNull(difficulty, "difficulty");
-        return mode == BattleMode.CLASSIC ? new MatchConfig(mode, difficulty, 0) : MatchConfig.of(mode);
+        MatchConfig config = mode == BattleMode.CLASSIC ? new MatchConfig(mode, difficulty, 0) : MatchConfig.of(mode);
+        return config.withControlStyle(style == null ? ControlStyle.MODERN : style);
     }
 }

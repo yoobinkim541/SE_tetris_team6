@@ -16,6 +16,13 @@ public interface LobbyClient extends AutoCloseable {
     /** Completes on entering LOBBY; fails exceptionally on connection failure. */
     CompletionStage<Void> host(int port);
     CompletionStage<Void> connect(String address, int port);
+    /**
+     * rememberPeer가 false면 접속에 성공해도 최근 접속 주소에 남기지 않는다.
+     * 인터넷 대전은 이 PC의 중계 루프백 주소로 접속하므로 남길 주소가 아니다
+     */
+    default CompletionStage<Void> connect(String address, int port, boolean rememberPeer) {
+        return connect(address, port);
+    }
     /** Idempotently cancels pending establishment and returns to INITIAL. */
     void cancel();
     /** Host-only in LOBBY; increments revision and clears both votes. */
@@ -29,7 +36,10 @@ public interface LobbyClient extends AutoCloseable {
      * the client's receiver already exists. Empty outside STARTING/PLAYING/RESULT.
      */
     Optional<BattleClient> battleClient();
-    /** RESULT -> LOBBY on the same connection (F-07). Keeps config and the peer's vote; clears the local vote. */
+    /** 레이드 CONFIG면 호스트 엔진 또는 클라이언트 수신기. 대전이면 비어 있다 */
+    default Optional<tetris.feature.raid.api.RaidClient> raidClient() {
+        return Optional.empty();
+    }
     void returnToLobby();
     /** Delivers the current snapshot first, then ordered updates until unsubscribed. */
     Subscription subscribe(Consumer<LobbySnapshot> listener);

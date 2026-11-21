@@ -29,13 +29,15 @@ public class KeyMapTest {
         assertEquals(KeyEvent.VK_SPACE, keys.keyOf(GameAction.HARD_DROP));
         assertEquals(KeyEvent.VK_P, keys.keyOf(GameAction.PAUSE));
         assertEquals(KeyEvent.VK_Q, keys.keyOf(GameAction.QUIT));
+        assertEquals(KeyEvent.VK_Z, keys.keyOf(GameAction.ROTATE_CCW));
+        assertEquals(KeyEvent.VK_C, keys.keyOf(GameAction.HOLD));
     }
 
     @Test
     void 키로_기능을_찾고_없는_키는_null() {
         KeyMap keys = new KeyMap();
         assertEquals(GameAction.ROTATE, keys.actionOf(KeyEvent.VK_UP));
-        assertNull(keys.actionOf(KeyEvent.VK_Z));
+        assertEquals(GameAction.ROTATE_CCW, keys.actionOf(KeyEvent.VK_Z));
     }
 
     @Test

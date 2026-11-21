@@ -1,5 +1,6 @@
 package tetris.ui;
 
+import java.awt.Color;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.event.KeyEvent;
@@ -14,6 +15,7 @@ public class ScoreBoardPanel extends JPanel {
     private static final int MAIN_MENU = 0;
     private static final int EXIT = 1;
 
+    private static final String[] CATEGORIES = {"클래식 · 쉬움", "클래식 · 보통", "클래식 · 어려움", "아이템 · 보통"};
     private final Runnable onMainMenu;
     private final Runnable onExit;
     private List<ScoreEntry> entries = List.of();
@@ -21,7 +23,6 @@ public class ScoreBoardPanel extends JPanel {
     private int category = 1;
     private int highlightedCategory = -1;
     private int highlightedRank = -1;
-    private static final String[] CATEGORIES = {"CLASSIC EASY", "CLASSIC NORMAL", "CLASSIC HARD", "ITEM NORMAL"};
     private int highlightIndex = -1;
     private boolean afterGame;
     private int selected = MAIN_MENU;
@@ -96,55 +97,69 @@ public class ScoreBoardPanel extends JPanel {
 
     @Override
     protected void paintComponent(Graphics g) {
-        super.paintComponent(g);
         Graphics2D g2 = Theme.smooth(g);
         int w = getWidth();
         int h = getHeight();
+        tetris.ui.theme.UiKit.paintScene(g2, w, h);
         int unit = Theme.unit(h);
 
-        g2.setFont(Theme.text(unit * 2, true));
-        g2.setColor(Theme.ACCENT);
-        Theme.drawCentered(g2, Messages.get("scoreboard.title"), w / 2, unit * 4);
-        g2.setFont(Theme.text(unit, true));
-        Theme.drawCentered(g2, "◀ " + CATEGORIES[category] + " ▶", w / 2, unit * 5);
+        g2.setFont(Theme.font("스코어보드", unit * 2, false));
+        g2.setColor(tetris.ui.theme.UiKit.CYAN);
+        Theme.drawCentered(g2, "스코어보드", w / 2, unit * 3);
+        String categoryLabel = "◀ " + CATEGORIES[category] + " ▶";
+        g2.setFont(Theme.font(categoryLabel, unit, false));
+        Theme.drawCentered(g2, categoryLabel, w / 2, unit * 4 + unit / 2);
 
+        java.awt.Rectangle table = tableBounds();
+        g2.setColor(new Color(8, 14, 32, 190));
+        g2.fillRoundRect(table.x, table.y, table.width, table.height, 16, 16);
+        tetris.ui.theme.UiKit.paintFrame(g2, tetris.ui.theme.UiKit.Tone.CYAN, table.x, table.y, table.width, table.height);
+
+        int corner = 72;
         int rowHeight = unit + unit / 2;
-        int top = unit * 6;
-        int rankX = w / 10;
-        int nameX = w / 5;
-        int scoreRight = w * 3 / 4;
-        int levelRight = w * 9 / 10;
+        int headerBaseline = table.y + corner;
+        int rankX = table.x + corner;
+        int nameX = rankX + unit * 2;
+        int levelRight = table.x + table.width - corner;
+        int scoreRight = levelRight - unit * 2;
 
-        g2.setFont(Theme.text(unit, true));
+        g2.setFont(Theme.font("순위", unit, false));
         g2.setColor(Theme.DIM_TEXT);
-        g2.drawString(Messages.get("scoreboard.rank"), rankX - unit, top);
-        g2.drawString(Messages.get("scoreboard.name"), nameX, top);
-        Theme.drawRight(g2, Messages.get("scoreboard.score"), scoreRight, top);
-        Theme.drawRight(g2, Messages.get("scoreboard.level"), levelRight, top);
+        g2.drawString("순위", rankX, headerBaseline);
+        g2.drawString("이름", nameX, headerBaseline);
+        Theme.drawRight(g2, "점수", scoreRight, headerBaseline);
+        Theme.drawRight(g2, "레벨", levelRight, headerBaseline);
 
         if (entries.isEmpty()) {
-            g2.setFont(Theme.text(unit, false));
-            Theme.drawCentered(g2, Messages.get("scoreboard.empty"), w / 2, top + rowHeight * 3);
+            g2.setFont(Theme.font(Messages.get("scoreboard.empty"), unit, false));
+            Theme.drawCentered(g2, Messages.get("scoreboard.empty"), w / 2, headerBaseline + rowHeight * 3);
         }
 
         for (int i = 0; i < entries.size(); i++) {
             ScoreEntry entry = entries.get(i);
-            int baseline = top + rowHeight * (i + 1);
+            java.awt.Rectangle row = rowBounds(i);
+            int baseline = row.y + row.height - 6;
             if (i == highlightIndex) {
                 g2.setColor(Theme.HIGHLIGHT_ROW);
-                g2.fillRect(rankX - unit * 2, baseline - unit - unit / 6, levelRight - rankX + unit * 3, rowHeight);
+                g2.fillRect(row.x, row.y, row.width, row.height);
+                g2.setColor(tetris.ui.theme.UiKit.CYAN);
+                g2.setStroke(new java.awt.BasicStroke(3f));
+                g2.drawRect(row.x + 1, row.y + 1, row.width - 3, row.height - 3);
+                g2.setStroke(new java.awt.BasicStroke(1f));
             }
-            g2.setFont(Theme.text(unit, i == highlightIndex));
+            if (i < 3) drawMedal(g2, rankX - unit, baseline - unit / 2, i);
+            g2.setFont(Theme.font(entry.name(), unit, false));
             g2.setColor(i == highlightIndex ? Theme.ACCENT : Theme.TEXT);
             Theme.drawRight(g2, String.valueOf(i + 1), rankX + unit, baseline);
             g2.drawString(entry.name(), nameX, baseline);
+            g2.setFont(tetris.ui.theme.GameTheme.fontFor(String.valueOf(entry.score()), unit, true));
             Theme.drawRight(g2, String.valueOf(entry.score()), scoreRight, baseline);
             Theme.drawRight(g2, String.valueOf(entry.level()), levelRight, baseline);
         }
 
-        int bottom = top + rowHeight * 11 + unit;
+        int bottom = table.y + table.height + unit;
         if (!notice.isEmpty()) {
-            g2.setFont(Theme.text(Math.max(10, unit * 3 / 4), false));
+            g2.setFont(Theme.font(notice, Math.max(10, unit * 3 / 4), false));
             g2.setColor(Theme.WARNING);
             Theme.drawCentered(g2, notice, w / 2, bottom);
         }
@@ -157,5 +172,42 @@ public class ScoreBoardPanel extends JPanel {
                 ? Messages.get("guide.scoreboardAfterGame")
                 : Messages.keyGuide(MainFrame.Screen.SCOREBOARD, null);
         Theme.drawGuide(g2, guide, w, h);
+    }
+
+    /** 기록 표. 분류 비교 테스트가 이 사각형만 본다 */
+    public java.awt.Rectangle tableBounds() {
+        int w = Math.max(1, getWidth());
+        int h = Math.max(1, getHeight());
+        int unit = Theme.unit(h);
+        return new java.awt.Rectangle(unit, unit * 5, w - unit * 2, unit * 14);
+    }
+
+    public java.awt.Rectangle rowBounds(int index) {
+        java.awt.Rectangle table = tableBounds();
+        int unit = Theme.unit(Math.max(1, getHeight()));
+        int corner = 72;
+        int rowHeight = unit + unit / 2;
+        int y = table.y + corner + 10 + rowHeight * index;
+        return new java.awt.Rectangle(table.x + corner / 2, y, table.width - corner, rowHeight - 4);
+    }
+
+
+    /** 강조 행 안쪽. 테두리가 아닌 채움색을 읽는다 */
+    public java.awt.Point highlightSample() {
+        java.awt.Rectangle row = rowBounds(Math.max(0, highlightIndex));
+        return new java.awt.Point(row.x + 8, row.y + row.height / 2);
+    }
+
+    private static void drawMedal(Graphics2D g, int x, int y, int rank) {
+        Color color = switch (rank) {
+            case 0 -> new Color(0xF6C945);
+            case 1 -> new Color(0xD7DEE8);
+            default -> new Color(0xE0A36A);
+        };
+        g.setColor(color);
+        g.fillOval(x, y - 8, 14, 14);
+        g.setColor(new Color(0x1B1E24));
+        g.setFont(tetris.ui.theme.GameTheme.fontFor(String.valueOf(rank + 1), 10, true));
+        g.drawString(String.valueOf(rank + 1), x + 4, y + 3);
     }
 }

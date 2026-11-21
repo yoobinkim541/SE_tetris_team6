@@ -155,7 +155,7 @@ public class MenuPanelsTest {
 
     @Test
     void devNetworkOverlayIsHiddenWithoutDevFlag() { // 일반 실행의 설정 화면은 2차와 같다
-        settingPanel.moveSelection(4); // Color Blind 바로 아래는 Reset Scoreboard
+        settingPanel.moveSelection(8); // 효과음·배경음 다음이 Reset Scoreboard
         settingPanel.activateSelected();
         assertFalse(settings.isDevNetworkOverlay());
         assertEquals(0, saves, "Reset Scoreboard 확인창만 열리고 설정은 바뀌지 않는다");
@@ -164,7 +164,7 @@ public class MenuPanelsTest {
     @Test
     void devNetworkOverlayTogglesRightAfterColorBlindUnderDevFlag() { // dev-net-overlay
         SettingPanel dev = new SettingPanel(settings, () -> { saves++; return true; }, () -> true, () -> { }, () -> true);
-        dev.moveSelection(4); // Color Blind 바로 아래
+        dev.moveSelection(8); // 효과음·배경음 다음이 개발자 항목
         dev.activateSelected();
         assertTrue(settings.isDevNetworkOverlay());
         assertEquals(1, saves, "바뀐 설정은 바로 저장한다");
@@ -176,14 +176,14 @@ public class MenuPanelsTest {
     @Test
     void savedDevNetworkOverlayStaysVisibleUntilTurnedOff() { // --dev 없이도 켜진 값은 끌 수 있어야 한다
         settings.setDevNetworkOverlay(true);
-        settingPanel.moveSelection(4);
+        settingPanel.moveSelection(8);
         settingPanel.activateSelected();
         assertFalse(settings.isDevNetworkOverlay());
 
         settingPanel.moveSelection(1); // 항목이 사라져 선택은 Reset Scoreboard에 있다 → 다음은 Reset Settings
         settingPanel.moveSelection(1); // 맨 아래에서 맨 위로 순환
         settingPanel.activateSelected();
-        assertEquals(ScreenSize.LARGE, settings.getScreenSize(), "6개 항목 목록으로 돌아왔다");
+        assertEquals(ScreenSize.LARGE, settings.getScreenSize(), "연출이 있는 목록으로 돌아왔다");
     }
 
     @Test
@@ -194,9 +194,33 @@ public class MenuPanelsTest {
     }
 
     @Test
+    void effectsRowCyclesHighAndLowAndPersists() throws Exception {
+        settingPanel.moveSelection(5);
+        settingPanel.activateSelected();
+        assertFalse(settings.isEffectsHigh());
+        settingPanel.changeValue(-1);
+        assertTrue(settings.isEffectsHigh());
+        var file = java.nio.file.Files.createTempFile("effects", ".json");
+        try {
+            settings.setEffectsHigh(false);
+            assertTrue(new tetris.feature.save.JsonSettingsRepository(file).save(settings));
+            var loaded = new tetris.feature.save.JsonSettingsRepository(file).load();
+            assertTrue(loaded.warnings().isEmpty());
+            assertFalse(loaded.value().isEffectsHigh());
+            var absent = java.nio.file.Files.createTempFile("effects-absent", ".json");
+            java.nio.file.Files.writeString(absent, "{\"screenSize\":\"SMALL\"}");
+            assertTrue(new tetris.feature.save.JsonSettingsRepository(absent).load().value().isEffectsHigh());
+            java.nio.file.Files.deleteIfExists(absent);
+        } finally {
+            java.nio.file.Files.deleteIfExists(file);
+            tetris.ui.fx.StarfieldBackground.setEffectsHigh(true);
+        }
+    }
+
+    @Test
     void keyCaptureAppliesValidKey() {
         settingPanel.openControlKeys();
-        settingPanel.moveSelection(4); // HARD_DROP
+        settingPanel.moveSelection(5); // HARD_DROP (반시계가 하나 늘었다)
         settingPanel.activateSelected();
         assertTrue(settingPanel.isCapturing());
 

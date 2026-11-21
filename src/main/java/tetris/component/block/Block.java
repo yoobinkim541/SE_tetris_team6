@@ -89,7 +89,7 @@ public abstract class Block implements Cloneable {
         throw new UnsupportedOperationException("서브클래스에서 override 필요");
     }
 
-    // 회전 상태 0..3 (0 = 초기 모양, 시계방향으로 +1). 모양과 어긋나지 않도록 rotateClockwise에서만 바뀐다
+    // 회전 상태 0..3 (0 = 초기 모양, 시계방향으로 +1). 모양과 어긋나지 않도록 rotateClockwise/rotateCounterClockwise에서만 바뀐다
     private int rotation;
 
     public int getRotation() {
@@ -117,6 +117,28 @@ public abstract class Block implements Cloneable {
         // rotateRight와 같은 좌표 변환: (r, c) → (c, n - 1 - r)
         int rotatedRow = itemCol;
         itemCol = n - 1 - itemRow;
+        itemRow = rotatedRow;
+    }
+
+    /** 반시계 90도 회전한 새 격자. 원본은 바꾸지 않는다 */
+    public int[][] rotateLeft() {
+        int n = shape.length;
+        int[][] rotated = new int[n][n];
+        for (int i = 0; i < n; i++) {
+            for (int j = 0; j < n; j++) {
+                rotated[n - 1 - j][i] = shape[i][j];
+            }
+        }
+        return rotated;
+    }
+
+    /** 모양·회전 상태·아이템 칸을 함께 반시계 90° 돌린다. 좌표는 (r, c) → (n-1-c, r) */
+    public void rotateCounterClockwise() {
+        int n = shape.length;
+        shape = rotateLeft();
+        rotation = (rotation + 3) % 4;
+        int rotatedRow = n - 1 - itemCol;
+        itemCol = itemRow;
         itemRow = rotatedRow;
     }
 

@@ -17,10 +17,21 @@ public class Messages {
     static {
         TEXT.put("app.title", "SE Tetris");
 
-        TEXT.put("menu.start", "게임 시작");
+        TEXT.put("menu.start", "게임 시작 (솔로)");
+        TEXT.put("menu.item", "아이템 모드");
+        TEXT.put("menu.multi", "멀티플레이");
         TEXT.put("menu.settings", "설정");
         TEXT.put("menu.scoreboard", "스코어보드");
         TEXT.put("menu.exit", "게임 종료");
+        TEXT.put("menu.solo.classic", "일반 게임");
+        TEXT.put("menu.raid.solo", "솔로 레이드");
+        TEXT.put("menu.raid.coop", "협동 레이드 (2인)");
+        TEXT.put("menu.raid.race", "레이스 레이드 (1v1)");
+        TEXT.put("menu.multi.classic", "로컬 일반 대전");
+        TEXT.put("menu.multi.item", "로컬 아이템 대전");
+        TEXT.put("menu.multi.timed", "로컬 시간제한 대전");
+        TEXT.put("menu.multi.online", "온라인 대전 (LAN·인터넷)");
+        TEXT.put("menu.back", "메인 메뉴");
 
         TEXT.put("game.next", "NEXT");
         TEXT.put("game.score", "SCORE");
@@ -28,6 +39,7 @@ public class Messages {
         TEXT.put("game.lines", "LINES");
         TEXT.put("game.state", "STATE");
         TEXT.put("game.keys", "KEYS");
+        TEXT.put("game.time", "TIME");
         TEXT.put("game.effects", "지속 효과");
         TEXT.put("effect.DOUBLE_SCORE.tag", "x2");
         TEXT.put("effect.DOUBLE_SCORE.desc", "점수 2배");
@@ -69,9 +81,17 @@ public class Messages {
         TEXT.put("settings.difficulty", "난이도");
         TEXT.put("settings.controlKeys", "조작키");
         TEXT.put("settings.colorBlind", "색맹 모드");
+        TEXT.put("settings.controlStyle", "조작 방식");
         TEXT.put("settings.devNetOverlay", "개발자: 연결 상태 표시");
         TEXT.put("settings.resetScoreboard", "스코어보드 초기화");
         TEXT.put("settings.resetSettings", "설정 초기화");
+        TEXT.put("settings.effects", "연출");
+        TEXT.put("settings.effects.high", "높음");
+        TEXT.put("settings.effects.low", "낮음");
+        TEXT.put("settings.sfx", "효과음");
+        TEXT.put("settings.bgm", "배경음");
+        TEXT.put("settings.enabled", "켬");
+        TEXT.put("settings.disabled", "끔");
         TEXT.put("settings.on", "ON");
         TEXT.put("settings.off", "OFF");
         TEXT.put("settings.pressKey", "새 키를 누르세요 (Esc 취소)");
@@ -81,6 +101,8 @@ public class Messages {
         TEXT.put("settings.saveFailed", "설정을 저장하지 못했습니다 (이번 실행에만 적용됩니다)");
         TEXT.put("settings.scoreboardCleared", "스코어보드를 초기화했습니다");
         TEXT.put("settings.settingsReset", "설정을 기본값으로 되돌렸습니다");
+        TEXT.put("style.CLASSIC", "클래식(명세)");
+        TEXT.put("style.MODERN", "모던");
 
         TEXT.put("size.SMALL", "Small");
         TEXT.put("size.MEDIUM", "Medium");
@@ -94,12 +116,16 @@ public class Messages {
         TEXT.put("action.MOVE_RIGHT", "오른쪽 이동");
         TEXT.put("action.SOFT_DROP", "소프트 드롭");
         TEXT.put("action.ROTATE", "회전");
+        TEXT.put("action.ROTATE_CCW", "반시계 회전");
         TEXT.put("action.HARD_DROP", "하드 드롭");
+        TEXT.put("action.HOLD", "홀드");
         TEXT.put("action.PAUSE", "일시정지");
         TEXT.put("action.QUIT", "게임 끝내기");
+        TEXT.put("game.hold", "홀드");
 
         TEXT.put("guide.move", "이동");
         TEXT.put("guide.mainMenu", "↑/↓ 이동   Enter 선택");
+        TEXT.put("guide.subMenu", "↑/↓ 이동   Enter 선택   Esc 메인 메뉴");
         TEXT.put("guide.settings", "↑/↓ 이동   Enter 선택   Esc 뒤로");
         TEXT.put("guide.controlKeys", "↑/↓ 이동   Enter 키 변경   Esc 뒤로");
         TEXT.put("guide.scoreboard", "Enter/Esc 메인 메뉴");
@@ -117,6 +143,11 @@ public class Messages {
         String text = TEXT.get(key);
         if (text == null) throw new IllegalArgumentException("unknown message key: " + key);
         return text;
+    }
+
+    /** 글꼴이 안내 문구를 모두 그릴 수 있는지 테스트가 확인한다 */
+    public static java.util.Collection<String> allTexts() {
+        return java.util.List.copyOf(TEXT.values());
     }
 
     public static String format(String key, Object... args) {
@@ -148,11 +179,13 @@ public class Messages {
      */
     public static String keyGuide(MainFrame.Screen screen, KeyMap keyMap) {
         return switch (screen) {
-            case BATTLE_MODES -> "↑↓ 선택 · Enter 확인";
+            case BATTLE_MODES -> get("guide.subMenu");
             case BATTLE -> new tetris.ui.versus.BattleKeyMap().guide();
             case BATTLE_RESULT -> "Enter 모드 선택 · Esc 메인 메뉴";
             case P2P_LOBBY -> "호스트 대기 또는 IP 접속 · 양쪽 모두 게임 시작";
             case P2P_RESULT -> "Enter 로비로 · Esc 메인 메뉴";
+            case SOLO_MENU -> get("guide.subMenu");
+            case RAID -> "R 필살 · P 일시정지 · Esc 나가기";
             case MAIN_MENU -> get("guide.mainMenu");
             case SETTINGS -> get("guide.settings");
             case SCOREBOARD -> get("guide.scoreboard");
@@ -162,8 +195,8 @@ public class Messages {
                     keyName(keyMap, GameAction.MOVE_LEFT) + "/" + keyName(keyMap, GameAction.MOVE_RIGHT)
                             + "  " + get("guide.move"),
                     gameKeyLine(keyMap, GameAction.SOFT_DROP),
-                    gameKeyLine(keyMap, GameAction.ROTATE),
-                    gameKeyLine(keyMap, GameAction.HARD_DROP),
+                    gameKeyLine(keyMap, GameAction.ROTATE) + " / " + keyName(keyMap, GameAction.ROTATE_CCW),
+                    gameKeyLine(keyMap, GameAction.HARD_DROP) + " / " + keyName(keyMap, GameAction.HOLD),
                     gameKeyLine(keyMap, GameAction.PAUSE),
                     gameKeyLine(keyMap, GameAction.QUIT));
         };

@@ -15,11 +15,14 @@ import tetris.feature.item.GameModifiers;
 import tetris.feature.item.ItemResult;
 import tetris.feature.item.ItemType;
 import tetris.feature.rule.BlockGenerator;
+import tetris.feature.rule.BasicRotationPolicy;
+import tetris.feature.rule.ImmediateLockPolicy;
 import tetris.feature.rule.ItemBlockGenerator;
 import tetris.feature.rule.LevelPolicy;
 import tetris.feature.rule.LockDelayPolicy;
 import tetris.feature.rule.LockPolicy;
 import tetris.feature.rule.NextBlockQueue;
+import tetris.feature.setting.ControlStyle;
 import tetris.feature.rule.RotationPolicy;
 import tetris.feature.rule.ScoringPolicy;
 import tetris.feature.rule.SpawnPolicy;
@@ -37,7 +40,8 @@ import tetris.feature.versus.api.SpawnBoundary;
  * 현재 블록은 보드 배열에 그리지 않고 currentBlock으로만 들고 있다가 Lock할 때 보드에 기록한다.
  */
 public class GameSession {
-    private static final int PREVIEW_COUNT = 1; // NXT-1
+    private static final int CLASSIC_PREVIEW_COUNT = 1; // NXT-1
+    private static final int MODERN_PREVIEW_COUNT = 3;   // NXT-2
     private static final int CLEAR_ANIMATION_MILLIS = 150; // ANI-1
     private static final int CELL_CLEAR_SCORE = 10;        // 아이템이 지운 고정 칸당 점수 (ITB-4)
 
@@ -60,9 +64,18 @@ public class GameSession {
     private boolean lastActionIsRotate;           // 마지막으로 성공한 조작이 회전인지 (T-스핀 판정용, ROT-7)
     private int lastKickIndex = -1;               // 마지막 회전에 쓰인 SRS 킥 번호. 회전한 적 없으면 -1 (TSP-3)
     private TSpinType lastTSpin = TSpinType.NONE; // 가장 최근 Lock의 T-스핀 판정. 다음 Lock 때 바뀐다 (TSP-4)
+    private Block held;                           // 홀드 칸. 비어 있으면 null (HLD-1)
+    private boolean holdUsed;                     // 이번 블록에서 홀드를 이미 썼는지. Lock 뒤 Spawn에서 풀린다
+    private boolean bufferRotate;                 // CLEARING 중 버퍼된 회전 (BUF-1)
+    private boolean bufferRotateCcw;
+    private boolean bufferHold;
+    private boolean bufferHardDrop;
+    private boolean applyingBuffer;
 
     private final SpawnPolicy spawnPolicy = new SpawnPolicy();
-    private final RotationPolicy rotationPolicy = new SrsRotationPolicy(); // ROT-8: SRS Wall Kick
+    private final RotationPolicy rotationPolicy;
+    private final int previewCount;
+    private final boolean modernFeatures;
     private final LockPolicy lockPolicy;
     private final LevelPolicy levelPolicy;
     private final ScoringPolicy scoringPolicy = new ScoringPolicy();
@@ -73,6 +86,8 @@ public class GameSession {
     private SpawnBoundary spawnBoundary;
     private boolean spawnPending;
     private boolean attackApplied;
+    private int[] lastClearedRows = new int[0];
+    private java.util.List<Cell> lastPlacedCells = java.util.List.of();
 
     /** 일반 모드·NORMAL 난이도 */
     public GameSession(BlockGenerator generator, GameClock clock, GameListener listener) {
@@ -98,6 +113,31 @@ public class GameSession {
 
     public GameSession(GameMode mode, Difficulty difficulty, BlockGenerator generator, GameClock clock,
                        GameListener listener, SpawnBoundary spawnBoundary, LockPolicy lockPolicy) {
+        this(mode, difficulty, generator, clock, listener, spawnBoundary, lockPolicy,
+                new SrsRotationPolicy(), CLASSIC_PREVIEW_COUNT, false);
+    }
+
+    /**
+     * 조작 방식 (CTL-1). CLASSIC은 즉시 Lock·킥 없음·Next 1. MODERN은 Lock Delay·SRS·Next 3과
+     * 고스트·홀드·반시계·입력 버퍼를 켠다. 한 판이 시작될 때 정하고 도중에는 바꾸지 않는다.
+     */
+    public GameSession(GameMode mode, Difficulty difficulty, BlockGenerator generator, GameClock clock,
+                       GameListener listener, ControlStyle style) {
+        this(mode, difficulty, generator, clock, listener, SpawnBoundary.IMMEDIATE, style);
+    }
+
+    /** 대전 엔진용. 호스트가 고른 조작 방식을 Spawn 경계와 함께 넘긴다 */
+    public GameSession(GameMode mode, Difficulty difficulty, BlockGenerator generator, GameClock clock,
+                       GameListener listener, SpawnBoundary spawnBoundary, ControlStyle style) {
+        this(mode, difficulty, generator, clock, listener, spawnBoundary, lockPolicyOf(style),
+                style == ControlStyle.CLASSIC ? new BasicRotationPolicy() : new SrsRotationPolicy(),
+                style == ControlStyle.MODERN ? MODERN_PREVIEW_COUNT : CLASSIC_PREVIEW_COUNT,
+                style == ControlStyle.MODERN);
+    }
+
+    private GameSession(GameMode mode, Difficulty difficulty, BlockGenerator generator, GameClock clock,
+                       GameListener listener, SpawnBoundary spawnBoundary, LockPolicy lockPolicy,
+                       RotationPolicy rotationPolicy, int previewCount, boolean modernFeatures) {
         if (mode == null) throw new IllegalArgumentException("mode cannot be null");
         if (difficulty == null) throw new IllegalArgumentException("difficulty cannot be null");
         if (generator == null) throw new IllegalArgumentException("generator cannot be null");
@@ -112,6 +152,14 @@ public class GameSession {
         this.listener = listener;
         this.spawnBoundary = Objects.requireNonNull(spawnBoundary, "spawnBoundary");
         this.lockPolicy = Objects.requireNonNull(lockPolicy, "lockPolicy");
+        this.rotationPolicy = Objects.requireNonNull(rotationPolicy, "rotationPolicy");
+        this.previewCount = previewCount;
+        this.modernFeatures = modernFeatures;
+    }
+
+    private static LockPolicy lockPolicyOf(ControlStyle style) {
+        if (style == null) throw new IllegalArgumentException("style cannot be null");
+        return style == ControlStyle.CLASSIC ? new ImmediateLockPolicy() : new LockDelayPolicy();
     }
 
     // ── 수명주기 ─────────────────────────────
@@ -122,7 +170,7 @@ public class GameSession {
         score = 0;
         lines = 0;
         levelPolicy.reset();
-        nextQueue = new NextBlockQueue(generator, PREVIEW_COUNT);
+        nextQueue = new NextBlockQueue(generator, previewCount);
         currentBlock = null;
         quitPending = false;
         spawnPending = false;
@@ -132,6 +180,9 @@ public class GameSession {
         pausedDuringClearing = false;
         crushing = false;
         resetLockState();
+        held = null;
+        holdUsed = false;
+        clearInputBuffer();
         lastTSpin = TSpinType.NONE;
         modifiers = new GameModifiers();
 
@@ -179,19 +230,51 @@ public class GameSession {
 
     /** 실패하면 모양·위치·회전 상태를 바꾸지 않는다 (ROT-3) */
     public void rotateRight() {
-        if (state != GameState.PLAYING || spawnPending) return;
+        if (bufferRotation(false)) return;
+        if (state != GameState.PLAYING || spawnPending || currentBlock == null) return;
         if (currentBlock.isWeight()) return; // ITW-1: 무게추는 회전하지 않는다
-        int kick = rotationPolicy.tryRotate(board, currentBlock);
-        if (kick < 0) return;
-        lastActionIsRotate = true;
-        lastKickIndex = kick;
-        onMovedOrRotated();
-        if (state == GameState.PLAYING) listener.onChanged(snapshot()); // 다 쓴 블록은 다시 닿는 순간 Lock될 수 있다
+        applyRotation(false);
+    }
+
+    /** 반시계 90°. 클래식에서는 무시한다 (ROT-9) */
+    public void rotateLeft() {
+        if (!modernFeatures) return;
+        if (bufferRotation(true)) return;
+        if (state != GameState.PLAYING || spawnPending || currentBlock == null) return;
+        if (currentBlock.isWeight()) return;
+        applyRotation(true);
+    }
+
+    /**
+     * 홀드 (HLD-1, HLD-2). 블록당 한 번, Lock 뒤 다음 Spawn에서 다시 쓸 수 있다.
+     * 바꾸면 홀드 칸의 블록을 스폰 위치·초기 회전으로 꺼낸다. 무게추는 홀드할 수 없다.
+     * 아이템 칸은 블록에 붙은 채로 같이 들어간다.
+     */
+    public void hold() {
+        if (!modernFeatures) return;
+        if (state == GameState.CLEARING) {
+            bufferHold = true;
+            return;
+        }
+        if (state != GameState.PLAYING || spawnPending || holdUsed || currentBlock == null) return;
+        if (currentBlock.isWeight()) return;
+        Block incoming = held;
+        held = normalized(currentBlock);
+        holdUsed = true;
+        currentBlock = null;
+        resetLockState();
+        if (incoming == null) spawnPiece(nextQueue.pop(), false);
+        else spawnPiece(incoming, false);
+        if (state == GameState.PLAYING) listener.onChanged(snapshot());
     }
 
     /** 내려갈 수 있는 만큼 한 번에 내리고 +칸수 x Level (SCR-2) 후 즉시 Lock. 점수는 Level이 바뀔 수 있는 Lock 전에 더한다 */
     public void hardDrop() {
-        if (state != GameState.PLAYING || spawnPending) return;
+        if (state == GameState.CLEARING && modernFeatures) {
+            bufferHardDrop = true;
+            return;
+        }
+        if (state != GameState.PLAYING || spawnPending || currentBlock == null) return;
 
         if (currentBlock.isWeight()) {
             crushToBottom(); // ITW-6, ITW-7: 점수 없음
@@ -334,10 +417,11 @@ public class GameSession {
     }
 
     public GameSnapshot snapshot() {
+        Block next = nextQueue == null ? null : nextQueue.peek(0).copy();
         return new GameSnapshot(
                 board.copyCells(),
                 currentBlock == null ? null : currentBlock.copy(),
-                nextQueue == null ? null : nextQueue.peek(0).copy(),
+                next,
                 score,
                 levelPolicy.getLevel(),
                 lines,
@@ -348,7 +432,81 @@ public class GameSession {
                 mode == GameMode.ITEM ? 10 - lines % 10 : 0,
                 modifiers.effects(),
                 board.copyItemCells(),
-                lastTSpin);
+                lastTSpin,
+                held == null ? null : held.copy(),
+                peekNext(),
+                ghostOf(currentBlock));
+    }
+
+    /** CLEARING 중 회전은 다음 블록에 한 번만 적용한다. 마지막 방향이 이긴다 (BUF-1) */
+    private boolean bufferRotation(boolean counterClockwise) {
+        if (!modernFeatures || state != GameState.CLEARING) return false;
+        bufferRotate = true;
+        bufferRotateCcw = counterClockwise;
+        return true;
+    }
+
+    private void applyRotation(boolean counterClockwise) {
+        int kick = counterClockwise
+                ? rotationPolicy.tryRotateCounterClockwise(board, currentBlock)
+                : rotationPolicy.tryRotate(board, currentBlock);
+        if (kick < 0) return;
+        lastActionIsRotate = true;
+        lastKickIndex = kick;
+        onMovedOrRotated();
+        listener.onChanged(snapshot());
+    }
+
+    private void clearInputBuffer() {
+        bufferRotate = false;
+        bufferRotateCcw = false;
+        bufferHold = false;
+        bufferHardDrop = false;
+    }
+
+    /** 적용 순서는 홀드 → 회전 → 하드 드롭. 각각 최대 한 번 (BUF-1) */
+    private void applyBufferedInputs() {
+        if (!modernFeatures || applyingBuffer) return;
+        boolean rotate = bufferRotate;
+        boolean counterClockwise = bufferRotateCcw;
+        boolean hold = bufferHold;
+        boolean drop = bufferHardDrop;
+        clearInputBuffer();
+        if (!rotate && !hold && !drop) return;
+        applyingBuffer = true;
+        try {
+            if (state != GameState.PLAYING || currentBlock == null) return;
+            if (hold) hold();
+            if (state != GameState.PLAYING || currentBlock == null) return;
+            if (rotate) applyRotation(counterClockwise);
+            if (drop && state == GameState.PLAYING && currentBlock != null) hardDrop();
+        } finally {
+            applyingBuffer = false;
+        }
+    }
+
+    private List<Block> peekNext() {
+        if (nextQueue == null) return List.of();
+        List<Block> blocks = new ArrayList<>();
+        for (int i = 0; i < nextQueue.previewCount(); i++) blocks.add(nextQueue.peek(i).copy());
+        return blocks;
+    }
+
+    /** 모던 착지 미리보기. 이미 그 자리이거나 무게추면 그리지 않는다 (GST-1) */
+    private Block ghostOf(Block block) {
+        if (!modernFeatures || block == null || block.isWeight()) return null;
+        int distance = board.getDropDistance(block);
+        if (distance <= 0) return null;
+        Block ghost = block.copy();
+        ghost.setPosition(block.getRow() + distance, block.getCol());
+        return ghost;
+    }
+
+    /** 홀드 칸에는 초기 회전으로 넣는다. 아이템 칸도 같이 돌아간다 (HLD-2) */
+    private static Block normalized(Block block) {
+        Block copy = block.copy();
+        while (copy.getRotation() != 0) copy.rotateCounterClockwise();
+        return copy;
     }
 
     // ── 명세 4장 파이프라인 (내부) ────────────
@@ -362,7 +520,7 @@ public class GameSession {
         currentBlock.setPosition(row, col);
         lastActionIsRotate = false;
         onMovedOrRotated();
-        if (state == GameState.PLAYING) listener.onChanged(snapshot()); // 다 쓴 블록은 다시 닿는 순간 Lock될 수 있다
+        listener.onChanged(snapshot());
     }
 
     /**
@@ -377,9 +535,9 @@ public class GameSession {
         if (!usesLockDelay()) {
             if (!descended) lockCurrentBlock();
         } else if (descended) {
-            if (isGrounded()) onGrounded();     // 방금 바닥에 닿았다
+            if (isGrounded()) startLockDelay(); // 방금 바닥에 닿았다
         } else if (!lockDelayActive) {
-            onGrounded();                       // 닿아 있었지만 유예가 아직 시작되지 않았다
+            startLockDelay();                   // 닿아 있었지만 유예가 아직 시작되지 않았다 (예: 닿은 채로 Spawn)
         } else if (timerFired) {
             lockCurrentBlock();                 // 유예 시간이 다 지났다
         }
@@ -401,24 +559,14 @@ public class GameSession {
     }
 
     /**
-     * 바닥에서 떨어져 있던 블록이 다시 닿았다 (LCK-6). 바닥을 벗어날 때도 초기화 1회를 쓰므로,
-     * 블록당 횟수를 다 썼으면 새 유예 없이 바로 Lock한다. 이렇게 하지 않으면 바닥 가장자리에서
-     * 좌우로 오가거나 위로 킥되는 회전을 반복해 Lock을 끝없이 미룰 수 있다.
-     */
-    private void onGrounded() {
-        if (lockResets > 0 && lockResets >= lockPolicy.maxResets()) lockCurrentBlock();
-        else startLockDelay();
-    }
-
-    /**
      * 좌우 이동·회전 성공 직후 (LCK-6). 유예 중이면 남은 횟수가 있을 때만 타이머를 처음부터 다시 센다.
-     * 이동·회전으로 바닥에서 벗어나면 초기화 1회를 쓰고 낙하 타이머로 돌아가며, 공중에서 움직여 바닥에 닿으면 onGrounded로 넘긴다.
+     * 이동·회전으로 바닥에서 벗어나면 유예를 끝내고 낙하 타이머로 돌아가며, 공중에서 움직여 바닥에 닿으면 유예를 시작한다.
      */
     private void onMovedOrRotated() {
         if (!usesLockDelay()) return;
         boolean grounded = isGrounded();
         if (!lockDelayActive) {
-            if (grounded) onGrounded();
+            if (grounded) startLockDelay();
             return;
         }
         if (!grounded) {
@@ -539,6 +687,7 @@ public class GameSession {
 
     /** L4~L6 후 Spawn */
     private void finishLock(ClearPlan plan) {
+        lastClearedRows = plan.rows().stream().filter(row -> row >= 0 && row < Board.HEIGHT).mapToInt(Integer::intValue).toArray();
         int clearedCells = applyClear(plan);          // L4
         awardClearScore(plan, clearedCells);          // L5
         updateCounters(plan);                         // L6
@@ -559,9 +708,17 @@ public class GameSession {
         if (!board.tryPlaceBlock(currentBlock))
             throw new IllegalStateException("current block is not at a placeable position");
 
-        Block placed = currentBlock;
+        java.util.ArrayList<Cell> placed = new java.util.ArrayList<>();
+        int[][] shape = currentBlock.getShape();
+        for (int r = 0; r < shape.length; r++) {
+            for (int c = 0; c < shape[r].length; c++) {
+                if (shape[r][c] != 0) placed.add(new Cell(currentBlock.getRow() + r, currentBlock.getCol() + c));
+            }
+        }
+        lastPlacedCells = java.util.List.copyOf(placed);
+        Block placedBlock = currentBlock;
         currentBlock = null; // 보드에 들어간 블록을 스냅샷이 두 번 그리지 않도록
-        return placed;
+        return placedBlock;
     }
 
     /**
@@ -623,18 +780,22 @@ public class GameSession {
     }
 
     private void spawnNextBlock() {
-        Block block = nextQueue.pop();                                             // S1
+        spawnPiece(nextQueue.pop(), true);                                         // S1
+        if (state == GameState.PLAYING) applyBufferedInputs();
+    }
+
+    /** freshPiece면 홀드 사용 횟수를 되돌린다. 홀드에서 꺼낸 블록은 이미 쓴 것으로 남긴다 */
+    private void spawnPiece(Block block, boolean freshPiece) {
         int row = spawnPolicy.getSpawnRow(block);
         int col = spawnPolicy.getSpawnColumn(block);
-
         if (!board.canPlace(block, row, col)) {                                    // S2
             gameOver(); // SPN-4: 블록을 놓지 않고 카운터·Level·타이머도 바꾸지 않는다
             return;
         }
-
         block.setPosition(row, col);
         currentBlock = block;
         crushing = false;
+        if (freshPiece) holdUsed = false;
         resetLockState();
         levelPolicy.onBlockSpawned();                                              // S3
         modifiers.onSpawn();
@@ -649,5 +810,125 @@ public class GameSession {
         state = GameState.GAME_OVER;
         clock.stop();
         listener.onGameOver(snapshot());
+    }
+
+    // ── 레이드 훅. 싱글·대전은 호출하지 않는다 ──
+
+    /** 직전 Lock에서 지운 보이는 행. 지우지 않았으면 빈 배열 */
+    public int[] lastClearedRows() {
+        return lastClearedRows.clone();
+    }
+
+    /** 직전 Lock에서 보드에 기록한 칸. 숨은 줄 좌표가 포함될 수 있다 */
+    public java.util.List<Cell> lastPlacedCells() {
+        return lastPlacedCells;
+    }
+
+    /** 이미 보여 준 바로 다음은 두고 그 뒤를 바꾼다. 저주 블록이 S/Z 두 개를 넣을 때 쓴다 */
+    public void forceUpcoming(Block... pieces) {
+        if (nextQueue == null) throw new IllegalStateException("not started");
+        if (pieces == null) throw new IllegalArgumentException("pieces");
+        nextQueue.replaceAfterFront(java.util.List.of(pieces));
+    }
+
+    /** index번째 대기 블록 종류. 큐 밖이면 null */
+    public tetris.component.block.BlockType peekUpcomingType(int index) {
+        if (nextQueue == null || index < 0) return null;
+        try {
+            return nextQueue.peek(index).getType();
+        } catch (IllegalArgumentException ex) {
+            return null;
+        }
+    }
+
+    /** NEXT 미리보기를 늘린다. 최대 cap */
+    public void expandPreview(int additional, int cap) {
+        if (nextQueue == null) return;
+        nextQueue.expandPreview(additional, cap);
+    }
+
+    public int previewCount() {
+        return nextQueue == null ? previewCount : nextQueue.previewCount();
+    }
+
+    /** 다음 Spawn의 낙하 배율. 1.0이면 기존과 같다 */
+    public void setGravityMultiplier(double multiplier) {
+        modifiers.setGravityMultiplier(multiplier);
+    }
+
+    public double gravityMultiplier() {
+        return modifiers.gravityMultiplier();
+    }
+
+    /**
+     * 빈 고정 칸에 값을 쓴다. 떨어지는 블록이 차지한 칸·벽·범위 밖은 무시한다.
+     * 기둥·덩어리 소환이 회색 칸(공격 칸 값)을 심을 때 쓴다.
+     */
+    public boolean writeFixedCell(int row, int col, int value) {
+        if (row < 0 || row >= Board.HEIGHT || col < 0 || col >= Board.WIDTH) return false;
+        if (value == Board.EMPTY) return false;
+        if (!board.isEmpty(row, col)) return false;
+        if (currentBlock != null && covers(currentBlock, row, col)) return false;
+        try {
+            var method = Board.class.getDeclaredMethod("setCell", int.class, int.class, int.class, ItemType.class);
+            method.setAccessible(true);
+            method.invoke(board, row, col, value, null);
+            return true;
+        } catch (ReflectiveOperationException ex) {
+            throw new IllegalStateException("고정 칸을 쓸 수 없습니다", ex);
+        }
+    }
+
+    /** 보이는 행을 지우고 위 칸을 내린다. 떨어지는 블록이 겹치면 위로 올린다 */
+    public void removeVisibleRows(int... rows) {
+        if (rows == null || rows.length == 0) return;
+        java.util.List<Integer> list = new java.util.ArrayList<>();
+        for (int row : rows) list.add(row);
+        board.removeRows(list);
+        liftCurrentIfColliding();
+    }
+
+    /**
+     * 상단 초과로 쓰러진 참가자를 빈 보드로 되돌리고 다음 조각을 꺼낸다.
+     * 점수·줄·생성기 순서는 유지한다. GAME_OVER가 아니면 무시한다.
+     */
+    public void reviveFromTopOut() {
+        if (state != GameState.GAME_OVER) return;
+        board.reset();
+        currentBlock = null;
+        quitPending = false;
+        spawnPending = false;
+        attackApplied = false;
+        pendingClear = null;
+        pausedDuringClearing = false;
+        crushing = false;
+        resetLockState();
+        held = null;
+        holdUsed = false;
+        clearInputBuffer();
+        lastTSpin = TSpinType.NONE;
+        lastClearedRows = new int[0];
+        lastPlacedCells = java.util.List.of();
+        modifiers = new GameModifiers();
+        state = GameState.PLAYING;
+        spawnNextBlock();
+        if (state == GameState.PLAYING) listener.onChanged(snapshot());
+    }
+
+    private static boolean covers(Block block, int row, int col) {
+        int[][] shape = block.getShape();
+        int localRow = row - block.getRow();
+        int localCol = col - block.getCol();
+        return localRow >= 0 && localRow < shape.length && localCol >= 0 && localCol < shape[localRow].length
+                && shape[localRow][localCol] != 0;
+    }
+
+    private void liftCurrentIfColliding() {
+        if (currentBlock == null) return;
+        int guard = 0;
+        while (guard++ < Board.HEIGHT + Board.MARGIN
+                && !board.canPlace(currentBlock, currentBlock.getRow(), currentBlock.getCol())) {
+            currentBlock.setPosition(currentBlock.getRow() - 1, currentBlock.getCol());
+        }
     }
 }

@@ -10,6 +10,8 @@ public class GameModifiers {
     private int slowRemaining;
     private boolean doubleScoreRenewed;
     private boolean currentBlockSlow;
+    /** 1.0이면 싱글·대전과 같다. 레이드 과부하가 2.0으로 올린다 */
+    private double gravityMultiplier = 1.0;
 
     /** L1 직전 한 번. 이번 Lock에서 D를 재획득했는지 구분한다. */
     public void beginLock() {
@@ -45,7 +47,18 @@ public class GameModifiers {
 
     /** 현재 Spawn 블록의 배율. 다음 onSpawn까지 변하지 않는다. */
     public double fallMultiplier() {
-        return currentBlockSlow ? 1.5 : 1.0;
+        double base = currentBlockSlow ? 1.5 : 1.0;
+        return base * gravityMultiplier;
+    }
+
+    /** 다음 Spawn부터 낙하 간격에 곱한다. 1.0으로 되돌리면 기존 속도와 같다 */
+    public void setGravityMultiplier(double multiplier) {
+        if (multiplier <= 0 || Double.isNaN(multiplier)) throw new IllegalArgumentException("multiplier");
+        gravityMultiplier = multiplier;
+    }
+
+    public double gravityMultiplier() {
+        return gravityMultiplier;
     }
 
     /** 변경 불가능한 사본. S의 remainingBlocks는 현재 블록 이후 남은 Spawn 수다. */

@@ -66,7 +66,10 @@ class RequirementsVisualAuditTest {
 
     private static int[][] empty() { return new int[Board.HEIGHT][Board.WIDTH]; }
     private static int pixel(BufferedImage image, int row, int col) {
-        return image.getRGB(PADDING + col * CELL + 4, PADDING + row * CELL + 4);
+        GamePanel probe = new GamePanel(new Settings(), new PausePanel(() -> {}, () -> {}, () -> {}), value -> {});
+        probe.setCellSize(CELL);
+        java.awt.Rectangle cell = probe.boardCellBounds(row, col);
+        return image.getRGB(cell.x + 4, cell.y + 4);
     }
 
     static Stream<Arguments> items() {
@@ -103,12 +106,12 @@ class RequirementsVisualAuditTest {
         next.attachItem(0, 0, item);
         BufferedImage image = render(snapshot(empty(), null, next, GameState.PLAYING, GameMode.ITEM,
                 Difficulty.NORMAL, 10, List.of(), List.of()), colorBlind);
-        int label = CELL * 9 / 20;
-        int boxX = PADDING * 2 + Board.WIDTH * CELL;
-        int boxY = PADDING + label + label / 2;
-        int blockX = boxX + (CELL * 6 - CELL * 2) / 2;
-        int blockY = boxY + (CELL * 4 - CELL * 2) / 2;
-        assertEquals(Color.WHITE.getRGB(), image.getRGB(blockX + 4, blockY + 4));
+        GamePanel probe = new GamePanel(new Settings(), new PausePanel(() -> {}, () -> {}, () -> {}), value -> {});
+        probe.setCellSize(CELL);
+        probe.onChanged(snapshot(empty(), null, next, GameState.PLAYING, GameMode.ITEM,
+                Difficulty.NORMAL, 10, List.of(), List.of()));
+        java.awt.Rectangle itemCell = probe.nextCellBounds(0, 0);
+        assertEquals(Color.WHITE.getRGB(), image.getRGB(itemCell.x + 4, itemCell.y + 4));
     }
 
     @ParameterizedTest @ValueSource(booleans = {false, true})

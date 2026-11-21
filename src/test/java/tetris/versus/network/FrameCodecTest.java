@@ -125,7 +125,7 @@ public class FrameCodecTest {
         String json = new String(frame, 4, frame.length - 4, StandardCharsets.UTF_8);
 
         assertEquals(frame.length - 4, length);
-        assertTrue(json.contains("\"version\":1"), json);
+        assertTrue(json.contains("\"version\":" + WireFormat.VERSION), json);
         assertTrue(json.contains("\"sequence\":1"), json);
         assertTrue(json.contains("\"type\":\"PING\""), json);
     }
@@ -147,7 +147,7 @@ public class FrameCodecTest {
 
     @Test
     void 정확히_64KiB인_프레임은_받는다() throws ProtocolException {
-        String prefix = "{\"version\":1,\"sequence\":1,\"type\":\"STATE\",\"matchId\":\"m\",\"configRevision\":0,\"payload\":{\"pad\":\"";
+        String prefix = "{\"version\":" + WireFormat.VERSION + ",\"sequence\":1,\"type\":\"STATE\",\"matchId\":\"m\",\"configRevision\":0,\"payload\":{\"pad\":\"";
         String suffix = "\"}}";
         int padding = WireFormat.MAX_FRAME_BYTES - prefix.length() - suffix.length();
         byte[] frame = rawFrame(prefix + "x".repeat(padding) + suffix);
@@ -182,42 +182,42 @@ public class FrameCodecTest {
 
     @Test
     void 다른_프로토콜_버전은_거부한다() {
-        String json = "{\"version\":2,\"sequence\":1,\"type\":\"PING\",\"configRevision\":0,\"payload\":{}}";
+        String json = "{\"version\":9,\"sequence\":1,\"type\":\"PING\",\"configRevision\":0,\"payload\":{}}";
 
         assertEquals(ErrorCode.UNSUPPORTED_VERSION, decodeFails(rawFrame(json)).code());
     }
 
     @Test
     void 모르는_메시지_종류는_거부한다() {
-        String json = "{\"version\":1,\"sequence\":1,\"type\":\"CHAT\",\"configRevision\":0,\"payload\":{}}";
+        String json = "{\"version\":" + WireFormat.VERSION + ",\"sequence\":1,\"type\":\"CHAT\",\"configRevision\":0,\"payload\":{}}";
 
         assertEquals(ErrorCode.UNKNOWN_TYPE, decodeFails(rawFrame(json)).code());
     }
 
     @Test
     void 경기_메시지에_matchId가_없으면_거부한다() {
-        String json = "{\"version\":1,\"sequence\":1,\"type\":\"INPUT\",\"configRevision\":0,\"payload\":{}}";
+        String json = "{\"version\":" + WireFormat.VERSION + ",\"sequence\":1,\"type\":\"INPUT\",\"configRevision\":0,\"payload\":{}}";
 
         assertEquals(ErrorCode.INVALID_FIELD, decodeFails(rawFrame(json)).code());
     }
 
     @Test
     void 준비_메시지에_설정_revision이_없으면_거부한다() {
-        String json = "{\"version\":1,\"sequence\":1,\"type\":\"READY\",\"configRevision\":0,\"payload\":{}}";
+        String json = "{\"version\":" + WireFormat.VERSION + ",\"sequence\":1,\"type\":\"READY\",\"configRevision\":0,\"payload\":{}}";
 
         assertEquals(ErrorCode.INVALID_FIELD, decodeFails(rawFrame(json)).code());
     }
 
     @Test
     void payload가_객체가_아니면_거부한다() {
-        String json = "{\"version\":1,\"sequence\":1,\"type\":\"PING\",\"configRevision\":0,\"payload\":3}";
+        String json = "{\"version\":" + WireFormat.VERSION + ",\"sequence\":1,\"type\":\"PING\",\"configRevision\":0,\"payload\":3}";
 
         assertEquals(ErrorCode.INVALID_FIELD, decodeFails(rawFrame(json)).code());
     }
 
     @Test
     void 숫자_필드에_문자열이_오면_거부한다() {
-        String json = "{\"version\":1,\"sequence\":\"1\",\"type\":\"PING\",\"configRevision\":0,\"payload\":{}}";
+        String json = "{\"version\":" + WireFormat.VERSION + ",\"sequence\":\"1\",\"type\":\"PING\",\"configRevision\":0,\"payload\":{}}";
 
         assertEquals(ErrorCode.INVALID_FIELD, decodeFails(rawFrame(json)).code());
     }
@@ -233,8 +233,8 @@ public class FrameCodecTest {
     //#region 순번
     @Test
     void 순번은_연결마다_1부터_하나씩_증가해야_한다() throws ProtocolException {
-        String first = "{\"version\":1,\"sequence\":1,\"type\":\"PING\",\"configRevision\":0,\"payload\":{}}";
-        String skipped = "{\"version\":1,\"sequence\":3,\"type\":\"PING\",\"configRevision\":0,\"payload\":{}}";
+        String first = "{\"version\":" + WireFormat.VERSION + ",\"sequence\":1,\"type\":\"PING\",\"configRevision\":0,\"payload\":{}}";
+        String skipped = "{\"version\":" + WireFormat.VERSION + ",\"sequence\":3,\"type\":\"PING\",\"configRevision\":0,\"payload\":{}}";
         FrameDecoder decoder = new FrameDecoder();
         byte[] ok = rawFrame(first);
         decoder.feed(ok, 0, ok.length);

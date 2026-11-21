@@ -7,7 +7,7 @@ import java.util.Arrays;
 import java.util.List;
 import javax.swing.SwingUtilities;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import tetris.feature.game.*;
 import tetris.feature.item.*;
 import tetris.feature.setting.Settings;
@@ -26,21 +26,27 @@ class CompactInfoLayoutTest {
         return image;
     }
 
+    private static GamePanel probe(int cell) {
+        GamePanel panel = new GamePanel(new Settings(), new PausePanel(() -> {}, () -> {}, () -> {}), s -> {});
+        panel.setCellSize(cell);
+        return panel;
+    }
+
     @ParameterizedTest
-    @CsvSource({"12,183", "13,203", "14,217", "15,237", "16,244", "17,264", "18,278", "19,298", "20,305"})
-    void bothEffectCountsRemainVisibleAboveUnchangedKeyGuide(int cell, int guideTop) throws Exception {
+    @ValueSource(ints = {12, 13, 14, 15, 16, 17, 18, 19, 20})
+    void bothEffectCountsRemainVisibleAboveUnchangedKeyGuide(int cell) throws Exception {
         SwingUtilities.invokeAndWait(() -> {
             BufferedImage none = render(cell, List.of());
             BufferedImage doubleScore = render(cell, List.of(new ActiveEffect(ItemType.DOUBLE_SCORE, 7)));
             BufferedImage both = render(cell, List.of(new ActiveEffect(ItemType.DOUBLE_SCORE, 7), new ActiveEffect(ItemType.SLOW, 3)));
-            int x = cell * 10 + cell / 2 * 2;
-            int width = cell * 6;
-            assertFalse(Arrays.equals(none.getRGB(x, 0, width, guideTop, null, 0, width),
-                    doubleScore.getRGB(x, 0, width, guideTop, null, 0, width)), "x2 잔여 수가 안내 위에 보여야 함");
-            assertFalse(Arrays.equals(doubleScore.getRGB(x, 0, width, guideTop, null, 0, width),
-                    both.getRGB(x, 0, width, guideTop, null, 0, width)), "SLOW 잔여 수가 안내 위에 보여야 함");
-            assertArrayEquals(none.getRGB(x, guideTop, width, none.getHeight() - guideTop, null, 0, width),
-                    both.getRGB(x, guideTop, width, both.getHeight() - guideTop, null, 0, width),
+            Rectangle fx = probe(cell).effectsBounds();
+            Rectangle guide = probe(cell).keyGuideBounds();
+            assertFalse(Arrays.equals(none.getRGB(fx.x, fx.y, fx.width, fx.height, null, 0, fx.width),
+                    doubleScore.getRGB(fx.x, fx.y, fx.width, fx.height, null, 0, fx.width)), "x2 잔여 수가 안내 위에 보여야 함");
+            assertFalse(Arrays.equals(doubleScore.getRGB(fx.x, fx.y, fx.width, fx.height, null, 0, fx.width),
+                    both.getRGB(fx.x, fx.y, fx.width, fx.height, null, 0, fx.width)), "SLOW 잔여 수가 안내 위에 보여야 함");
+            assertArrayEquals(none.getRGB(guide.x, guide.y, guide.width, guide.height, null, 0, guide.width),
+                    both.getRGB(guide.x, guide.y, guide.width, guide.height, null, 0, guide.width),
                     "효과 표시가 조작 안내를 덮으면 안 됨");
         });
     }

@@ -67,7 +67,8 @@ class BattleModesUiTest {
             var g = image.createGraphics();
             panel.paint(g);
             g.dispose();
-            assertNotEquals(image.getRGB(0, 0), image.getRGB(28 + 13, 90 + 19 * 27 + 13));
+            java.awt.Point item = panel.boardSample(tetris.feature.versus.api.PlayerId.ONE, 19, 0);
+            assertNotEquals(image.getRGB(0, 0), image.getRGB(item.x, item.y));
         });
     }
 

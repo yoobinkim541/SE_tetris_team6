@@ -25,9 +25,10 @@ class BattleViewTest {
                     view.setSize(size[0], size[1]);
                     var image = new BufferedImage(size[0], size[1], BufferedImage.TYPE_INT_RGB);
                     var g = image.createGraphics(); view.paint(g); g.dispose();
-                    double scale=size[0]/960.0;
-                    assertNotEquals(image.getRGB(0,0), image.getRGB((int)(40*scale),(int)(610*scale)));
-                    assertNotEquals(image.getRGB(0,0), image.getRGB((int)(512*scale),(int)(610*scale)));
+                    java.awt.Point one = view.toView(view.boardSample(tetris.feature.versus.api.PlayerId.ONE, 19, 0), size[0], size[1]);
+                    java.awt.Point two = view.toView(view.boardSample(tetris.feature.versus.api.PlayerId.TWO, 19, 0), size[0], size[1]);
+                    assertNotEquals(image.getRGB(0, 0), image.getRGB(one.x, one.y));
+                    assertNotEquals(image.getRGB(0, 0), image.getRGB(two.x, two.y));
                     if(size[0]==960 && colorBlind) {
                         try {
                             var file=new java.io.File("build/reports/sprint7-b-preview.png");

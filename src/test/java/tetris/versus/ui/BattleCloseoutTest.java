@@ -36,7 +36,7 @@ class BattleCloseoutTest {
         });
     }
     private void quit(JRootPane root) {
-        var name = root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).get(KeyStroke.getKeyStroke(KeyEvent.VK_Q, 0));
+        var name = root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).get(KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0));
         root.getActionMap().get(name).actionPerformed(null);
     }
     @Test void finishingDuringAutomaticPauseDoesNotOpenQuitDialog() throws Exception {

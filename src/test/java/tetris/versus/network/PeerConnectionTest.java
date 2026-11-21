@@ -343,7 +343,7 @@ public class PeerConnectionTest {
         Socket[] pair = socketPair();
         Recorder recorder = new Recorder();
         start(pair[1], recorder);
-        String prefix = "{\"version\":1,\"sequence\":1,\"configRevision\":0,\"payload\":{},\"type\":\"";
+        String prefix = "{\"version\":" + WireFormat.VERSION + ",\"sequence\":1,\"configRevision\":0,\"payload\":{},\"type\":\"";
         String suffix = "\"}";
         String type = "Z".repeat(WireFormat.MAX_FRAME_BYTES - prefix.length() - suffix.length());
         byte[] body = (prefix + type + suffix).getBytes(StandardCharsets.UTF_8);

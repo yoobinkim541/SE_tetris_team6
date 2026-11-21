@@ -8,6 +8,7 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.CompletionStage;
 import java.util.function.IntSupplier;
 import java.util.function.Supplier;
+import javax.swing.SwingUtilities;
 import tetris.feature.network.EstablishException;
 import tetris.feature.network.LanAddresses;
 import tetris.feature.network.lobby.LinkHealth;
@@ -15,7 +16,10 @@ import tetris.feature.network.lobby.LobbyClient;
 import tetris.feature.network.lobby.LobbySnapshot;
 import tetris.feature.network.lobby.LobbySnapshot.Role;
 import tetris.feature.network.lobby.LobbySnapshot.State;
+import tetris.feature.network.relay.InternetRelay;
+import tetris.feature.network.relay.RelayException;
 import tetris.feature.versus.api.BattleClient;
+import tetris.feature.setting.ControlStyle;
 import tetris.feature.versus.api.BattleMode;
 import tetris.feature.versus.api.MatchConfig;
 
@@ -30,6 +34,8 @@ import tetris.feature.versus.api.MatchConfig;
  *   <li>연결 상태(S10-B2): 지연은 화면에 표시만 하고, 끊김(LOST)과 상대의 정상 나가기(PEER_LEFT)는 다른 안내로
  *       P2P 첫 화면에 보여 준다. 최근 접속에 성공한 IP를 골라 다시 접속할 수 있다</li>
  *   <li>결과 뒤 "다시 대전"은 같은 연결의 로비로 돌아가 이 PC의 준비를 바로 켠다. 이전 판 준비는 해제된다</li>
+ *   <li>인터넷 대전: 호스트는 아무 포트로 대기한 뒤 중계 서버에서 방 코드를 받는다. 참가자는 방 코드로 중계에 붙은 뒤
+ *       이 PC의 중계 루프백 포트로 접속한다. 그 뒤 흐름(로비·경기·재대전·끊김)은 같은 LAN과 같다</li>
  * </ul>
  */
 public final class P2pLobbyController implements P2pLobbyPanel.Actions, AutoCloseable {
@@ -37,6 +43,9 @@ public final class P2pLobbyController implements P2pLobbyPanel.Actions, AutoClos
     public interface Navigation {
         /** 경기 시작. local은 이 PC가 조작하는 쪽 설명(P1/P2) */
         void startMatch(BattleClient client, MatchConfig config, Role role);
+        /** 레이드 시작. 호스트는 왼쪽, 클라이언트는 오른쪽 */
+        default void startRaid(tetris.feature.raid.api.RaidClient client, MatchConfig config, Role role) {
+        }
         /** 경기 중 연결이 끊겼다. 경기 화면을 닫고 로비 화면을 보여 줘야 한다 */
         void connectionLost();
         /** INITIAL에서 뒤로: P2P 화면을 떠난다 */
@@ -57,11 +66,19 @@ public final class P2pLobbyController implements P2pLobbyPanel.Actions, AutoClos
     private final LobbyClient.Subscription subscription;
     private final LobbyClient.Subscription healthSubscription;
     private final List<String> recent = new ArrayList<>();
+    private final Supplier<InternetRelay> relayFactory;
+    /** 진행 중인 인터넷 대전 중계. 같은 LAN이면 null */
+    private InternetRelay relay;
+    private String roomCode;
+    /** 마지막 연결이 인터넷이었는지 (끊김 안내 문구용) */
+    private boolean internetSession;
     private LinkHealth health = LinkHealth.NONE;
     private String connectingTo;
     private boolean error;
     private LobbySnapshot current;
     private BattleMode selectedMode = BattleMode.CLASSIC;
+    private tetris.feature.raid.api.RaidMode selectedRaid;
+    private ControlStyle controlStyle = ControlStyle.MODERN;
     private String message = "";
     private long attempt;
     private boolean inMatch;
@@ -80,6 +97,15 @@ public final class P2pLobbyController implements P2pLobbyPanel.Actions, AutoClos
     /** recentPeers: 저장된 최근 접속 IP(최신순). 화면을 열 때 한 번 읽는다 (R3-RECENT) */
     public P2pLobbyController(LobbyClient lobby, Navigation navigation, IntSupplier localPort,
                               Supplier<List<String>> lanAddresses, Supplier<List<String>> recentPeers) {
+        this(lobby, navigation, localPort, lanAddresses, recentPeers,
+                () -> new InternetRelay(InternetRelay.configuredRoutes(), SwingUtilities::invokeLater));
+    }
+
+    /** relayFactory: 인터넷 대전을 시작할 때마다 새 중계 접속 하나를 만든다 (테스트는 가짜 중계) */
+    public P2pLobbyController(LobbyClient lobby, Navigation navigation, IntSupplier localPort,
+                              Supplier<List<String>> lanAddresses, Supplier<List<String>> recentPeers,
+                              Supplier<InternetRelay> relayFactory) {
+        this.relayFactory = Objects.requireNonNull(relayFactory, "relayFactory");
         this.lobby = Objects.requireNonNull(lobby, "lobby");
         this.navigation = Objects.requireNonNull(navigation, "navigation");
         this.localPort = Objects.requireNonNull(localPort, "localPort");
@@ -127,7 +153,7 @@ public final class P2pLobbyController implements P2pLobbyPanel.Actions, AutoClos
 
     @Override
     public void host(String portText) {
-        if (closed || current.state() != State.INITIAL) return;
+        if (closed || current.state() != State.INITIAL || relay != null) return;
         Integer port = parsePort(portText);
         if (port == null) return;
         clearMessage();
@@ -136,7 +162,7 @@ public final class P2pLobbyController implements P2pLobbyPanel.Actions, AutoClos
 
     @Override
     public void connect(String address, String portText) {
-        if (closed || current.state() != State.INITIAL) return;
+        if (closed || current.state() != State.INITIAL || relay != null) return;
         Integer port = parsePort(portText);
         if (port == null) return;
         String host = address == null ? "" : address.trim();
@@ -152,9 +178,18 @@ public final class P2pLobbyController implements P2pLobbyPanel.Actions, AutoClos
     @Override
     public void selectMode(BattleMode mode) {
         selectedMode = Objects.requireNonNull(mode);
+        selectedRaid = null;
         if (closed || current.role() != Role.HOST || current.state() != State.LOBBY) return;
-        if (current.config() != null && current.config().mode() == mode) return;
-        lobby.selectConfig(MatchConfig.of(mode));
+        if (current.config() != null && !current.config().raid() && current.config().mode() == mode) return;
+        lobby.selectConfig(configFor(mode));
+    }
+
+    @Override
+    public void selectRaid(tetris.feature.raid.api.RaidMode mode) {
+        selectedRaid = Objects.requireNonNull(mode);
+        if (closed || current.role() != Role.HOST || current.state() != State.LOBBY) return;
+        if (current.config() != null && current.config().raidMode() == mode) return;
+        lobby.selectConfig(MatchConfig.raid(mode, controlStyle));
     }
 
     @Override
@@ -168,6 +203,93 @@ public final class P2pLobbyController implements P2pLobbyPanel.Actions, AutoClos
     }
 
     @Override
+    public void hostInternet() {
+        if (closed || current.state() != State.INITIAL || relay != null) return;
+        clearMessage();
+        internetSession = true;
+        track(() -> lobby.host(0), "인터넷 방 만들기"); // 아무 빈 포트로 대기한다. 상대는 중계를 거쳐 들어온다
+        if (current.state() != State.HOSTING) return;
+        int port = localPort.getAsInt();
+        if (port <= 0) {
+            failInternet("인터넷 방을 만들 수 없습니다. 다시 시도하세요.");
+            return;
+        }
+        InternetRelay opened = relayFactory.get();
+        relay = opened;
+        long mine = attempt;
+        render();
+        opened.openRoom(port).whenComplete((code, error) -> {
+            if (closed || relay != opened || mine != attempt) return;
+            if (error != null) {
+                failInternet(relayFailureText(error));
+                return;
+            }
+            roomCode = code;
+            panel.setInternetRoom(code);
+            render();
+        });
+    }
+
+    @Override
+    public void joinInternet(String code) {
+        if (closed || current.state() != State.INITIAL || relay != null) return;
+        String trimmed = code == null ? "" : code.trim().toUpperCase(java.util.Locale.ROOT);
+        InternetRelay opened = relayFactory.get();
+        if (!opened.accepts(trimmed)) {
+            opened.close();
+            showMessage("방 코드가 올바르지 않습니다. 호스트 화면에 보이는 코드(예: K7Q-M2X)를 그대로 입력하세요.");
+            return;
+        }
+        clearMessage();
+        internetSession = true;
+        relay = opened;
+        long mine = ++attempt;
+        message = "방 " + trimmed + "에 참가하는 중…";
+        render();
+        opened.join(trimmed).whenComplete((port, error) -> {
+            if (closed || relay != opened || mine != attempt) return;
+            if (error != null) {
+                failInternet(relayFailureText(error));
+                return;
+            }
+            roomCode = trimmed;
+            panel.setInternetRoom(trimmed);
+            message = "";
+            track(() -> lobby.connect("127.0.0.1", port, false), "참가");
+        });
+    }
+
+    /** 인터넷 대전 시작에 실패했다: 대기·중계를 정리하고 이유를 보인다 */
+    private void failInternet(String text) {
+        attempt++;
+        if (current.state() == State.HOSTING || current.state() == State.CONNECTING) lobby.cancel();
+        closeRelay();
+        showMessage(text);
+    }
+
+    private void closeRelay() {
+        InternetRelay closing = relay;
+        relay = null;
+        roomCode = null;
+        panel.setInternetRoom(null);
+        if (closing != null) closing.close();
+    }
+
+    static String relayFailureText(Throwable error) {
+        Throwable cause = error instanceof CompletionException && error.getCause() != null ? error.getCause() : error;
+        if (!(cause instanceof RelayException relayError)) return "인터넷 대전 연결 실패: " + cause.getMessage();
+        return switch (relayError.reason()) {
+            case UNREACHABLE -> "중계 서버에 연결할 수 없습니다. 인터넷 연결을 확인하세요.";
+            case NO_ROOM -> "그 방 코드가 없거나 이미 다른 사람이 참가했습니다. 코드를 다시 확인하세요.";
+            case PROTO_MISMATCH -> "상대와 게임 버전이 다릅니다. 같은 버전으로 실행하세요.";
+            case SERVER_FULL -> "중계 서버가 혼잡합니다. 잠시 뒤 다시 시도하세요.";
+            case TOO_MANY_ATTEMPTS -> "틀린 코드를 너무 많이 입력했습니다. 1분 뒤 다시 시도하세요.";
+            case EXPIRED -> "방 코드 유효 시간(10분)이 지났습니다. 방을 다시 만드세요.";
+            case BAD_REQUEST, CLOSED -> "중계 연결이 끊어졌습니다. 다시 시도하세요.";
+        };
+    }
+
+    @Override
     public void cancelOrBack() {
         if (closed) return;
         switch (current.state()) {
@@ -176,12 +298,14 @@ public final class P2pLobbyController implements P2pLobbyPanel.Actions, AutoClos
                 attempt++;
                 message = "취소했습니다.";
                 lobby.cancel();
+                closeRelay();
                 render();
             }
             default -> {
                 attempt++;
                 message = "연결을 끊었습니다.";
                 lobby.leave();
+                closeRelay();
                 render();
             }
         }
@@ -226,16 +350,28 @@ public final class P2pLobbyController implements P2pLobbyPanel.Actions, AutoClos
             if (snapshot.role() == Role.CLIENT && connectingTo != null) remember(connectingTo);
         }
         if (state != State.CONNECTING) connectingTo = null;
+        if (state == State.INITIAL && previous != null && previous.state() != State.INITIAL) {
+            closeRelay(); // 대기 취소·접속 실패·끊김: 이번 중계 접속도 끝났다
+        }
         if (snapshot.role() == Role.HOST && state == State.LOBBY && snapshot.config() == null) {
-            lobby.selectConfig(MatchConfig.of(selectedMode));
+            lobby.selectConfig(configFor(selectedMode));
             return; // 설정이 들어간 스냅샷이 곧 다시 온다
         }
         if ((state == State.STARTING || state == State.PLAYING) && !inMatch) {
-            var battle = lobby.battleClient();
-            if (battle.isPresent() && !inMatch) {
-                inMatch = true;
-                message = "";
-                navigation.startMatch(battle.get(), snapshot.config(), snapshot.role());
+            if (snapshot.config() != null && snapshot.config().raid()) {
+                var raid = lobby.raidClient();
+                if (raid.isPresent()) {
+                    inMatch = true;
+                    message = "";
+                    navigation.startRaid(raid.get(), snapshot.config(), snapshot.role());
+                }
+            } else {
+                var battle = lobby.battleClient();
+                if (battle.isPresent()) {
+                    inMatch = true;
+                    message = "";
+                    navigation.startMatch(battle.get(), snapshot.config(), snapshot.role());
+                }
             }
         }
         if (inMatch && state == State.INITIAL) {
@@ -254,6 +390,19 @@ public final class P2pLobbyController implements P2pLobbyPanel.Actions, AutoClos
         render();
     }
 
+    /** 호스트 설정의 조작 방식. P2P 규칙은 이 값이 CONFIG로 가서 엔진이 따른다 */
+    public void useControlStyle(ControlStyle style) {
+        controlStyle = style == null ? ControlStyle.MODERN : style;
+        if (!closed && current != null && current.role() == Role.HOST && current.state() == State.LOBBY) {
+            lobby.selectConfig(selectedRaid == null ? configFor(selectedMode)
+                    : tetris.feature.versus.api.MatchConfig.raid(selectedRaid, controlStyle));
+        }
+    }
+
+    private MatchConfig configFor(BattleMode mode) {
+        return MatchConfig.of(mode).withControlStyle(controlStyle);
+    }
+
     /**
      * 연결 상태 (R3-LAG, R3-DISCONNECT). 종료 상태는 로비가 INITIAL을 먼저 알린 뒤 오므로,
      * 이미 띄운 끊김 안내를 정상 나가기/응답 없음으로 구체화한다
@@ -268,7 +417,9 @@ public final class P2pLobbyController implements P2pLobbyPanel.Actions, AutoClos
             }
             case LOST -> {
                 error = true;
-                message = "상대와 연결이 끊어졌습니다. 같은 LAN인지, 방화벽을 확인한 뒤 다시 접속하세요.";
+                message = internetSession
+                        ? "상대와 연결이 끊어졌습니다. 인터넷 연결을 확인한 뒤 방을 다시 만드세요."
+                        : "상대와 연결이 끊어졌습니다. 같은 LAN인지, 방화벽을 확인한 뒤 다시 접속하세요.";
             }
             default -> {
             }
@@ -294,6 +445,7 @@ public final class P2pLobbyController implements P2pLobbyPanel.Actions, AutoClos
     private void clearMessage() {
         message = "";
         error = false;
+        internetSession = false;
     }
 
     private void track(Supplier<CompletionStage<Void>> start, String what) {
@@ -353,9 +505,14 @@ public final class P2pLobbyController implements P2pLobbyPanel.Actions, AutoClos
     private String status() {
         return switch (current.state()) {
             case INITIAL -> message.isEmpty() ? "호스트로 대기하거나 상대 IP로 접속하세요." : message;
-            case HOSTING -> "상대 접속 대기 중 · 내 IP " + String.join(" / ", lanAddresses.get())
+            case HOSTING -> relay != null
+                    ? (roomCode == null ? "인터넷 방을 만드는 중…"
+                            : "인터넷 방 코드 " + roomCode + " · 상대에게 알려 주세요 (10분 동안 유효)"
+                            // 숫자 4자리는 예비 서버 코드다. 메인 서버가 안 돼 넘어갔다는 것을 알려 둔다
+                            + (roomCode.matches("\\d{4}") ? " · 예비 서버" : ""))
+                    : "상대 접속 대기 중 · 내 IP " + String.join(" / ", lanAddresses.get())
                     + " · 포트 " + (localPort.getAsInt() > 0 ? localPort.getAsInt() : panel.portField().getText().trim());
-            case CONNECTING -> "접속 중…";
+            case CONNECTING -> relay != null ? "방 " + roomCode + "에 연결 중…" : "접속 중…";
             case LOBBY -> withLag((message.isEmpty() ? "" : message + " ")
                     + (current.role() == Role.HOST ? "모드를 고르고 게임 시작을 누르세요." : "호스트가 모드를 고릅니다. 게임 시작을 누르세요."));
             case STARTING, PLAYING -> withLag("경기 진행 중");
@@ -375,6 +532,7 @@ public final class P2pLobbyController implements P2pLobbyPanel.Actions, AutoClos
         attempt++;
         subscription.close();
         healthSubscription.close();
+        closeRelay();
         lobby.close();
     }
 }

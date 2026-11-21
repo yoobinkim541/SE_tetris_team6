@@ -8,13 +8,17 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
 import java.util.function.BooleanSupplier;
+import java.util.function.LongSupplier;
 import javax.swing.AbstractAction;
 import javax.swing.ActionMap;
 import javax.swing.InputMap;
 import javax.swing.JComponent;
 import javax.swing.KeyStroke;
+import javax.swing.Timer;
 import tetris.feature.game.GameSession;
 import tetris.feature.game.GameState;
+import tetris.feature.setting.AutoRepeat;
+import tetris.feature.setting.ControlStyle;
 import tetris.feature.setting.GameAction;
 import tetris.feature.setting.KeyMap;
 
@@ -47,6 +51,10 @@ public class KeyBindingManager {
     private GameSession session;
     private KeyMap keyMap;
     private boolean suspended;
+    private boolean modern;
+    private LongSupplier clock = System::currentTimeMillis;
+    private final AutoRepeat repeats = new AutoRepeat();
+    private Timer repeatTimer;
 
     /** onQuit: Quit 키를 눌렀을 때 실행. 확인창을 띄워야 해서 세션 호출(requestQuit)은 화면 쪽이 맡는다 */
     public KeyBindingManager(Runnable onQuit) {
@@ -69,6 +77,29 @@ public class KeyBindingManager {
         rebind(keyMap);
     }
 
+    /** 모던이면 OS 반복을 무시하고 DAS/ARR 타이머로 좌우·소프트 드롭을 반복한다 */
+    public void bindGameKeys(JComponent target, KeyMap keyMap, GameSession session, ControlStyle style) {
+        bindGameKeys(target, keyMap, session, style, System::currentTimeMillis);
+    }
+
+    /** 테스트는 시계를 주입하고 pulseRepeats()로 시각을 넘긴다 */
+    public void bindGameKeys(JComponent target, KeyMap keyMap, GameSession session, ControlStyle style, LongSupplier clock) {
+        if (style == null || clock == null) throw new IllegalArgumentException("style, clock cannot be null");
+        this.modern = style.modern();
+        this.clock = clock;
+        bindGameKeys(target, keyMap, session);
+        if (modern && repeatTimer == null) {
+            repeatTimer = new Timer(16, event -> pulseRepeats());
+            repeatTimer.start();
+        }
+    }
+
+    /** 주입한 시계 기준으로 반복 입력을 한 번 처리한다 */
+    public void pulseRepeats() {
+        if (!modern || session == null) return;
+        for (GameAction action : repeats.poll(clock.getAsLong())) perform(action);
+    }
+
     /** 조작키 변경 후 바인딩 다시 적용 */
     public void rebind(KeyMap keyMap) {
         if (target == null) throw new IllegalStateException("bindGameKeys must be called first");
@@ -86,11 +117,13 @@ public class KeyBindingManager {
             }
         }
         held.clear();
+        repeats.clear();
     }
 
     /** 창 포커스 이탈 시 눌림 상태 초기화 (KEY-8) */
     public void clearPressedKeys() {
         held.clear();
+        repeats.clear();
     }
 
     /** 확인창이 떠 있는 동안 게임 키를 모두 끈다. 확인창이 자기 키(↑↓←→ Enter Esc)를 받는다 */
@@ -152,7 +185,9 @@ public class KeyBindingManager {
             case MOVE_RIGHT -> session.moveRight();
             case SOFT_DROP -> session.moveDown();
             case ROTATE -> session.rotateRight();
+            case ROTATE_CCW -> session.rotateLeft();
             case HARD_DROP -> session.hardDrop();
+            case HOLD -> session.hold();
             case PAUSE -> session.togglePause();
             case QUIT -> onQuit.run();
         }
@@ -172,6 +207,12 @@ public class KeyBindingManager {
 
         @Override
         public void actionPerformed(ActionEvent e) {
+            if (modern && action.isRepeatable()) {
+                if (!held.add(action)) return;
+                repeats.press(action, clock.getAsLong());
+                perform(action);
+                return;
+            }
             // Rotate·Hard Drop·Pause·Quit은 최초 눌림만. OS 반복 이벤트는 뗄 때까지 무시한다 (명세 7.3)
             if (!action.isRepeatable() && !held.add(action)) return;
             perform(action);
@@ -188,6 +229,7 @@ public class KeyBindingManager {
         @Override
         public void actionPerformed(ActionEvent e) {
             held.remove(action);
+            repeats.release(action);
         }
     }
 }

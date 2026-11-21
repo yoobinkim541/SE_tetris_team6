@@ -22,7 +22,8 @@ import tetris.feature.versus.api.BattleMode;
 
 /**
  * P2P 접속·로비 화면 (S9-B2, R3-MENU, R3-HOST, R3-READY). 상태를 그리기만 하고 동작은 {@link Actions}로 넘긴다.
- * 호스트 대기/접속, IP·포트 입력, 접속 상태, 호스트만 바꿀 수 있는 모드, 양쪽 "게임 시작"(준비), 취소·뒤로를 보여 준다. EDT 전용.
+ * 같은 LAN은 호스트 대기/IP 접속, 다른 네트워크는 인터넷 방 만들기/방 코드 참가. 접속 상태, 호스트만 바꿀 수 있는 모드,
+ * 양쪽 "게임 시작"(준비), 취소·뒤로를 보여 준다. EDT 전용.
  */
 public final class P2pLobbyPanel extends JPanel {
     /** 화면 버튼이 부르는 동작. P2pLobbyController가 구현한다 */
@@ -30,8 +31,13 @@ public final class P2pLobbyPanel extends JPanel {
         void host(String port);
         void connect(String address, String port);
         void selectMode(BattleMode mode);
+        void selectRaid(tetris.feature.raid.api.RaidMode mode);
         void toggleReady();
         void cancelOrBack();
+        /** 인터넷 대전: 중계 서버에 방을 만들고 방 코드를 받는다 */
+        void hostInternet();
+        /** 인터넷 대전: 상대가 알려 준 방 코드로 참가한다 */
+        void joinInternet(String code);
     }
 
     private static final Color BACKGROUND = new Color(0x1B1E24);
@@ -40,7 +46,13 @@ public final class P2pLobbyPanel extends JPanel {
     private final JComboBox<String> recentBox = new JComboBox<>();
     private final JButton hostButton = new JButton("호스트로 대기");
     private final JButton connectButton = new JButton("접속");
-    private final JComboBox<BattleMode> modeBox = new JComboBox<>(BattleMode.values());
+    private final JTextField codeField = new JTextField("", 7);
+    private final JButton joinInternetButton = new JButton("참가");
+    private final JButton hostInternetButton = new JButton("방 만들기");
+    private final JComboBox<Object> modeBox = new JComboBox<>(new Object[] {
+            BattleMode.CLASSIC, BattleMode.ITEM, BattleMode.TIMED,
+            tetris.feature.raid.api.RaidMode.COOP, tetris.feature.raid.api.RaidMode.RACE
+    });
     private final JLabel statusLabel = label("", 17, true);
     private final JLabel peerLabel = label("", 15, false);
     private final JLabel readyLabel = label("", 15, false);
@@ -54,6 +66,8 @@ public final class P2pLobbyPanel extends JPanel {
     private int wrappedWidth = -1;
     private static final Color ERROR = new Color(0xFF8A80);
     private State renderedState;
+    /** 인터넷 대전 방 코드. 같은 LAN 연결이면 null */
+    private String internetRoom;
     private boolean error;
 
     public P2pLobbyPanel(Actions actions) {
@@ -62,7 +76,7 @@ public final class P2pLobbyPanel extends JPanel {
         setFocusable(true);
         setLayout(new GridBagLayout());
         modeBox.setRenderer((list, value, index, selected, focus) -> {
-            var cell = new JLabel(value == null ? "" : BattleModes.label(value));
+            var cell = new JLabel(modeLabel(value));
             cell.setOpaque(true);
             cell.setBackground(selected ? new Color(0x3A4250) : Color.WHITE);
             cell.setForeground(selected ? Color.WHITE : Color.BLACK);
@@ -76,10 +90,14 @@ public final class P2pLobbyPanel extends JPanel {
 
         // 좁은 창에서도 잘리지 않도록 "이름 | 입력 | 버튼" 격자로 둔다. 긴 안내는 줄바꿈한다
         int y = 0;
-        addWide(label("P2P 대전 (같은 LAN)", 26, true), y++);
+        addWide(label("P2P 대전 (같은 LAN · 인터넷)", 26, true), y++);
         addRow(label("포트", 16, false), portField, hostButton, y++);
         addRow(label("상대 IP", 16, false), addressField, connectButton, y++);
         addRow(label("최근 IP", 16, false), recentBox, label("(고르면 입력됨)", 13, false), y++);
+        var internetButtons = row();
+        internetButtons.add(joinInternetButton);
+        internetButtons.add(hostInternetButton);
+        addRow(label("인터넷 방 코드", 16, false), codeField, internetButtons, y++);
         addWide(statusLabel, y++);
         addWide(peerLabel, y++);
         addRow(label("모드", 16, false), modeBox, label("(호스트만 선택)", 13, false), y++);
@@ -88,7 +106,8 @@ public final class P2pLobbyPanel extends JPanel {
         addWide(hint, y);
 
         // 작은 창에서 입력 줄이 넘치지 않도록 버튼 좌우 여백을 줄인다
-        for (JButton button : new JButton[]{hostButton, connectButton, readyButton, backButton}) {
+        for (JButton button : new JButton[]{hostButton, connectButton, joinInternetButton, hostInternetButton,
+                readyButton, backButton}) {
             button.setMargin(new Insets(2, 8, 2, 8));
         }
         addComponentListener(new java.awt.event.ComponentAdapter() {
@@ -96,17 +115,27 @@ public final class P2pLobbyPanel extends JPanel {
         });
         hostButton.addActionListener(e -> actions.host(portField.getText()));
         connectButton.addActionListener(e -> actions.connect(addressField.getText(), portField.getText()));
+        joinInternetButton.addActionListener(e -> actions.joinInternet(codeField.getText()));
+        codeField.addActionListener(e -> actions.joinInternet(codeField.getText()));
+        hostInternetButton.addActionListener(e -> actions.hostInternet());
         recentBox.addActionListener(e -> {
             if (!rendering && recentBox.getSelectedItem() instanceof String address && !address.isEmpty()) {
                 addressField.setText(address);
             }
         });
         modeBox.addActionListener(e -> {
-            if (!rendering && modeBox.getSelectedItem() instanceof BattleMode selected) actions.selectMode(selected);
+            if (rendering) return;
+            if (modeBox.getSelectedItem() instanceof BattleMode selected) actions.selectMode(selected);
+            else if (modeBox.getSelectedItem() instanceof tetris.feature.raid.api.RaidMode raid) actions.selectRaid(raid);
         });
         readyButton.addActionListener(e -> actions.toggleReady());
         backButton.addActionListener(e -> actions.cancelOrBack());
         render(new LobbySnapshot(Role.NONE, State.INITIAL, null, 0, false, false, null), "");
+    }
+
+    /** 인터넷 대전 방 코드를 표시한다. 같은 LAN 연결이면 null (상대 주소 대신 방 코드를 보인다) */
+    public void setInternetRoom(String code) {
+        internetRoom = code;
     }
 
     /** 최근 접속 IP 목록 (최신순). 비어 있으면 고를 수 없다 (R3-RECENT) */
@@ -206,8 +235,12 @@ public final class P2pLobbyPanel extends JPanel {
             addressField.setEnabled(initial);
             hostButton.setEnabled(initial);
             connectButton.setEnabled(initial);
+            codeField.setEnabled(initial);
+            joinInternetButton.setEnabled(initial);
+            hostInternetButton.setEnabled(initial);
             recentBox.setEnabled(initial && recentBox.getItemCount() > 0);
-            if (lobby.config() != null) modeBox.setSelectedItem(lobby.config().mode());
+            if (lobby.config() != null) modeBox.setSelectedItem(lobby.config().raid()
+                    ? lobby.config().raidMode() : lobby.config().mode());
             modeBox.setEnabled(inLobby && lobby.role() == Role.HOST);
             readyButton.setEnabled(inLobby && lobby.config() != null);
             readyButton.setText(lobby.localReady() ? "준비 취소" : "게임 시작");
@@ -219,12 +252,14 @@ public final class P2pLobbyPanel extends JPanel {
             this.status = status;
             statusLabel.setText(wrap(status));
             wrappedWidth = wrapWidth();
-            peerLabel.setText(lobby.peerIdentity() == null ? ""
-                    : (lobby.role() == Role.HOST ? "접속한 상대: " : "호스트: ") + peerName(lobby.peerIdentity())
+            String peer = lobby.peerIdentity() == null ? null
+                    : internetRoom != null ? "인터넷 상대 (방 " + internetRoom + ")" : peerName(lobby.peerIdentity());
+            peerLabel.setText(peer == null ? ""
+                    : (lobby.role() == Role.HOST ? "접속한 상대: " : "호스트: ") + peer
                     + (lobby.role() == Role.HOST ? "  (나: P1 왼쪽)" : "  (나: P2 오른쪽)"));
             ready = inLobby || lobby.state() == State.STARTING
                     ? "나: " + (lobby.localReady() ? "준비 완료" : "대기") + "   상대: " + (lobby.peerReady() ? "준비 완료" : "대기")
-                    + (lobby.config() == null ? "" : "   모드: " + BattleModes.label(lobby.config().mode()))
+                    + (lobby.config() == null ? "" : "   모드: " + configLabel(lobby.config()))
                     : "";
             readyLabel.setText(ready);
         } finally {
@@ -259,7 +294,21 @@ public final class P2pLobbyPanel extends JPanel {
     public JTextField addressField() { return addressField; }
     public JButton hostButton() { return hostButton; }
     public JButton connectButton() { return connectButton; }
-    public JComboBox<BattleMode> modeBox() { return modeBox; }
+    public JTextField codeField() { return codeField; }
+    public JButton joinInternetButton() { return joinInternetButton; }
+    public JButton hostInternetButton() { return hostInternetButton; }
+    public JComboBox<Object> modeBox() { return modeBox; }
+
+    private static String modeLabel(Object value) {
+        if (value instanceof BattleMode mode) return BattleModes.label(mode);
+        if (value == tetris.feature.raid.api.RaidMode.COOP) return "협동 레이드";
+        if (value == tetris.feature.raid.api.RaidMode.RACE) return "레이스 레이드";
+        return "";
+    }
+
+    private static String configLabel(tetris.feature.versus.api.MatchConfig config) {
+        return config.raid() ? modeLabel(config.raidMode()) : BattleModes.label(config.mode());
+    }
     public JButton readyButton() { return readyButton; }
     public JButton backButton() { return backButton; }
 }

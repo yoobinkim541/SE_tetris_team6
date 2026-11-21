@@ -53,18 +53,26 @@ public class PausePanel extends JPanel {
     protected void paintComponent(Graphics g) {
         Graphics2D g2 = Theme.smooth(g);
         int w = getWidth();
-        int unit = Theme.unit(getHeight());
-        int[] box = Theme.drawDialogBox(g2, w, getHeight(), Math.min(w - unit * 2, unit * 16), unit * 13);
+        int h = getHeight();
+        int unit = Theme.unit(h);
+        int boxW = Math.min(w - unit * 2, unit * 18);
+        int boxH = Math.min(h - unit * 2, unit * 16);
+        int[] box = Theme.drawDialogBox(g2, w, h, boxW, boxH);
 
         g2.setFont(Theme.text(unit * 2, true));
-        g2.setColor(Theme.ACCENT);
+        g2.setColor(tetris.ui.theme.UiKit.CYAN);
         Theme.drawCentered(g2, Messages.get("pause.title"), w / 2, box[1] + unit * 3);
 
         List<String> labels = items.stream().map(MenuItem::label).toList();
-        Theme.drawMenu(g2, labels, selected, w / 2, box[1] + unit * 4 + unit / 2, unit + unit / 4);
+        int fontSize = Math.max(12, unit);
+        Theme.drawPills(g2, labels, selected, w / 2, box[1] + unit * 4, fontSize, boxW - unit * 4, false);
 
-        g2.setFont(Theme.text(Math.max(9, unit * 2 / 3), false));
-        g2.setColor(Theme.DIM_TEXT);
-        Theme.drawCentered(g2, keyGuide, w / 2, box[1] + box[3] - unit);
+        int guideSize = Math.max(9, unit * 2 / 3);
+        g2.setFont(Theme.text(guideSize, false));
+        while (g2.getFontMetrics().stringWidth(keyGuide) > boxW - unit * 3 && guideSize > 8) {
+            g2.setFont(Theme.text(--guideSize, false));
+        }
+        g2.setColor(Theme.TEXT);
+        Theme.drawCentered(g2, keyGuide, w / 2, box[1] + box[3] - unit * 2);
     }
 }

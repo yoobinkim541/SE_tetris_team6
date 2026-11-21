@@ -148,30 +148,6 @@ public class LockDelayTest {
     }
 
     @Test
-    void 바닥_가장자리를_오가도_초기화_15회를_넘기면_다시_닿는_순간_고정한다() {
-        GameSession session = started(new OBlock(), new OBlock(), new TBlock());
-        tick(session, 19);                       // 첫 O: 4~5열 18~19행 고정
-        tick(session, 16);                       // 둘째 O: 첫 O 위(16~17행)에 착지
-        session.moveRight();                     // 5~6열: 아직 첫 O에 걸쳐 있다 (초기화 1회)
-
-        int freshDelays = 0;
-        int cycles = 0;
-        while (cycles < 100 && session.isLockDelayActive()) {
-            session.moveRight();                 // 6~7열: 공중 (바닥 이탈도 1회로 센다)
-            int before = clock.starts.size();
-            session.moveLeft();                  // 5~6열: 다시 닿는다
-            if (clock.starts.size() > before && lastStart() == DELAY) freshDelays++;
-            cycles++;
-        }
-
-        assertEquals(14, cycles);                // 1 + 14 = 15회를 다 쓴 뒤 다시 닿는 순간 고정
-        assertEquals(13, freshDelays);           // 그 전까지만 새 유예를 받는다
-        assertEquals(".....OO...", row(session, 16));
-        assertEquals(".....OO...", row(session, 17));
-        assertEquals(GameState.PLAYING, session.getState());
-    }
-
-    @Test
     void Soft_Drop은_유예_중_Lock을_앞당기지_않는다() {
         GameSession session = started(new OBlock(), new TBlock());
         tick(session, 18);

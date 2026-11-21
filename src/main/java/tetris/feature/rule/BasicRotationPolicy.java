@@ -11,4 +11,11 @@ public class BasicRotationPolicy implements RotationPolicy {
         block.rotateClockwise();
         return true;
     }
+
+    @Override
+    public int tryRotateCounterClockwise(Board board, Block block) {
+        if (!board.canPlace(block.rotateLeft(), block.getRow(), block.getCol())) return -1;
+        block.rotateCounterClockwise();
+        return 0;
+    }
 }

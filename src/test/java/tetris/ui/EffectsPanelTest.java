@@ -43,13 +43,16 @@ public class EffectsPanelTest {
         return result;
     }
 
-    private static int infoX(int cell) {
-        return cell / 2 * 2 + cell * 10;
+    private static java.awt.Rectangle effects(int cell) {
+        GamePanel panel = new GamePanel(new Settings(), new PausePanel(() -> {}, () -> {}, () -> {}), s -> {});
+        panel.setCellSize(cell);
+        return panel.effectsBounds();
     }
 
-    private static int guideTop(int cell) {
-        int label = Math.max(9, cell * 9 / 20);
-        return cell / 2 + cell * 20 - (label + label / 2) * GUIDE_LINES;
+    private static java.awt.Rectangle guide(int cell) {
+        GamePanel panel = new GamePanel(new Settings(), new PausePanel(() -> {}, () -> {}, () -> {}), s -> {});
+        panel.setCellSize(cell);
+        return panel.keyGuideBounds();
     }
 
     // 글자는 안티앨리어싱으로 색이 섞이므로 color와 가까운 픽셀(채널별 차이 합 60 이하)을 센다
@@ -70,13 +73,13 @@ public class EffectsPanelTest {
     void 지속_효과는_노란색_섹션과_게이지로_조작_안내_위에_그린다(int cell) throws Exception {
         BufferedImage none = onEdt(cell, List.of())[0];
         BufferedImage both = onEdt(cell, List.of(new ActiveEffect(ItemType.DOUBLE_SCORE, 7), new ActiveEffect(ItemType.SLOW, 9)))[0];
-        int x = infoX(cell), width = cell * 6, top = guideTop(cell);
+        java.awt.Rectangle fx = effects(cell);
+        java.awt.Rectangle keys = guide(cell);
 
-        assertEquals(0, countColor(none, x, 0, width, top, Theme.ACCENT), "효과가 없으면 노란색이 없어야 함");
-        // 게이지 채운 칸 7 + 9 = 16칸이 노란색으로 칠해져 글자보다 훨씬 많은 노란 픽셀이 생긴다
-        assertTrue(countColor(both, x, 0, width, top, Theme.ACCENT) > cell * 16, "노란 게이지가 보여야 함");
-        assertArrayEquals(none.getRGB(x, top, width, none.getHeight() - top, null, 0, width),
-                both.getRGB(x, top, width, both.getHeight() - top, null, 0, width), "지속 효과가 조작 안내를 덮으면 안 됨");
+        assertEquals(0, countColor(none, fx.x, fx.y, fx.width, fx.height, Theme.ACCENT), "효과가 없으면 노란색이 없어야 함");
+        assertTrue(countColor(both, fx.x, fx.y, fx.width, fx.height, Theme.ACCENT) > cell * 16, "노란 게이지가 보여야 함");
+        assertArrayEquals(none.getRGB(keys.x, keys.y, keys.width, keys.height, null, 0, keys.width),
+                both.getRGB(keys.x, keys.y, keys.width, keys.height, null, 0, keys.width), "지속 효과가 조작 안내를 덮으면 안 됨");
     }
 
     @ParameterizedTest
@@ -84,9 +87,9 @@ public class EffectsPanelTest {
     void 게이지는_남은_블록_수만큼_채운다(int cell) throws Exception {
         BufferedImage seven = onEdt(cell, List.of(new ActiveEffect(ItemType.DOUBLE_SCORE, 7)))[0];
         BufferedImage three = onEdt(cell, List.of(new ActiveEffect(ItemType.DOUBLE_SCORE, 3)))[0];
-        int x = infoX(cell), width = cell * 6, top = guideTop(cell);
+        java.awt.Rectangle fx = effects(cell);
 
-        assertTrue(countColor(seven, x, 0, width, top, Theme.ACCENT) > countColor(three, x, 0, width, top, Theme.ACCENT));
+        assertTrue(countColor(seven, fx.x, fx.y, fx.width, fx.height, Theme.ACCENT) > countColor(three, fx.x, fx.y, fx.width, fx.height, Theme.ACCENT));
     }
 
     @ParameterizedTest
@@ -94,9 +97,9 @@ public class EffectsPanelTest {
     void 작은_화면에서는_효과_줄만_노란색으로_그린다(int cell) throws Exception {
         BufferedImage none = onEdt(cell, List.of())[0];
         BufferedImage one = onEdt(cell, List.of(new ActiveEffect(ItemType.SLOW, 4)))[0];
-        int x = infoX(cell), width = cell * 6, top = guideTop(cell);
+        java.awt.Rectangle fx = effects(cell);
 
-        assertEquals(0, countColor(none, x, 0, width, top, Theme.ACCENT));
-        assertTrue(countColor(one, x, 0, width, top, Theme.ACCENT) > 0, "작은 화면에서도 효과 줄이 노란색이어야 함");
+        assertEquals(0, countColor(none, fx.x, fx.y, fx.width, fx.height, Theme.ACCENT));
+        assertTrue(countColor(one, fx.x, fx.y, fx.width, fx.height, Theme.ACCENT) > 0, "작은 화면에서도 효과 줄이 노란색이어야 함");
     }
 }

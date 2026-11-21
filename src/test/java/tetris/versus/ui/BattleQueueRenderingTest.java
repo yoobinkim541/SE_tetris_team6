@@ -21,14 +21,14 @@ class BattleQueueRenderingTest {
                     var image = new BufferedImage(960, 720, BufferedImage.TYPE_INT_RGB);
                     var graphics = image.createGraphics(); panel.paint(graphics); graphics.dispose();
                     for (int player = 0; player < 2; player++) {
-                        int x = (player == 0 ? 28 : 500) + 288;
                         for (int row = 0; row < VersusRules.MAX_PENDING_ROWS; row++) {
                             int hole = (row + (player == 0 ? 0 : 3)) % VersusRules.BOARD_COLS;
                             for (int col = 0; col < VersusRules.BOARD_COLS; col++) {
-                                boolean empty = row >= count || col == hole;
-                                assertEquals(empty ? 0x262A33 : 0x929AA5,
-                                    image.getRGB(x + col * 14 + 2, 280 + row * 16 + 1) & 0xffffff,
-                                    "player=" + player + " count=" + count + " row=" + row + " col=" + col);
+                                boolean empty = row >= count;
+                                java.awt.Point sample = panel.attackQueueSample(player, row, col);
+                                int expected = (empty || col == hole) ? 0x262A33 : 0x929AA5;
+                                assertEquals(expected, image.getRGB(sample.x, sample.y) & 0xffffff,
+                                        "player=" + player + " count=" + count + " row=" + row + " col=" + col);
                             }
                         }
                     }

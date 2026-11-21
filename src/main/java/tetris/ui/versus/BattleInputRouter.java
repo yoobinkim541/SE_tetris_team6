@@ -1,5 +1,7 @@
 package tetris.ui.versus;
 
+import java.awt.KeyEventDispatcher;
+import java.awt.KeyboardFocusManager;
 import java.awt.Window;
 import java.awt.event.*;
 import java.util.*;
@@ -22,6 +24,8 @@ public final class BattleInputRouter implements AutoCloseable {
     private long sequence;
     private boolean closed;
     private String matchId;
+    private BattleKeyMap keyMap;
+    private final KeyEventDispatcher locationKeys = this::dispatchLocated;
     private Window window;
     private final WindowFocusListener focus = new WindowAdapter() {
         @Override public void windowLostFocus(WindowEvent e) { clearPressedKeys(); }
@@ -51,16 +55,22 @@ public final class BattleInputRouter implements AutoCloseable {
     public void rebind(BattleKeyMap keys) {
         if(closed) throw new IllegalStateException("router closed");
         Objects.requireNonNull(keys); clearPressedKeys(); uninstall();
-        for(var entry: keys.bindings().entrySet()) {
-            Target target=entry.getKey(); int code=entry.getValue();
-            install(KeyStroke.getKeyStroke(code,0,false),() -> press(target));
-            int[] flags={InputEvent.SHIFT_DOWN_MASK,InputEvent.CTRL_DOWN_MASK,InputEvent.ALT_DOWN_MASK,InputEvent.META_DOWN_MASK,InputEvent.ALT_GRAPH_DOWN_MASK};
-            for(int combination=0;combination<(1<<flags.length);combination++) {
-                int modifiers=0;
-                for(int bit=0;bit<flags.length;bit++) if((combination & (1<<bit))!=0) modifiers|=flags[bit];
-                install(KeyStroke.getKeyStroke(code,modifiers,true),() -> release(target));
+        KeyboardFocusManager.getCurrentKeyboardFocusManager().removeKeyEventDispatcher(locationKeys);
+        this.keyMap = keys;
+        for (var entry : keys.located().entrySet()) {
+            Target target = entry.getKey();
+            BattleKeyMap.Binding binding = entry.getValue();
+            if (binding.location() != KeyEvent.KEY_LOCATION_UNKNOWN) continue;
+            int code = binding.code();
+            install(KeyStroke.getKeyStroke(code, 0, false), () -> press(target));
+            int[] flags = {InputEvent.SHIFT_DOWN_MASK, InputEvent.CTRL_DOWN_MASK, InputEvent.ALT_DOWN_MASK, InputEvent.META_DOWN_MASK, InputEvent.ALT_GRAPH_DOWN_MASK};
+            for (int combination = 0; combination < (1 << flags.length); combination++) {
+                int modifiers = 0;
+                for (int bit = 0; bit < flags.length; bit++) if ((combination & (1 << bit)) != 0) modifiers |= flags[bit];
+                install(KeyStroke.getKeyStroke(code, modifiers, true), () -> release(target));
             }
         }
+        KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(locationKeys);
     }
     private void install(KeyStroke stroke,Runnable command) {
         InputMap map=root.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW);
@@ -106,8 +116,25 @@ public final class BattleInputRouter implements AutoCloseable {
     @Override public void close() {
         if(closed) return;
         clearPressedKeys(); closed=true; uninstall();
+        KeyboardFocusManager.getCurrentKeyboardFocusManager().removeKeyEventDispatcher(locationKeys);
         root.removeHierarchyListener(hierarchy);
         if(window!=null) window.removeWindowFocusListener(focus);
         root.putClientProperty(OWNER,null);
+    }
+
+    /** 오른쪽 Ctrl/Shift처럼 키 위치가 필요한 입력. 테스트도 이 메서드로 KeyEvent를 넣는다 */
+    public boolean dispatchLocated(KeyEvent event) {
+        if (closed || keyMap == null || event == null) return false;
+        if (event.getID() != KeyEvent.KEY_PRESSED && event.getID() != KeyEvent.KEY_RELEASED) return false;
+        boolean fromTest = event.getSource() == root;
+        if (!fromTest && !root.isShowing()) return false;
+        for (var entry : keyMap.located().entrySet()) {
+            if (entry.getValue().location() == KeyEvent.KEY_LOCATION_UNKNOWN) continue;
+            if (!BattleKeyMap.matches(entry.getValue(), event)) continue;
+            if (event.getID() == KeyEvent.KEY_PRESSED) press(entry.getKey());
+            else release(entry.getKey());
+            return true;
+        }
+        return false;
     }
 }
