@@ -174,7 +174,8 @@ class VersusAcceptanceGuiTest {
                     var name = result.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).get(javax.swing.KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0));
                     result.getActionMap().get(name).actionPerformed(null);
                     assertEquals(MainFrame.Screen.BATTLE_MODES, field(frame[0], "currentScreen"));
-                    choose(menu(frame[0], MainFrame.Screen.BATTLE_MODES), 5);
+                    // 멀티 메뉴: 클래식·아이템·시간제·온라인·협동 레이드·레이스 레이드·뒤로(6). 레이드가 생기기 전에는 뒤로가 5였다
+                    choose(menu(frame[0], MainFrame.Screen.BATTLE_MODES), 6);
                     assertEquals(MainFrame.Screen.MAIN_MENU, field(frame[0], "currentScreen"));
                     assertTrue(settings.isColorBlindMode());
                     assertEquals(Difficulty.HARD, settings.getDifficulty());

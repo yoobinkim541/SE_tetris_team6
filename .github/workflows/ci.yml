@@ -22,6 +22,16 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.10.2'
+      # InternetRoomE2ETest가 예비 중계 서버(relay/tetris_relay.py)를 직접 띄운다. 그 실행 환경을 relay/.venv에 만든다
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Relay fallback Python env
+        shell: bash
+        run: |
+          python -m venv relay/.venv
+          if [ -x relay/.venv/Scripts/python.exe ]; then py=relay/.venv/Scripts/python.exe; else py=relay/.venv/bin/python; fi
+          "$py" -m pip install -q -r relay/requirements.txt
       - name: Windows acceptance and package
         run: gradle check guiAcceptance resourceAcceptance releaseJar packageApp --no-daemon
       - name: Verify packaged EXE
@@ -62,6 +72,25 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.10.2'
+
+      # InternetRoomE2ETest가 예비 중계 서버(relay/tetris_relay.py)를 직접 띄운다. 그 실행 환경을 relay/.venv에 만든다
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Relay fallback Python env
+        shell: bash
+        run: |
+          python -m venv relay/.venv
+          if [ -x relay/.venv/Scripts/python.exe ]; then py=relay/.venv/Scripts/python.exe; else py=relay/.venv/bin/python; fi
+          "$py" -m pip install -q -r relay/requirements.txt
+
+      # 글꼴 테스트(FontCoverageTest·TextAlignmentTest)는 내장 글꼴에 없는 기호를 운영체제 글꼴로 그린다.
+      # 우분투 러너에는 한글 글꼴이 없어 Windows와 같은 조건이 되도록 Noto CJK를 설치한다
+      - name: Korean fonts for Java2D
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q fonts-noto-cjk fonts-dejavu-core
+          fc-cache -f
 
       # check = test + 커버리지 게이트(Line 70%, jacocoTestCoverageVerification)
       - name: Test

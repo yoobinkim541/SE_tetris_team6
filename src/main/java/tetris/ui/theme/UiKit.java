@@ -648,14 +648,14 @@ public final class UiKit {
         }
         Align side = align == null ? Align.CENTER : align;
         double centerOff = vis.getY() + vis.getHeight() / 2.0;
-        double bias = title ? 0.5 : 0;
-        int baseline = (int) Math.round(box.y + box.height / 2.0 - bias - centerOff);
+        // 제목 글자에 0.5px를 더 빼던 보정은 반올림과 겹쳐 작은 칸에서 1.5px 치우쳤다(TextAlignmentTest). 가운데에 그대로 둔다
+        int baseline = (int) Math.round(box.y + box.height / 2.0 - centerOff);
         if (title) {
             double half = vis.getWidth() / 2.0;
             int centerX = (int) Math.round(switch (side) {
-                case LEFT -> box.x + half - bias;
-                case RIGHT -> box.x + box.width - half - bias;
-                case CENTER -> box.x + box.width / 2.0 - bias;
+                case LEFT -> box.x + half;
+                case RIGHT -> box.x + box.width - half;
+                case CENTER -> box.x + box.width / 2.0;
             });
             GameTheme.paintTitle(g, text, g.getFont(), centerX, baseline, assetSelected ? 1 : 0);
         } else {
@@ -746,8 +746,9 @@ public final class UiKit {
 
     private static boolean isDisplayFace(Font font) {
         if (font == null) return false;
-        String name = font.getFontName() == null ? "" : font.getFontName();
-        return name.contains("Black Han");
+        // getFontName()은 운영체제 언어로 바뀐다(한국어 Windows는 한글 이름). 언어와 상관없이 영어 이름으로 비교한다
+        String name = font.getFontName(java.util.Locale.ENGLISH);
+        return name != null && name.contains("Black Han");
     }
 
     /** 외곽선 절반과 1px 그림자가 칸 안에 남도록 줄이는 여백 */
