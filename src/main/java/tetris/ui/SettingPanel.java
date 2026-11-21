@@ -4,6 +4,7 @@ import java.awt.Color;
 import java.awt.Component;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.Rectangle;
 import java.awt.KeyEventDispatcher;
 import java.awt.KeyboardFocusManager;
 import java.awt.event.KeyEvent;
@@ -46,7 +47,7 @@ public class SettingPanel extends JPanel {
     private ConfirmDialog confirmDialog;
     private String notice = "";
     private boolean noticeIsError;   // 경고색으로 그릴지 (거부·저장 실패)
-
+    private final tetris.ui.input.Hits hits = new tetris.ui.input.Hits();
     /**
      * onChanged: 설정 값이 바뀐 뒤 호출. 화면 반영과 저장을 하고 저장 성공 여부를 돌려준다.
      * onResetScoreboard: 스코어보드를 비우고 저장 성공 여부를 돌려준다. onBack: Main Menu로 (Esc)
@@ -77,6 +78,7 @@ public class SettingPanel extends JPanel {
         KeyBindingManager.bindKey(this, KeyEvent.VK_RIGHT, listActive, () -> changeValue(1));
         KeyBindingManager.bindKey(this, KeyEvent.VK_ENTER, listActive, this::activateSelected);
         KeyBindingManager.bindKey(this, KeyEvent.VK_ESCAPE, listActive, this::back);
+        tetris.ui.input.MenuMouse.install(this, hits, this::hoverHit, this::clickHit);
     }
 
     /** 화면에 들어올 때마다 설정 목록 맨 위에서 시작 */
@@ -221,11 +223,20 @@ public class SettingPanel extends JPanel {
         }
     }
 
-    // Small -> Medium -> Large 순환
+    // Small -> Medium -> Large -> 전체 화면 순환. 창 크기는 전체 화면을 꺼면 돌아온다
     private void changeScreenSize(int delta) {
-        ScreenSize[] sizes = ScreenSize.values();
-        settings.setScreenSize(sizes[Theme.cycle(settings.getScreenSize().ordinal(), delta, sizes.length)]);
+        int index = settings.isFullscreen() ? 3 : settings.getScreenSize().ordinal();
+        int next = Theme.cycle(index, delta, 4);
+        if (next == 3) settings.setFullscreen(true);
+        else {
+            settings.setFullscreen(false);
+            settings.setScreenSize(ScreenSize.values()[next]);
+        }
         applyChange("");
+    }
+
+    private String screenSizeLabel() {
+        return Messages.get(settings.isFullscreen() ? "size.FULLSCREEN" : "size." + settings.getScreenSize().name());
     }
 
     // Easy -> Normal -> Hard 순환 (SET-8). 다음 게임부터 적용된다
@@ -317,45 +328,100 @@ public class SettingPanel extends JPanel {
         Graphics2D g2 = Theme.smooth(g);
         int w = getWidth();
         int h = getHeight();
+        hits.begin(null);
         tetris.ui.theme.UiKit.paintScene(g2, w, h);
-        int unit = Theme.unit(h);
-
+        int unit = Math.max(16, (Theme.unit(h) / 8) * 8);
+        int pad = 8;
         String title = inControlKeys ? Messages.get("settings.controlKeys") : Messages.get("settings.title");
-        g2.setFont(Theme.text(unit * 2, true));
-        g2.setColor(tetris.ui.theme.UiKit.CYAN);
-        Theme.drawCentered(g2, title, w / 2, unit * 4);
+        int titleSize = Math.max(16, unit * 2);
+        int titleBaseline = pad * 6 + titleSize;
+        paintHeading(g2, title, titleSize, w / 2, titleBaseline);
 
         List<String[]> rows = inControlKeys ? keyRows() : settingRows();
-        int lineHeight = unit * 2;
-        int y = unit * 7;
-        int labelX = w / 8;
-        int valueRight = w * 7 / 8;
+        int rowH = Math.max(40, (unit * 2 / 8) * 8);
+        int y = ((titleBaseline + pad * 2) / 8) * 8;
+        int labelX = pad * 4;
+        int rowW = Math.max(pad * 8, w - pad * 8);
         boolean colorBlind = settings.isColorBlindMode();
         for (int i = 0; i < rows.size(); i++) {
+            java.awt.Rectangle row = new java.awt.Rectangle(labelX, y, rowW, rowH - pad);
             boolean isSelected = i == selected;
-            int inset = isSelected ? Math.max(unit, 16) : 0;
-            if (isSelected) {
-                tetris.ui.theme.UiKit.paintButton(g2, true, labelX - unit, y - unit, valueRight - labelX + unit * 2,
-                        lineHeight - 2, colorBlind, tetris.ui.theme.UiKit.pulse());
-                tetris.ui.theme.UiKit.paintArrow(g2, labelX - unit * 2, y - unit / 3, Math.max(8, unit / 2),
-                        colorBlind, tetris.ui.theme.UiKit.pulse());
+            tetris.ui.theme.UiKit.paintButton(g2, isSelected, row.x, row.y, row.width, row.height,
+                    colorBlind, tetris.ui.theme.UiKit.pulse());
+            hits.add("row:" + i, row);
+            String value = rows.get(i)[1];
+            int font = Math.max(14, unit);
+            g2.setFont(Theme.font(rows.get(i)[0], font, false));
+            g2.setColor(isSelected ? java.awt.Color.WHITE : Theme.TEXT);
+            tetris.ui.theme.UiKit.drawInAsset(g2, tetris.ui.theme.UiKit.AssetSlot.BUTTON, row,
+                    rows.get(i)[0], tetris.ui.theme.UiKit.Align.LEFT, isSelected);
+            g2.setFont(Theme.font(value, font, false));
+            tetris.ui.theme.UiKit.drawInAsset(g2, tetris.ui.theme.UiKit.AssetSlot.BUTTON, row,
+                    value, tetris.ui.theme.UiKit.Align.RIGHT, isSelected);
+            if (value.startsWith("◀") && value.endsWith("▶")) {
+                int textWidth = tetris.ui.theme.GameTheme.width(g2, value);
+                java.awt.Rectangle hole = tetris.ui.theme.UiKit.contentBox(tetris.ui.theme.UiKit.AssetSlot.BUTTON, row);
+                int valueRight = hole.x + hole.width;
+                int valueLeft = valueRight - textWidth;
+                int arrow = Math.max(24, g2.getFontMetrics().stringWidth("◀") + pad);
+                hits.add("dec:" + i, valueLeft - 4, row.y, arrow, row.height);
+                hits.add("inc:" + i, valueRight - arrow + 4, row.y, arrow, row.height);
             }
-            g2.setFont(Theme.font(rows.get(i)[0], unit, false));
-            g2.setColor(isSelected ? Color.WHITE : Theme.TEXT);
-            g2.drawString(rows.get(i)[0], labelX + inset, y);
-            g2.setFont(Theme.font(rows.get(i)[1], unit, false));
-            Theme.drawRight(g2, rows.get(i)[1], valueRight - inset, y);
-            y += lineHeight;
+            y += rowH;
         }
 
         if (!notice.isEmpty()) {
-            g2.setFont(Theme.text(Math.max(10, unit * 4 / 5), true));
-            g2.setColor(noticeIsError ? Theme.WARNING : tetris.ui.theme.UiKit.CYAN);
-            Theme.drawCentered(g2, notice, w / 2, y + unit);
+            g2.setFont(Theme.text(Math.max(14, unit * 4 / 5), true));
+            g2.setColor(java.awt.Color.WHITE);
+            String shown = noticeIsError && !notice.startsWith("⚠") ? "⚠ " + notice : notice;
+            tetris.ui.theme.UiKit.drawInBox(g2, shown,
+                    new java.awt.Rectangle(pad, y, w - pad * 2, unit * 2), tetris.ui.theme.UiKit.Align.CENTER);
         }
 
         String guide = inControlKeys ? Messages.get("guide.controlKeys") : Messages.keyGuide(MainFrame.Screen.SETTINGS, null);
         Theme.drawGuide(g2, guide, w, h);
+    }
+
+    private static void paintHeading(Graphics2D g, String text, int size, int centerX, int baseline) {
+        java.awt.Font font = tetris.ui.theme.GameTheme.display(size);
+        g.setFont(font);
+        g.setColor(java.awt.Color.WHITE);
+        tetris.ui.theme.GameTheme.paintTitle(g, text, font, centerX, baseline, 0);
+    }
+
+    /** 테스트가 그린 사각형을 그대로 누른다 */
+    public String hitAt(int x, int y) {
+        return hits.hit(x, y);
+    }
+
+    private void hoverHit(String id) {
+        if (capturing != null || confirmDialog != null || id == null) return;
+        int index = hitIndex(id);
+        if (index >= 0 && index != selected) {
+            selected = index;
+            notice = "";
+            repaint();
+        }
+    }
+
+    private void clickHit(String id) {
+        if (capturing != null || confirmDialog != null || id == null) return;
+        int index = hitIndex(id);
+        if (index < 0) return;
+        selected = index;
+        if (id.startsWith("dec:")) changeValue(-1);
+        else if (id.startsWith("inc:")) changeValue(1);
+        else activateSelected();
+    }
+
+    private static int hitIndex(String id) {
+        int colon = id.indexOf(':');
+        if (colon < 0 || colon == id.length() - 1) return -1;
+        try {
+            return Integer.parseInt(id.substring(colon + 1));
+        } catch (NumberFormatException e) {
+            return -1;
+        }
     }
 
     private List<String[]> settingRows() {
@@ -363,7 +429,7 @@ public class SettingPanel extends JPanel {
         for (Item item : items()) {
             rows.add(switch (item) {
                 case SCREEN_SIZE -> new String[] {Messages.get("settings.screenSize"),
-                        "◀ " + Messages.get("size." + settings.getScreenSize().name()) + " ▶"};
+                        "◀ " + screenSizeLabel() + " ▶"};
                 case DIFFICULTY -> new String[] {Messages.get("settings.difficulty"),
                         "◀ " + Messages.difficultyName(settings.getDifficulty()) + " ▶"};
                 case CONTROL_KEYS -> new String[] {Messages.get("settings.controlKeys"), "설정 ▶"};

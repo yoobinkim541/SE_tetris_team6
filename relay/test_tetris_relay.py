@@ -151,3 +151,94 @@ def test_health_endpoint_answers_ok():
         assert body == b"ok\n"
         await stop(task)
     run(scenario())
+
+
+def test_named_public_room_is_listed_and_joinable_by_id():
+    async def scenario():
+        task, base = await start_server()
+        ws = await connect(base + "/relay")
+        await ws.send(json.dumps({"op": "host", "relay": 1, "proto": 7, "name": "  오픈\n", "visibility": "public", "mode": "classic"}))
+        room = json.loads(await ws.recv())
+        assert room["code"].isdigit() and room["id"] != room["code"]
+        listed = await connect(base + "/relay")
+        await listed.send(json.dumps({"op": "list", "relay": 1}))
+        payload = json.loads(await listed.recv())
+        assert payload["rooms"][0]["name"] == "오픈"
+        assert payload["rooms"][0]["private"] is False
+        assert "code" not in payload["rooms"][0]
+        guest = await connect(base + "/relay")
+        await guest.send(json.dumps({"op": "join", "relay": 1, "proto": 7, "id": room["id"]}))
+        assert json.loads(await guest.recv()) == {"op": "paired"}
+        await stop(task)
+    run(scenario())
+
+
+def test_private_room_rejects_id_and_accepts_code():
+    async def scenario():
+        task, base = await start_server()
+        ws = await connect(base + "/relay")
+        await ws.send(json.dumps({"op": "host", "relay": 1, "proto": 7, "name": "비밀", "visibility": "private", "mode": "item"}))
+        room = json.loads(await ws.recv())
+        guest = await connect(base + "/relay")
+        await guest.send(json.dumps({"op": "join", "relay": 1, "proto": 7, "id": room["id"]}))
+        assert json.loads(await guest.recv())["reason"] == "PRIVATE"
+        ok = await join(base, room["code"])
+        assert ok[1] == {"op": "paired"}
+        await stop(task)
+    run(scenario())
+
+
+def test_old_host_is_not_listed_and_list_is_rate_limited():
+    async def scenario():
+        task, base = await start_server()
+        await host(base)
+        listed = await connect(base + "/relay")
+        await listed.send(json.dumps({"op": "list", "relay": 1}))
+        assert json.loads(await listed.recv()) == {"op": "rooms", "rooms": []}
+        with pytest.raises(ConnectionClosed):
+            await listed.recv()
+        again = await connect(base + "/relay")
+        await again.send(json.dumps({"op": "list", "relay": 1}))
+        await again.recv()
+        with pytest.raises(ConnectionClosed):
+            await again.recv()
+        limited = await connect(base + "/relay")
+        await limited.send(json.dumps({"op": "list", "relay": 1}))
+        assert json.loads(await limited.recv())["reason"] == "TOO_MANY_ATTEMPTS"
+        await stop(task)
+
+
+def test_bad_names_are_rejected_and_list_hides_code():
+    async def scenario():
+        task, base = await start_server()
+        ws = await connect(base + "/relay")
+        await ws.send(json.dumps({"op": "host", "relay": 1, "proto": 7, "name": "가" * 21, "visibility": "public", "mode": "classic"}))
+        assert json.loads(await ws.recv())["reason"] == "BAD_REQUEST"
+        empty = await connect(base + "/relay")
+        await empty.send(json.dumps({"op": "host", "relay": 1, "proto": 7, "name": "\n\t", "visibility": "public", "mode": "classic"}))
+        assert json.loads(await empty.recv())["reason"] == "BAD_REQUEST"
+        ok = await connect(base + "/relay")
+        await ok.send(json.dumps({"op": "host", "relay": 1, "proto": 7, "name": "비밀", "visibility": "private", "mode": "classic"}))
+        room = json.loads(await ok.recv())
+        listed = await connect(base + "/relay")
+        await listed.send(json.dumps({"op": "list", "relay": 1}))
+        payload = json.loads(await listed.recv())
+        assert room["code"] not in json.dumps(payload)
+        assert "127.0.0.1" not in json.dumps(payload["rooms"])
+        await stop(task)
+    run(scenario())
+
+
+def test_forwarded_ip_is_trusted_only_from_loopback():
+    relay = tetris_relay.Relay()
+
+    class Request:
+        headers = {"CF-Connecting-IP": "203.0.113.9, evil"}
+
+    class Socket:
+        def __init__(self, peer):
+            self.request = Request()
+            self.remote_address = (peer, 9)
+
+    assert relay._client_ip(Socket("8.8.8.8")) == "8.8.8.8"
+    assert relay._client_ip(Socket("127.0.0.1")) == "203.0.113.9"

@@ -44,10 +44,10 @@ public final class UiKit {
     public static final Color VIOLET = new Color(0x9B6BFF);
 
     private static final NineSlice FRAME_C = new NineSlice(FRAME_CYAN, 64, NineSlice.Axis.NINE);
-    private static final NineSlice FRAME_M = new NineSlice(FRAME_MAGENTA, 64, NineSlice.Axis.NINE);
-    private static final NineSlice FRAME_V = new NineSlice(FRAME_VIOLET, 64, NineSlice.Axis.NINE);
+    private static final NineSlice FRAME_M = new NineSlice(FRAME_MAGENTA, FRAME_CYAN, 0.83f, 64, NineSlice.Axis.NINE);
+    private static final NineSlice FRAME_V = new NineSlice(FRAME_VIOLET, FRAME_CYAN, 0.25f, 64, NineSlice.Axis.NINE);
     private static final NineSlice TAB_C = new NineSlice(TAB_CYAN, 48, NineSlice.Axis.NINE);
-    private static final NineSlice TAB_M = new NineSlice(TAB_MAGENTA, 48, NineSlice.Axis.NINE);
+    private static final NineSlice TAB_M = new NineSlice(TAB_MAGENTA, TAB_CYAN, 0.83f, 48, NineSlice.Axis.NINE);
     private static final NineSlice BUTTON_IDLE = new NineSlice(BUTTON, 64, NineSlice.Axis.HORIZONTAL);
     private static final NineSlice BUTTON_ON = new NineSlice(BUTTON_SELECTED, 64, NineSlice.Axis.HORIZONTAL);
     private static final NineSlice CAPSULE_SLICE = new NineSlice(CAPSULE, 48, NineSlice.Axis.HORIZONTAL);
@@ -62,12 +62,11 @@ public final class UiKit {
     public static void paintScene(Graphics2D g, int width, int height) {
         paintNight(g, width, height);
         if (width <= 0 || height <= 0) return;
-        g.setColor(new Color(230, 236, 255, 180));
         for (int i = 0; i < 40; i++) {
             int x = (i * 97 + 13) % Math.max(1, width);
             int y = (i * 53 + 7) % Math.max(1, height);
-            int s = 1 + i % 2;
-            g.fillRect(x, y, s, s);
+            int s = 2 + i % 3;
+            softDot(g, x, y, s, new Color(230, 236, 255, 150 - (i % 5) * 16));
         }
         int moon = Math.max(36, Math.min(width, height) / 8);
         paintMoon(g, width - moon - moon / 3, moon / 3, moon);
@@ -333,6 +332,28 @@ public final class UiKit {
         g.drawLine(x + inset, y + size - inset - 1, x + size - inset - 1, y + size - inset - 1);
     }
 
+    /**
+     * 제목·버튼·배너 글자. {@link GameTheme#paintTitle}와 같다.
+     * 14px 이하는 효과 없이 그린다. style 0은 보통, 1은 선택.
+     */
+    public static void paintTitle(Graphics2D g, String text, Font font, int centerX, int baseline, int style) {
+        GameTheme.paintTitle(g, text, font, centerX, baseline, style);
+    }
+
+    /** 상자 한가운데. 기준선이 아니라 글자 모양의 중심이다 */
+    public static void paintTitleInBox(Graphics2D g, String text, Font font, java.awt.Rectangle box, boolean selected) {
+        if (g == null || font == null) return;
+        Font previous = g.getFont();
+        g.setFont(font);
+        assetSelected = selected;
+        try {
+            drawInBox(g, text, box, Align.CENTER);
+        } finally {
+            assetSelected = false;
+            if (previous != null) g.setFont(previous);
+        }
+    }
+
     /** 네온 글자. 같은 문장·크기·색은 한 번만 블러한다 */
     public static void paintGlowText(Graphics2D g, String text, Font font, Color color, int centerX, int baseline) {
         if (text == null || text.isEmpty() || font == null) return;
@@ -372,6 +393,104 @@ public final class UiKit {
 
     public static float pulse() {
         return (float) (0.5 + 0.5 * Math.sin(System.nanoTime() / 180_000_000.0));
+    }
+
+    /** 단단한 점 대신 가장자리가 사라지는 원. 별·입자가 매 프레임 수백 개라 (크기, 색)별 그림을 한 번 만들어 찍는다 */
+    public static void softDot(Graphics2D g, int x, int y, int size, Color color) {
+        if (g == null || color == null || size <= 0) return;
+        if (size <= 2) {
+            g.setColor(color);
+            g.fillOval(x, y, size, size);
+            return;
+        }
+        int rgb = color.getRGB() & 0xffffff;
+        int alpha = color.getAlpha();
+        Composite previous = g.getComposite();
+        if (alpha < 255) {
+            float base = previous instanceof AlphaComposite ac && ac.getRule() == AlphaComposite.SRC_OVER ? ac.getAlpha() : 1f;
+            g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, base * alpha / 255f));
+        }
+        java.awt.geom.AffineTransform t = g.getTransform();
+        boolean scaledOnly = t.getShearX() == 0 && t.getShearY() == 0 && t.getScaleX() > 0
+                && (t.getScaleX() != 1 || t.getScaleY() != 1);
+        try {
+            if (!scaledOnly) {
+                g.drawImage(softDotSprite(size, rgb), x, y, null);
+                return;
+            }
+            // 배율이 걸린 화면에서 점 그림을 늘리면 점마다 소프트웨어 변환이 돈다. 장치 픽셀 크기 점을 1:1로 찍는다
+            int deviceSize = Math.max(1, (int) Math.round(size * t.getScaleX()));
+            java.awt.geom.Point2D at = t.transform(new java.awt.geom.Point2D.Double(x, y), null);
+            g.setTransform(new java.awt.geom.AffineTransform());
+            g.drawImage(softDotSprite(deviceSize, rgb), (int) Math.round(at.getX()), (int) Math.round(at.getY()), null);
+        } finally {
+            g.setTransform(t);
+            g.setComposite(previous);
+        }
+    }
+
+    /** 반짝임은 알파만 바뀌므로 알파를 뺀 색으로 기억하고 그릴 때 투명도를 곱한다(캐시가 넘치지 않게) */
+    private static BufferedImage softDotSprite(int size, int rgb) {
+        long key = (((long) size) << 32) | rgb;
+        synchronized (DOTS) {
+            BufferedImage hit = DOTS.get(key);
+            if (hit != null) return hit;
+        }
+        Color opaque = new Color(rgb);
+        BufferedImage dot = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D d = dot.createGraphics();
+        try {
+            d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            float radius = size / 2f;
+            d.setPaint(new java.awt.RadialGradientPaint(radius, radius, Math.max(0.5f, radius),
+                    new float[] {0f, 0.55f, 1f},
+                    new Color[] {opaque,
+                            new Color(opaque.getRed(), opaque.getGreen(), opaque.getBlue(), 128),
+                            new Color(opaque.getRed(), opaque.getGreen(), opaque.getBlue(), 0)}));
+            d.fillOval(0, 0, size, size);
+        } finally {
+            d.dispose();
+        }
+        synchronized (DOTS) {
+            DOTS.put(key, dot);
+        }
+        return dot;
+    }
+
+    private static final Map<Long, BufferedImage> DOTS = new java.util.LinkedHashMap<>(64, 0.75f, true) {
+        @Override protected boolean removeEldestEntry(Map.Entry<Long, BufferedImage> eldest) {
+            return size() > 256;
+        }
+    };
+
+    /**
+     * 배율이 걸린 화면에 큰 그림을 늘려 그리면 Java2D가 매 프레임 소프트웨어로 변환한다.
+     * 장치 픽셀 크기 그림을 받아 변환 없이 1:1로 찍는다. 배율이 1이거나 회전이 있으면 그대로 그린다.
+     */
+    public static void drawDeviceImage(Graphics2D g, int x, int y, int width, int height,
+                                       java.util.function.BiFunction<Integer, Integer, BufferedImage> imageForSize) {
+        if (g == null || width <= 0 || height <= 0) return;
+        java.awt.geom.AffineTransform t = g.getTransform();
+        boolean axisAligned = t.getShearX() == 0 && t.getShearY() == 0 && t.getScaleX() > 0 && t.getScaleY() > 0;
+        if (!axisAligned || (t.getScaleX() == 1 && t.getScaleY() == 1)) {
+            BufferedImage image = imageForSize.apply(width, height);
+            if (image != null) g.drawImage(image, x, y, width, height, null);
+            return;
+        }
+        java.awt.geom.Point2D topLeft = t.transform(new java.awt.geom.Point2D.Double(x, y), null);
+        java.awt.geom.Point2D bottomRight = t.transform(new java.awt.geom.Point2D.Double(x + width, y + height), null);
+        int dx = (int) Math.round(topLeft.getX());
+        int dy = (int) Math.round(topLeft.getY());
+        int dw = Math.max(1, (int) Math.round(bottomRight.getX()) - dx);
+        int dh = Math.max(1, (int) Math.round(bottomRight.getY()) - dy);
+        BufferedImage image = imageForSize.apply(dw, dh);
+        if (image == null) return;
+        g.setTransform(new java.awt.geom.AffineTransform());
+        try {
+            g.drawImage(image, dx, dy, dw, dh, null);
+        } finally {
+            g.setTransform(t);
+        }
     }
 
     public static Color toneColor(Tone tone) {
@@ -449,6 +568,204 @@ public final class UiKit {
             ys[i] = cy + (int) (Math.sin(angle) * arm);
         }
         g.fillPolygon(xs, ys, 10);
+    }
+
+    public enum Align {
+        LEFT, CENTER, RIGHT
+    }
+
+    /**
+     * 글자 칸. 버튼·캡슐·탭·배너·이름표·HP 프레임 원본의 안쪽을 그린 크기에 맞춘다.
+     */
+    public enum AssetSlot {
+        BUTTON, CAPSULE, TAB, BANNER, NAME, HP
+    }
+
+    public static java.awt.Rectangle contentBox(AssetSlot slot, java.awt.Rectangle rect) {
+        return contentBox(slot, rect, 0);
+    }
+
+    /** variant 1은 nametab-p2. 장식이 오른쪽에 있다 */
+    public static java.awt.Rectangle contentBox(AssetSlot slot, java.awt.Rectangle rect, int variant) {
+        if (rect == null) return new java.awt.Rectangle();
+        AssetSlot kind = slot == null ? AssetSlot.CAPSULE : slot;
+        if (kind == AssetSlot.HP && !AssetInsets.hpFrame(rect)) {
+            int pad = Math.max(1, Math.min(rect.width, rect.height) / 8);
+            return new java.awt.Rectangle(rect.x + pad, rect.y + pad,
+                    Math.max(1, rect.width - pad * 2), Math.max(1, rect.height - pad * 2));
+        }
+        AssetInsets.Hole hole = switch (kind) {
+            case BUTTON -> AssetInsets.BUTTON;
+            case TAB -> AssetInsets.TAB;
+            case BANNER -> AssetInsets.BANNER;
+            case NAME -> variant == 1 ? AssetInsets.NAME_P2 : AssetInsets.NAME_P1;
+            case HP -> AssetInsets.HP;
+            default -> AssetInsets.CAPSULE;
+        };
+        int corner = kind == AssetSlot.TAB ? tabCorner(rect.width, rect.height) : Integer.MAX_VALUE;
+        return AssetInsets.map(hole, rect, corner);
+    }
+
+    /**
+     * 에셋 위 글자. 글자 칸 안에 두고, 시각 경계의 중심을 칸 중심에 맞춘 뒤 넘치면 줄인다.
+     */
+    public static void drawInAsset(Graphics2D g, AssetSlot slot, java.awt.Rectangle rect, String text, Align align) {
+        drawInAsset(g, slot, rect, text, align, false);
+    }
+
+    public static void drawInAsset(Graphics2D g, AssetSlot slot, java.awt.Rectangle rect, String text, Align align,
+                                   boolean selected) {
+        assetSelected = selected;
+        try {
+            drawInBox(g, text, contentBox(slot, rect), align);
+        } finally {
+            assetSelected = false;
+        }
+    }
+
+    private static boolean assetSelected;
+
+    /**
+     * 상자 세로 가운데는 ascent가 아니라 글자 모양 경계다.
+     * 경계가 없으면 글꼴·크기별 "가Ag0" 기준을 쓴다.
+     */
+    public static void drawInBox(Graphics2D g, String text, java.awt.Rectangle box, Align align) {
+        if (g == null || text == null || text.isEmpty() || box == null || box.width <= 0 || box.height <= 0) return;
+        Font original = g.getFont();
+        if (original == null) return;
+        int size = original.getSize();
+        boolean title = false;
+        java.awt.geom.Rectangle2D vis = GameTheme.drawnBounds(original, text, g.getFontRenderContext());
+        while (size > 8) {
+            Font face = original.deriveFont((float) size);
+            g.setFont(face);
+            title = size > 14 && isDisplayFace(face);
+            vis = GameTheme.drawnBounds(face, text, g.getFontRenderContext());
+            int pad = title ? titlePad(size) : 0;
+            if (vis.getWidth() <= Math.max(1, box.width - pad * 2)
+                    && vis.getHeight() <= Math.max(1, box.height - pad * 2)) break;
+            size--;
+        }
+        Align side = align == null ? Align.CENTER : align;
+        double centerOff = vis.getY() + vis.getHeight() / 2.0;
+        double bias = title ? 0.5 : 0;
+        int baseline = (int) Math.round(box.y + box.height / 2.0 - bias - centerOff);
+        if (title) {
+            double half = vis.getWidth() / 2.0;
+            int centerX = (int) Math.round(switch (side) {
+                case LEFT -> box.x + half - bias;
+                case RIGHT -> box.x + box.width - half - bias;
+                case CENTER -> box.x + box.width / 2.0 - bias;
+            });
+            GameTheme.paintTitle(g, text, g.getFont(), centerX, baseline, assetSelected ? 1 : 0);
+        } else {
+            int penX = (int) switch (side) {
+                case LEFT -> Math.ceil(box.x - vis.getX());
+                case RIGHT -> Math.floor(box.x + box.width - vis.getX() - vis.getWidth());
+                case CENTER -> Math.round(box.x + box.width / 2.0 - (vis.getX() + vis.getWidth() / 2.0));
+            };
+            GameTheme.draw(g, text, penX, baseline);
+        }
+        g.setFont(original);
+    }
+
+    /** 아이콘과 글자의 시각 세로 중심을 맞춘다. 못 그리는 글자는 글자 단위로 바꾼다 */
+    public static void drawIconText(Graphics2D g, java.awt.Rectangle box, String icon, String text) {
+        if (g == null || box == null) return;
+        Font original = g.getFont();
+        String mark = icon == null ? "" : icon;
+        String label = text == null ? "" : text;
+        int gap = 4;
+        java.awt.font.FontRenderContext context = g.getFontRenderContext();
+        java.awt.geom.Rectangle2D iconVis = mark.isEmpty() ? null : GameTheme.drawnBounds(g.getFont(), mark, context);
+        java.awt.geom.Rectangle2D textVis = label.isEmpty() ? null : GameTheme.drawnBounds(g.getFont(), label, context);
+        int iconW = iconVis == null ? 0 : (int) Math.ceil(iconVis.getWidth());
+        int textW = textVis == null ? 0 : (int) Math.ceil(textVis.getWidth());
+        int total = iconW + (mark.isEmpty() || label.isEmpty() ? 0 : gap) + textW;
+        int x = box.x + Math.max(0, (box.width - total) / 2);
+        int mid = box.y + box.height / 2;
+        if (iconVis != null) {
+            double baseline = mid - renderedCenterOff(g, mark);
+            double penX = x - iconVis.getX();
+            drawFractional(g, () -> GameTheme.draw(g, mark, (int) Math.floor(penX), (int) Math.floor(baseline)), penX, baseline);
+            x += iconW + gap;
+        }
+        if (textVis != null) {
+            double baseline = mid - renderedCenterOff(g, label);
+            double penX = x - textVis.getX();
+            drawFractional(g, () -> GameTheme.draw(g, label, (int) Math.floor(penX), (int) Math.floor(baseline)), penX, baseline);
+        }
+        if (original != null) g.setFont(original);
+    }
+
+    private static void drawFractional(Graphics2D g, Runnable paint, double x, double y) {
+        double fx = x - Math.floor(x);
+        double fy = y - Math.floor(y);
+        g.translate(fx, fy);
+        try {
+            paint.run();
+        } finally {
+            g.translate(-fx, -fy);
+        }
+    }
+
+    private static final java.util.Map<String, Double> INK_OFF = new java.util.HashMap<>();
+
+    private static double renderedCenterOff(Graphics2D g, String text) {
+        Font font = g.getFont() == null ? GameTheme.text(14, false) : g.getFont();
+        String key = font.getFontName() + "@" + font.getSize() + ":" + text;
+        Double hit = INK_OFF.get(key);
+        if (hit != null) return hit;
+        int width = Math.max(8, font.getSize() * Math.max(1, text.length()) * 2);
+        int height = Math.max(8, font.getSize() * 3);
+        BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D layer = image.createGraphics();
+        try {
+            GameTheme.applyQuality(layer);
+            layer.setFont(font);
+            layer.setColor(Color.WHITE);
+            int baseline = font.getSize() * 2;
+            GameTheme.draw(layer, text, 2, baseline);
+            int minY = height;
+            int maxY = -1;
+            for (int y = 0; y < height; y++) {
+                for (int x = 0; x < width; x++) {
+                    if ((image.getRGB(x, y) >>> 24) <= 40) continue;
+                    if (y < minY) minY = y;
+                    if (y > maxY) maxY = y;
+                }
+            }
+            double off = maxY < 0 ? 0 : (minY + maxY) / 2.0 - baseline;
+            INK_OFF.put(key, off);
+            return off;
+        } finally {
+            layer.dispose();
+        }
+    }
+
+
+    private static boolean isDisplayFace(Font font) {
+        if (font == null) return false;
+        String name = font.getFontName() == null ? "" : font.getFontName();
+        return name.contains("Black Han");
+    }
+
+    /** 외곽선 절반과 1px 그림자가 칸 안에 남도록 줄이는 여백 */
+    private static int titlePad(int size) {
+        float stroke = Math.max(1.25f, size / 18f);
+        return (int) Math.ceil(stroke / 2f + 1f);
+    }
+
+    private static final java.util.Map<String, java.awt.geom.Rectangle2D> REFERENCE = new java.util.HashMap<>();
+
+    private static java.awt.geom.Rectangle2D referenceBounds(Font font, java.awt.font.FontRenderContext context) {
+        String key = (font == null ? "none" : font.getFontName() + "@" + font.getSize());
+        java.awt.geom.Rectangle2D hit = REFERENCE.get(key);
+        if (hit != null) return hit;
+        Font face = font == null ? GameTheme.text(14, false) : font;
+        java.awt.geom.Rectangle2D bounds = face.createGlyphVector(context, "가Ag0").getVisualBounds();
+        REFERENCE.put(key, bounds);
+        return bounds;
     }
 
     /** 버튼 안 글자를 가운데에 둔다 */

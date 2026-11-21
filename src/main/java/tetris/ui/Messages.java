@@ -48,7 +48,7 @@ public class Messages {
         TEXT.put("effect.blocks", "%d블록");
         TEXT.put("effect.thisBlock", "이번 블록");
 
-        TEXT.put("pause.title", "PAUSED");
+        TEXT.put("pause.title", "일시정지");
         TEXT.put("pause.resume", "계속하기");
         TEXT.put("pause.restart", "다시 시작");
         TEXT.put("pause.quit", "메인 메뉴로");
@@ -62,8 +62,8 @@ public class Messages {
 
         TEXT.put("gameOver.title", "GAME OVER");
 
-        TEXT.put("name.title", "TOP 10 진입!");
-        TEXT.put("name.prompt", "이름을 입력하세요 (한글·영문·숫자, 최대 10자)");
+        TEXT.put("name.title", "10위 진입");
+        TEXT.put("name.prompt", "이름을 입력하세요 (한글/영문/숫자, 최대 10자)");
         TEXT.put("name.invalid", "이름은 공백을 뺀 1~10자로 입력하세요");
 
         TEXT.put("scoreboard.title", "SCOREBOARD");
@@ -107,6 +107,7 @@ public class Messages {
         TEXT.put("size.SMALL", "Small");
         TEXT.put("size.MEDIUM", "Medium");
         TEXT.put("size.LARGE", "Large");
+        TEXT.put("size.FULLSCREEN", "전체 화면");
 
         TEXT.put("difficulty.EASY", "Easy");
         TEXT.put("difficulty.NORMAL", "Normal");

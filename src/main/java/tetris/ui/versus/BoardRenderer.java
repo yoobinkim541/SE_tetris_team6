@@ -31,7 +31,8 @@ public final class BoardRenderer {
         int dot = Math.max(1, size / 16);
         for (int r = 0; r < cells.length; r++) for (int c = 0; c < cells[r].length; c++) {
             if (cells[r][c] != 0) continue;
-            g.fillRect(x + c * size + size / 2 - dot / 2, y + r * size + size / 2 - dot / 2, dot, dot);
+            tetris.ui.theme.UiKit.softDot(g, x + c * size + (size - dot) / 2, y + r * size + (size - dot) / 2,
+                    Math.max(2, dot), new Color(0x8FB7D8));
         }
         for (int r = 0; r < cells.length; r++) for (int c = 0; c < cells[r].length; c++) {
             if (cells[r][c] == 0) continue;
@@ -73,9 +74,9 @@ public final class BoardRenderer {
     private void paintItem(Graphics2D g, char symbol, int x, int y, int size) {
         tetris.ui.theme.GemTiles.paint(g, x, y, size, Color.WHITE);
         if (size < 9) return;
-        g.setFont(new Font(Font.MONOSPACED,Font.BOLD,Math.max(8,size*2/3)));
+        g.setFont(tetris.ui.theme.GameTheme.digits(Math.max(8, size * 2 / 3)));
         String text = String.valueOf(symbol);
-        g.drawString(text,x+(size-g.getFontMetrics().stringWidth(text))/2,y+(size+g.getFontMetrics().getAscent())/2-2);
+        tetris.ui.theme.UiKit.drawInBox(g, text, new java.awt.Rectangle(x, y, size, size), tetris.ui.theme.UiKit.Align.CENTER);
     }
     public void paintFitted(Graphics2D g, int[][] shape, int x, int y, int width, int height) {
         if (shape == null || width <= 1 || height <= 1) return;
@@ -124,9 +125,9 @@ public final class BoardRenderer {
             g.drawLine(x+size-inset-1,y+inset,x+inset,y+size-inset-1);
         } else if (size >= 8) {
             g.setColor(palette.textColor(fill));
-            g.setFont(new Font(Font.MONOSPACED,Font.BOLD,Math.max(8,size*2/3)));
-            String letter = String.valueOf(BlockType.values()[value-1].letter());
-            g.drawString(letter,x+(size-g.getFontMetrics().stringWidth(letter))/2,y+(size+g.getFontMetrics().getAscent())/2-2);
+            g.setFont(tetris.ui.theme.GameTheme.text(Math.max(8, size * 2 / 3), false));
+            String letter = String.valueOf(BlockType.values()[value - 1].letter());
+            tetris.ui.theme.UiKit.drawInBox(g, letter, new java.awt.Rectangle(x, y, size, size), tetris.ui.theme.UiKit.Align.CENTER);
         }
     }
 

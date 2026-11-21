@@ -38,7 +38,7 @@ class BattleResultPanelTest {
             var modes = new AtomicInteger(); var main = new AtomicInteger();
             var panel = new BattleResultPanel(modes::incrementAndGet, main::incrementAndGet);
             panel.setSnapshot(finished(MatchResult.win(PlayerId.ONE, MatchResult.EndReason.FORFEIT)));
-            button(panel, "모드 선택").doClick(); button(panel, "메인 메뉴").doClick();
+            panel.press("모드 선택"); panel.press("메인 메뉴");
             key(panel, KeyEvent.VK_ENTER); key(panel, KeyEvent.VK_ESCAPE);
             assertEquals(2, modes.get()); assertEquals(2, main.get());
             assertEquals(0, panel.getInputMap(JComponent.WHEN_FOCUSED).size());
@@ -48,13 +48,6 @@ class BattleResultPanelTest {
     private static MatchSnapshot finished(MatchResult result) {
         var sample = FakeBattleClient.sample();
         return new MatchSnapshot(sample.matchId(), 1, sample.one(), sample.two(), 0, MatchPhase.FINISHED, result);
-    }
-    private static JButton button(Container parent, String text) {
-        for (Component c : parent.getComponents()) {
-            if (c instanceof JButton b && b.getText().equals(text)) return b;
-            if (c instanceof Container nested) { var found = button(nested, text); if (found != null) return found; }
-        }
-        return null;
     }
     private static void key(JComponent panel, int code) {
         var binding = panel.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).get(KeyStroke.getKeyStroke(code, 0));

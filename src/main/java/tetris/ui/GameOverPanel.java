@@ -11,12 +11,16 @@ import tetris.ui.theme.UiKit;
 /** GAME OVER 화면: 최종 Score, Level 표시. Enter로 다음 단계 (Name 입력 또는 Scoreboard). */
 public class GameOverPanel extends JPanel {
     private GameSnapshot finalState;
+    private final Runnable onContinue;
+    private final tetris.ui.input.Hits hits = new tetris.ui.input.Hits();
 
     public GameOverPanel(Runnable onContinue) {
         if (onContinue == null) throw new IllegalArgumentException("onContinue cannot be null");
+        this.onContinue = onContinue;
         setOpaque(false);
         setFocusable(true);
         KeyBindingManager.bindKey(this, KeyEvent.VK_ENTER, onContinue);
+        tetris.ui.input.MenuMouse.install(this, hits, id -> { }, this::clickHit);
     }
 
     public void show(GameSnapshot finalState) {
@@ -32,17 +36,20 @@ public class GameOverPanel extends JPanel {
         int unit = Theme.unit(h);
         UiKit.paintScene(g2, w, h);
 
-        int boxW = Math.min(w - unit * 2, unit * 18);
-        int boxH = Math.min(h - unit * 4, unit * 18);
+        int inset = tetris.ui.theme.GameTheme.snap8(Math.max(16, unit * 2));
+        int boxW = Math.min(w - inset * 2, tetris.ui.theme.GameTheme.snap8(Math.max(8, unit * 18)));
+        int boxH = Math.min(h - inset * 2, tetris.ui.theme.GameTheme.snap8(Math.max(8, unit * 16)));
         int boxX = (w - boxW) / 2;
-        int boxY = Math.max(unit, (h - boxH) / 2 - unit);
+        int boxY = (h - boxH) / 2;
+        hits.begin(null);
+        hits.add("continue", boxX, boxY, boxW, boxH);
         g2.setColor(new Color(8, 12, 28, 190));
         g2.fillRoundRect(boxX, boxY, boxW, boxH, 18, 18);
         UiKit.paintFrame(g2, UiKit.Tone.MAGENTA, boxX, boxY, boxW, boxH);
-
-        g2.setFont(Theme.font("게임 오버", unit * 2, false));
-        g2.setColor(Color.WHITE);
-        Theme.drawCentered(g2, "게임 오버", w / 2, boxY + unit * 3);
+        g2.setFont(tetris.ui.theme.GameTheme.display(Math.max(22, unit * 2)));
+        tetris.ui.theme.UiKit.drawInBox(g2, "게임 오버",
+                new java.awt.Rectangle(boxX + unit, boxY + unit, boxW - unit * 2, unit * 3),
+                tetris.ui.theme.UiKit.Align.CENTER);
 
         if (finalState != null) {
             int y = boxY + unit * 4;
@@ -55,21 +62,28 @@ public class GameOverPanel extends JPanel {
     }
 
     private static int drawResult(Graphics2D g, String label, String value, int centerX, int y, int unit, int boxW) {
-        g.setFont(Theme.font(label, Math.max(11, unit * 3 / 4), false));
-        g.setColor(Theme.DIM_TEXT);
-        Theme.drawCentered(g, label, centerX, y + unit);
-        int capW = Math.min(boxW - unit * 4, unit * 10);
-        int capH = unit * 2;
+        int capW = Math.min(boxW - unit * 4, Math.max(8, unit * 10));
+        int capH = Math.max(32, unit * 2);
         int capX = centerX - capW / 2;
-        int capY = y + unit + unit / 3;
+        int labelH = Math.max(12, unit * 3 / 4);
+        int gap = 4;
+        int capY = y + labelH + gap;
+        g.setFont(Theme.font(label, labelH, false));
+        g.setColor(Theme.DIM_TEXT);
+        UiKit.drawInBox(g, label, new java.awt.Rectangle(capX, capY - gap - labelH, capW, labelH), UiKit.Align.CENTER);
         UiKit.paintCapsule(g, capX, capY, capW, capH);
-        int size = unit + unit / 3;
-        g.setFont(Theme.font(value, size, true));
-        while (g.getFontMetrics().stringWidth(value) > capW - unit && size > 8) {
-            g.setFont(Theme.font(value, --size, true));
-        }
+        g.setFont(Theme.font(value, unit + unit / 3, true));
         g.setColor(Color.WHITE);
-        Theme.drawCentered(g, value, centerX, capY + capH / 2 + g.getFontMetrics().getAscent() / 2 - 1);
-        return capY + capH + unit;
+        UiKit.drawInAsset(g, UiKit.AssetSlot.CAPSULE, new java.awt.Rectangle(capX, capY, capW, capH),
+                value, UiKit.Align.CENTER);
+        return capY + capH + gap;
+    }
+
+    public String hitAt(int x, int y) {
+        return hits.hit(x, y);
+    }
+
+    private void clickHit(String id) {
+        if ("continue".equals(id)) onContinue.run();
     }
 }

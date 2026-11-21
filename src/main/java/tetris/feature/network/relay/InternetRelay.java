@@ -83,6 +83,21 @@ public final class InternetRelay implements AutoCloseable {
         }
     }
 
+    /** 목록에 보이는 대기 방. routeIndex는 이 접속의 서버 순번이라 참가할 때 같은 서버로 간다 */
+    public record ListedRoom(int routeIndex, String serverName, String id, String name, String mode,
+                             boolean privateRoom, int players) {
+        public ListedRoom {
+            Objects.requireNonNull(serverName, "serverName");
+            Objects.requireNonNull(id, "id");
+            Objects.requireNonNull(name, "name");
+            Objects.requireNonNull(mode, "mode");
+        }
+    }
+
+    public List<Route> routes() {
+        return routes;
+    }
+
     private final List<Route> routes;
     private final Executor dispatcher;
     private final Object lock = new Object();
@@ -145,6 +160,37 @@ public final class InternetRelay implements AutoCloseable {
         return onDispatcher(result);
     }
 
+    /**
+     * 이름이 있는 방. 메인이 v2를 모르면(ERR) 예비 서버로 넘어간다.
+     * 돌아온 코드가 숫자 4자리면 예비 서버에서 만든 방이다.
+     */
+    public CompletionStage<String> openListedRoom(int localGamePort, String name, boolean isPublic, String mode) {
+        if (localGamePort <= 0 || localGamePort > 65535) {
+            throw new IllegalArgumentException("game port must be 1..65535: " + localGamePort);
+        }
+        CompletableFuture<String> result = new CompletableFuture<>();
+        synchronized (lock) {
+            claimStart();
+            roomCode = result;
+            hostGamePort = localGamePort;
+        }
+        connect(0, requestHost(name, isPublic, mode));
+        return onDispatcher(result);
+    }
+
+    /** 목록에서 고른 공개 방. 그 방이 있던 서버로만 간다 */
+    public CompletionStage<Integer> joinId(int routeIndex, String id) {
+        if (routeIndex < 0 || routeIndex >= routes.size()) throw new IllegalArgumentException("route");
+        if (id == null || id.isBlank()) throw new IllegalArgumentException("id");
+        CompletableFuture<Integer> result = new CompletableFuture<>();
+        synchronized (lock) {
+            claimStart();
+            loopbackPort = result;
+        }
+        connect(routeIndex, requestJoinId(id));
+        return onDispatcher(result);
+    }
+
     /** 참가자: 방 코드로 참가하고, 게임이 접속할 이 PC의 루프백 포트를 받는다. 코드 모양으로 서버를 고른다 */
     public CompletionStage<Integer> join(String code) {
         int index = -1;
@@ -179,6 +225,92 @@ public final class InternetRelay implements AutoCloseable {
         node.put("proto", WireFormat.VERSION); // 게임 버전이 다르면 서버가 참가 단계에서 거부한다
         if (code != null) node.put("code", code);
         return node.toString();
+    }
+
+    private static String requestHost(String name, boolean isPublic, String mode) {
+        ObjectNode node = JSON.createObjectNode();
+        node.put("op", "host");
+        node.put("relay", RELAY_VERSION);
+        node.put("proto", WireFormat.VERSION);
+        node.put("name", name);
+        node.put("visibility", isPublic ? "public" : "private");
+        node.put("mode", mode);
+        return node.toString();
+    }
+
+    private static String requestJoinId(String id) {
+        ObjectNode node = JSON.createObjectNode();
+        node.put("op", "join");
+        node.put("relay", RELAY_VERSION);
+        node.put("proto", WireFormat.VERSION);
+        node.put("id", id);
+        return node.toString();
+    }
+
+    /** 두 서버의 대기 방을 모아 온다. 한 서버가 v2를 모르면 그 서버 목록만 비운다 */
+    public static CompletionStage<java.util.List<ListedRoom>> list(java.util.List<Route> routes) {
+        if (routes == null || routes.isEmpty()) return CompletableFuture.completedFuture(java.util.List.of());
+        java.util.List<CompletableFuture<java.util.List<ListedRoom>>> parts = new java.util.ArrayList<>();
+        for (int i = 0; i < routes.size(); i++) parts.add(listOne(routes.get(i), i));
+        return CompletableFuture.allOf(parts.toArray(CompletableFuture[]::new)).thenApply(ignored -> {
+            java.util.List<ListedRoom> merged = new java.util.ArrayList<>();
+            for (CompletableFuture<java.util.List<ListedRoom>> part : parts) merged.addAll(part.join());
+            return java.util.List.copyOf(merged);
+        });
+    }
+
+    private static CompletableFuture<java.util.List<ListedRoom>> listOne(Route route, int index) {
+        CompletableFuture<java.util.List<ListedRoom>> result = new CompletableFuture<>();
+        ObjectNode request = JSON.createObjectNode();
+        request.put("op", "list");
+        request.put("relay", RELAY_VERSION);
+        route.transport().open(route.uri(), route.connectTimeout(), new RelayTransport.Listener() {
+            @Override
+            public void onText(String text) {
+                if (!result.isDone()) result.complete(parseRooms(text, index, route.name()));
+            }
+
+            @Override
+            public void onBinary(byte[] bytes) {
+            }
+
+            @Override
+            public void onClosed(String reason) {
+                result.complete(java.util.List.of());
+            }
+        }).whenComplete((channel, error) -> {
+            if (error != null) {
+                result.complete(java.util.List.of());
+                return;
+            }
+            channel.sendText(request.toString()).whenComplete((ignored, sendError) -> {
+                if (sendError != null) {
+                    result.complete(java.util.List.of());
+                    channel.close();
+                }
+            });
+            result.whenComplete((rooms, ignored) -> channel.close());
+        });
+        long wait = route.connectTimeout().toMillis() + 1_500;
+        return result.completeOnTimeout(java.util.List.of(), wait, java.util.concurrent.TimeUnit.MILLISECONDS);
+    }
+
+    private static java.util.List<ListedRoom> parseRooms(String text, int index, String serverName) {
+        try {
+            JsonNode message = JSON.readTree(text);
+            if (!"rooms".equals(message.path("op").asText())) return java.util.List.of();
+            java.util.List<ListedRoom> rooms = new java.util.ArrayList<>();
+            for (JsonNode room : message.path("rooms")) {
+                String id = room.path("id").asText("");
+                String name = room.path("name").asText("");
+                if (id.isEmpty() || name.isEmpty()) continue;
+                rooms.add(new ListedRoom(index, serverName, id, name, room.path("mode").asText("classic"),
+                        room.path("private").asBoolean(false), room.path("players").asInt(1)));
+            }
+            return java.util.List.copyOf(rooms);
+        } catch (IOException e) {
+            return java.util.List.of();
+        }
     }
 
     private void connect(int index, String firstMessage) {

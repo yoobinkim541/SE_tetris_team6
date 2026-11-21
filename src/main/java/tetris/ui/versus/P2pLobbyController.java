@@ -82,6 +82,8 @@ public final class P2pLobbyController implements P2pLobbyPanel.Actions, AutoClos
     private String message = "";
     private long attempt;
     private boolean inMatch;
+    private int listTicket;
+    private List<InternetRelay.ListedRoom> rooms = List.of();
     private boolean closed;
 
     public P2pLobbyController(LobbyClient lobby, Navigation navigation) {
@@ -205,6 +207,12 @@ public final class P2pLobbyController implements P2pLobbyPanel.Actions, AutoClos
     @Override
     public void hostInternet() {
         if (closed || current.state() != State.INITIAL || relay != null) return;
+        String name = tetris.relay.RoomName.sanitize(panel.createName()).orElse("");
+        if (name.isEmpty()) {
+            showMessage("방 이름은 1~20자여야 합니다.");
+            return;
+        }
+        applyListedMode(panel.listedMode());
         clearMessage();
         internetSession = true;
         track(() -> lobby.host(0), "인터넷 방 만들기"); // 아무 빈 포트로 대기한다. 상대는 중계를 거쳐 들어온다
@@ -218,7 +226,7 @@ public final class P2pLobbyController implements P2pLobbyPanel.Actions, AutoClos
         relay = opened;
         long mine = attempt;
         render();
-        opened.openRoom(port).whenComplete((code, error) -> {
+        opened.openListedRoom(port, name, panel.createPublic(), panel.listedMode().token()).whenComplete((code, error) -> {
             if (closed || relay != opened || mine != attempt) return;
             if (error != null) {
                 failInternet(relayFailureText(error));
@@ -228,6 +236,56 @@ public final class P2pLobbyController implements P2pLobbyPanel.Actions, AutoClos
             panel.setInternetRoom(code);
             render();
         });
+    }
+
+    @Override
+    public void refreshRooms() {
+        if (closed || current == null || current.state() != State.INITIAL || relay != null) return;
+        InternetRelay probe = relayFactory.get();
+        List<InternetRelay.Route> routes = probe.routes();
+        probe.close();
+        int ticket = ++listTicket;
+        InternetRelay.list(routes).whenComplete((listed, error) -> SwingUtilities.invokeLater(() -> {
+            if (closed || ticket != listTicket || error != null || listed == null) return;
+            rooms = listed;
+            panel.setRooms(listed);
+        }));
+    }
+
+    @Override
+    public void joinPublic(int routeIndex, String id) {
+        if (closed || current.state() != State.INITIAL || relay != null) return;
+        clearMessage();
+        internetSession = true;
+        InternetRelay opened = relayFactory.get();
+        relay = opened;
+        long mine = ++attempt;
+        message = "공개 방에 참가하는 중…";
+        render();
+        opened.joinId(routeIndex, id).whenComplete((port, error) -> {
+            if (closed || relay != opened || mine != attempt) return;
+            if (error != null) {
+                failInternet(relayFailureText(error));
+                return;
+            }
+            roomCode = id;
+            panel.setInternetRoom(id);
+            message = "";
+            track(() -> lobby.connect("127.0.0.1", port, false), "참가");
+        });
+    }
+
+    private void applyListedMode(tetris.relay.RelayRoomMode mode) {
+        selectedRaid = switch (mode) {
+            case RAID_COOP -> tetris.feature.raid.api.RaidMode.COOP;
+            case RAID_RACE -> tetris.feature.raid.api.RaidMode.RACE;
+            default -> null;
+        };
+        selectedMode = switch (mode) {
+            case ITEM -> BattleMode.ITEM;
+            case TIMED -> BattleMode.TIMED;
+            default -> BattleMode.CLASSIC;
+        };
     }
 
     @Override
@@ -285,6 +343,8 @@ public final class P2pLobbyController implements P2pLobbyPanel.Actions, AutoClos
             case SERVER_FULL -> "중계 서버가 혼잡합니다. 잠시 뒤 다시 시도하세요.";
             case TOO_MANY_ATTEMPTS -> "틀린 코드를 너무 많이 입력했습니다. 1분 뒤 다시 시도하세요.";
             case EXPIRED -> "방 코드 유효 시간(10분)이 지났습니다. 방을 다시 만드세요.";
+            case PRIVATE -> "비공개 방입니다. 호스트가 알려 준 방 코드를 입력하세요.";
+            case ROOM_LIMIT -> "이 네트워크에서 연 방이 너무 많습니다. 방을 닫은 뒤 다시 만드세요.";
             case BAD_REQUEST, CLOSED -> "중계 연결이 끊어졌습니다. 다시 시도하세요.";
         };
     }
@@ -354,7 +414,8 @@ public final class P2pLobbyController implements P2pLobbyPanel.Actions, AutoClos
             closeRelay(); // 대기 취소·접속 실패·끊김: 이번 중계 접속도 끝났다
         }
         if (snapshot.role() == Role.HOST && state == State.LOBBY && snapshot.config() == null) {
-            lobby.selectConfig(configFor(selectedMode));
+            lobby.selectConfig(selectedRaid == null ? configFor(selectedMode)
+                    : tetris.feature.versus.api.MatchConfig.raid(selectedRaid, controlStyle));
             return; // 설정이 들어간 스냅샷이 곧 다시 온다
         }
         if ((state == State.STARTING || state == State.PLAYING) && !inMatch) {

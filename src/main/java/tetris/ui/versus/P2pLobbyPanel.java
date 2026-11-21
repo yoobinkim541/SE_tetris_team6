@@ -1,32 +1,50 @@
 package tetris.ui.versus;
 
 import java.awt.Color;
-import java.awt.Font;
-import java.awt.GridBagConstraints;
-import java.awt.GridBagLayout;
-import java.awt.Insets;
+import java.awt.Cursor;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.Point;
+import java.awt.Rectangle;
+import java.awt.event.KeyAdapter;
+import java.awt.event.KeyEvent;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 import javax.swing.BorderFactory;
-import javax.swing.JButton;
-import javax.swing.JComboBox;
 import javax.swing.JComponent;
-import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.JComponent;
 import javax.swing.JTextField;
+import javax.swing.JPanel;
 import javax.swing.SwingConstants;
+import javax.swing.Timer;
 import tetris.feature.network.NetworkDefaults;
 import tetris.feature.network.lobby.LobbySnapshot;
 import tetris.feature.network.lobby.LobbySnapshot.Role;
 import tetris.feature.network.lobby.LobbySnapshot.State;
+import tetris.feature.network.relay.InternetRelay;
 import tetris.feature.versus.api.BattleMode;
+import tetris.relay.RelayRoomMode;
+import tetris.ui.fx.AssetStore;
+import tetris.ui.fx.StarfieldBackground;
+import tetris.ui.theme.GameTheme;
+import tetris.ui.theme.UiKit;
+import tetris.ui.versus.LobbyChrome.Hit;
+import tetris.ui.versus.LobbyChrome.Page;
+import tetris.ui.versus.LobbyChrome.RoomRow;
+import tetris.ui.versus.LobbyChrome.Scene;
+import tetris.ui.versus.LobbyChrome.Space;
+import tetris.ui.versus.LobbyChrome.View;
 
 /**
- * P2P 접속·로비 화면 (S9-B2, R3-MENU, R3-HOST, R3-READY). 상태를 그리기만 하고 동작은 {@link Actions}로 넘긴다.
- * 같은 LAN은 호스트 대기/IP 접속, 다른 네트워크는 인터넷 방 만들기/방 코드 참가. 접속 상태, 호스트만 바꿀 수 있는 모드,
- * 양쪽 "게임 시작"(준비), 취소·뒤로를 보여 준다. EDT 전용.
+ * P2P 접속·로비 화면. 크리스털 밤하늘에 방 목록·LAN·대기 카드를 그리고, 키와 마우스는 같은 선택 모델을 쓴다.
+ * 기존 테스트가 누르는 버튼·입력칸은 화면에 보이지 않게 남겨 둔다. EDT 전용.
  */
 public final class P2pLobbyPanel extends JPanel {
-    /** 화면 버튼이 부르는 동작. P2pLobbyController가 구현한다 */
+    /** 화면이 부르는 동작. P2pLobbyController가 구현한다 */
     public interface Actions {
         void host(String port);
         void connect(String address, String port);
@@ -34,112 +52,163 @@ public final class P2pLobbyPanel extends JPanel {
         void selectRaid(tetris.feature.raid.api.RaidMode mode);
         void toggleReady();
         void cancelOrBack();
-        /** 인터넷 대전: 중계 서버에 방을 만들고 방 코드를 받는다 */
         void hostInternet();
         /** 인터넷 대전: 상대가 알려 준 방 코드로 참가한다 */
         void joinInternet(String code);
+        /** 대기 방 목록을 다시 받는다 */
+        void refreshRooms();
+        /** 목록의 공개 방에 바로 참가한다 */
+        void joinPublic(int routeIndex, String id);
     }
 
-    private static final Color BACKGROUND = new Color(0x1B1E24);
-    private final JTextField portField = new JTextField(String.valueOf(NetworkDefaults.DEFAULT_PORT), 6);
-    private final JTextField addressField = new JTextField("", 11);
-    private final JComboBox<String> recentBox = new JComboBox<>();
-    private final JButton hostButton = new JButton("호스트로 대기");
-    private final JButton connectButton = new JButton("접속");
-    private final JTextField codeField = new JTextField("", 7);
-    private final JButton joinInternetButton = new JButton("참가");
-    private final JButton hostInternetButton = new JButton("방 만들기");
-    private final JComboBox<Object> modeBox = new JComboBox<>(new Object[] {
-            BattleMode.CLASSIC, BattleMode.ITEM, BattleMode.TIMED,
-            tetris.feature.raid.api.RaidMode.COOP, tetris.feature.raid.api.RaidMode.RACE
-    });
-    private final JLabel statusLabel = label("", 17, true);
-    private final JLabel peerLabel = label("", 15, false);
-    private final JLabel readyLabel = label("", 15, false);
+    private final Actions actions;
+    private final StarfieldBackground stars;
+    private final GlassField portField = new GlassField(String.valueOf(NetworkDefaults.DEFAULT_PORT), 6, null);
+    private final GlassField addressField = new GlassField("", 11, this);
+    private final LobbyChoice recentBox = new LobbyChoice(this::pickRecent);
+    private final LobbyPress hostButton;
+    private final LobbyPress connectButton;
+    private final GlassField codeField = new GlassField("", 8, null);
+    private final LobbyPress joinInternetButton;
+    private final LobbyPress hostInternetButton;
+    private final LobbyChoice modeBox = new LobbyChoice(this::pickMode);
+    private final LobbyPress readyButton;
+    private final LobbyPress backButton;
+    private final GlassField editor = new GlassField("", 12, null);
+    private final Timer refreshTimer = new Timer(2_000, e -> refreshIfShown());
+    private final List<InternetRelay.ListedRoom> rooms = new ArrayList<>();
+    private Page page = Page.INTERNET;
+    private String selectedId = "tab-net";
+    private String editing;
+    private String createName = "대전";
+    private boolean createPublic = true;
+    private int createModeIndex;
+    private String codePromptFor;
     private String status = "";
     private String ready = "";
-    private final JButton readyButton = new JButton("게임 시작");
-    private final JButton backButton = new JButton("뒤로");
-    private boolean rendering;
-    private static final String HINT = "게임 시작: 양쪽이 모두 눌러야 시작합니다. 나가기·취소는 연결을 끊습니다.";
-    private final JLabel hintLabel;
-    private int wrappedWidth = -1;
-    private static final Color ERROR = new Color(0xFF8A80);
-    private State renderedState;
-    /** 인터넷 대전 방 코드. 같은 LAN 연결이면 null */
+    private String peer = "";
     private String internetRoom;
     private boolean error;
+    private boolean rendering;
+    private State renderedState = State.INITIAL;
 
     public P2pLobbyPanel(Actions actions) {
-        Objects.requireNonNull(actions, "actions");
-        setBackground(BACKGROUND);
+        this.actions = Objects.requireNonNull(actions, "actions");
+        hostButton = new LobbyPress("호스트로 대기", () -> this.actions.host(portField.getText()));
+        connectButton = new LobbyPress("접속", () -> this.actions.connect(addressField.getText(), portField.getText()));
+        joinInternetButton = new LobbyPress("참가", () -> this.actions.joinInternet(codeField.getText()));
+        hostInternetButton = new LobbyPress("방 만들기", () -> this.actions.hostInternet());
+        readyButton = new LobbyPress("게임 시작", () -> this.actions.toggleReady());
+        backButton = new LobbyPress("뒤로", () -> this.actions.cancelOrBack());
+        setLayout(null);
+        setFont(GameTheme.text(16, false));
         setFocusable(true);
-        setLayout(new GridBagLayout());
-        modeBox.setRenderer((list, value, index, selected, focus) -> {
-            var cell = new JLabel(modeLabel(value));
-            cell.setOpaque(true);
-            cell.setBackground(selected ? new Color(0x3A4250) : Color.WHITE);
-            cell.setForeground(selected ? Color.WHITE : Color.BLACK);
-            return cell;
-        });
-        var buttons = row();
-        buttons.add(readyButton);
-        buttons.add(backButton);
-        hintLabel = label(wrap(HINT), 13, false);
-        var hint = hintLabel;
-
-        // 좁은 창에서도 잘리지 않도록 "이름 | 입력 | 버튼" 격자로 둔다. 긴 안내는 줄바꿈한다
-        int y = 0;
-        addWide(label("P2P 대전 (같은 LAN · 인터넷)", 26, true), y++);
-        addRow(label("포트", 16, false), portField, hostButton, y++);
-        addRow(label("상대 IP", 16, false), addressField, connectButton, y++);
-        addRow(label("최근 IP", 16, false), recentBox, label("(고르면 입력됨)", 13, false), y++);
-        var internetButtons = row();
-        internetButtons.add(joinInternetButton);
-        internetButtons.add(hostInternetButton);
-        addRow(label("인터넷 방 코드", 16, false), codeField, internetButtons, y++);
-        addWide(statusLabel, y++);
-        addWide(peerLabel, y++);
-        addRow(label("모드", 16, false), modeBox, label("(호스트만 선택)", 13, false), y++);
-        addWide(readyLabel, y++);
-        addWide(buttons, y++);
-        addWide(hint, y);
-
-        // 작은 창에서 입력 줄이 넘치지 않도록 버튼 좌우 여백을 줄인다
-        for (JButton button : new JButton[]{hostButton, connectButton, joinInternetButton, hostInternetButton,
-                readyButton, backButton}) {
-            button.setMargin(new Insets(2, 8, 2, 8));
-        }
-        addComponentListener(new java.awt.event.ComponentAdapter() {
-            @Override public void componentResized(java.awt.event.ComponentEvent e) { rewrap(); }
-        });
-        hostButton.addActionListener(e -> actions.host(portField.getText()));
-        connectButton.addActionListener(e -> actions.connect(addressField.getText(), portField.getText()));
-        joinInternetButton.addActionListener(e -> actions.joinInternet(codeField.getText()));
-        codeField.addActionListener(e -> actions.joinInternet(codeField.getText()));
-        hostInternetButton.addActionListener(e -> actions.hostInternet());
-        recentBox.addActionListener(e -> {
-            if (!rendering && recentBox.getSelectedItem() instanceof String address && !address.isEmpty()) {
-                addressField.setText(address);
-            }
-        });
-        modeBox.addActionListener(e -> {
-            if (rendering) return;
-            if (modeBox.getSelectedItem() instanceof BattleMode selected) actions.selectMode(selected);
-            else if (modeBox.getSelectedItem() instanceof tetris.feature.raid.api.RaidMode raid) actions.selectRaid(raid);
-        });
-        readyButton.addActionListener(e -> actions.toggleReady());
-        backButton.addActionListener(e -> actions.cancelOrBack());
+        setBackground(UiKit.NIGHT);
+        stars = new StarfieldBackground(this, AssetStore.BG_MENU);
+        editor.setOpaque(false);
+        editor.setBorder(BorderFactory.createEmptyBorder(2, 12, 2, 12));
+        editor.setForeground(Color.WHITE);
+        editor.setCaretColor(UiKit.CYAN);
+        editor.setHorizontalAlignment(SwingConstants.CENTER);
+        editor.setVisible(false);
+        editor.setFocusable(false);
+        add(editor);
+        wireHidden();
+        wireInput();
+        refreshTimer.setRepeats(true);
         render(new LobbySnapshot(Role.NONE, State.INITIAL, null, 0, false, false, null), "");
     }
 
-    /** 인터넷 대전 방 코드를 표시한다. 같은 LAN 연결이면 null (상대 주소 대신 방 코드를 보인다) */
-    public void setInternetRoom(String code) {
-        internetRoom = code;
+    private void wireHidden() {
+        modeBox.addItem(BattleMode.CLASSIC);
+        modeBox.addItem(BattleMode.ITEM);
+        modeBox.addItem(BattleMode.TIMED);
+        modeBox.addItem(tetris.feature.raid.api.RaidMode.COOP);
+        modeBox.addItem(tetris.feature.raid.api.RaidMode.RACE);
+        modeBox.adjust(() -> modeBox.setSelectedIndex(0));
     }
 
-    /** 최근 접속 IP 목록 (최신순). 비어 있으면 고를 수 없다 (R3-RECENT) */
-    public void setRecentPeers(java.util.List<String> peers) {
+    private void pickRecent(Object value) {
+        if (rendering) return;
+        if (value instanceof String address && !address.isEmpty()) {
+            addressField.setText(address);
+            repaint();
+        }
+    }
+
+    private void pickMode(Object value) {
+        if (rendering) return;
+        if (value instanceof BattleMode selected) actions.selectMode(selected);
+        else if (value instanceof tetris.feature.raid.api.RaidMode raid) actions.selectRaid(raid);
+    }
+
+    private void wireInput() {
+        addMouseMotionListener(new MouseAdapter() {
+            @Override public void mouseMoved(MouseEvent e) { hover(e); }
+        });
+        addMouseListener(new MouseAdapter() {
+            @Override public void mousePressed(MouseEvent e) { press(e); }
+        });
+        bind(KeyEvent.VK_UP, () -> moveSelection(0, -1));
+        bind(KeyEvent.VK_DOWN, () -> moveSelection(0, 1));
+        bind(KeyEvent.VK_LEFT, () -> moveSelection(-1, 0));
+        bind(KeyEvent.VK_RIGHT, () -> moveSelection(1, 0));
+        bind(KeyEvent.VK_ENTER, this::activateSelected);
+        bind(KeyEvent.VK_ESCAPE, this::escape);
+        bind(KeyEvent.VK_N, this::newRoom);
+        bind(KeyEvent.VK_R, () -> { if (page == Page.INTERNET) actions.refreshRooms(); });
+        editor.addActionListener(e -> commitEditor(true));
+        editor.addKeyListener(new KeyAdapter() {
+            @Override public void keyPressed(KeyEvent e) {
+                if (e.getKeyCode() == KeyEvent.VK_ESCAPE) {
+                    commitEditor(false);
+                    e.consume();
+                }
+            }
+        });
+    }
+
+    private void bind(int key, Runnable command) {
+        String name = "lobby." + key;
+        getInputMap(WHEN_IN_FOCUSED_WINDOW).put(javax.swing.KeyStroke.getKeyStroke(key, 0), name);
+        getActionMap().put(name, new javax.swing.AbstractAction() {
+            @Override public boolean isEnabled() { return editing == null; }
+            @Override public void actionPerformed(java.awt.event.ActionEvent e) { command.run(); }
+        });
+    }
+
+    /** 목록을 그린다. 컨트롤러가 두 서버를 합친 결과를 넘긴다 */
+    public void setRooms(List<InternetRelay.ListedRoom> next) {
+        rooms.clear();
+        if (next != null) rooms.addAll(next);
+        if (scene().byId(selectedId) == null) selectedId = defaultSelection();
+        repaint();
+    }
+
+    public String createName() { return createName; }
+    public boolean createPublic() { return createPublic; }
+    public RelayRoomMode listedMode() { return RelayRoomMode.values()[Math.floorMod(createModeIndex, RelayRoomMode.values().length)]; }
+    public String selectedId() { return selectedId; }
+
+    public void prepareCreate(String name, boolean isPublic, RelayRoomMode mode) {
+        createName = name;
+        createPublic = isPublic;
+        createModeIndex = mode.ordinal();
+    }
+
+    public List<InternetRelay.ListedRoom> listedRooms() {
+        return List.copyOf(rooms);
+    }
+
+    /** 테스트·캡처가 클릭할 화면 좌표. 그리는 사각형과 같다 */
+    public Rectangle hitScreenBounds(String id) {
+        Hit hit = scene().byId(id);
+        return hit == null ? new Rectangle() : space().toScreen(hit.bounds());
+    }
+
+    public void setInternetRoom(String code) { internetRoom = code; }
+
+    public void setRecentPeers(List<String> peers) {
         Objects.requireNonNull(peers);
         rendering = true;
         try {
@@ -150,83 +219,18 @@ public final class P2pLobbyPanel extends JPanel {
             rendering = false;
         }
         recentBox.setEnabled(!peers.isEmpty() && addressField.isEnabled());
-        recentBox.setToolTipText(peers.isEmpty() ? "접속에 성공한 IP가 여기에 남습니다" : null);
+        repaint();
     }
 
-    private void addRow(JComponent name, JComponent input, JComponent action, int y) {
-        JComponent[] parts = {name, input, action};
-        for (int x = 0; x < parts.length; x++) {
-            var c = new GridBagConstraints();
-            c.gridx = x;
-            c.gridy = y;
-            c.insets = new Insets(2, 4, 2, 4);
-            c.fill = x == 1 ? GridBagConstraints.HORIZONTAL : GridBagConstraints.NONE;
-            c.anchor = x == 0 ? GridBagConstraints.LINE_END : GridBagConstraints.LINE_START;
-            add(parts[x], c);
-        }
-    }
+    public void render(LobbySnapshot lobby, String status) { render(lobby, status, false); }
 
-    private void addWide(JComponent part, int y) {
-        var c = new GridBagConstraints();
-        c.gridx = 0;
-        c.gridy = y;
-        c.gridwidth = 3;
-        c.insets = new Insets(3, 4, 3, 4);
-        add(part, c);
-    }
-
-    /** 긴 문구를 정해진 폭 안에서 줄바꿈하는 HTML. 화면 글자는 그대로다 */
-    private String wrap(String text) {
-        String escaped = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
-        return "<html><div style='text-align:center;width:" + wrapWidth() + "px'>" + escaped + "</div></html>";
-    }
-
-    /**
-     * 줄바꿈 폭(HTML px). 창이 작을수록 좁힌다. HTML px은 화면에서 약 1.25배로 그려져서 패널 폭에서 여백을 빼고 나눈다.
-     * 설정의 SMALL 화면이 모니터에 맞춰 더 줄어도(예: 280 px) 안내가 잘리지 않게 한다 (S11-B1)
-     */
-    int wrapWidth() {
-        int width = getWidth();
-        if (width <= 0) return 250;
-        return Math.max(120, Math.min(360, (int) ((width - 24) / 1.3)));
-    }
-
-    private void rewrap() {
-        int width = wrapWidth();
-        if (width == wrappedWidth) return;
-        wrappedWidth = width;
-        hintLabel.setText(wrap(HINT));
-        statusLabel.setText(wrap(status));
-        revalidate();
-    }
-
-    private static JPanel row() {
-        var panel = new JPanel();
-        panel.setOpaque(false);
-        return panel;
-    }
-
-    private static JLabel label(String text, int size, boolean bold) {
-        var label = new JLabel(text, SwingConstants.CENTER);
-        label.setForeground(Color.WHITE);
-        label.setFont(new Font(Font.DIALOG, bold ? Font.BOLD : Font.PLAIN, size));
-        label.setBorder(BorderFactory.createEmptyBorder(0, 4, 0, 4));
-        return label;
-    }
-
-    /** 로비 상태와 안내 문구로 화면을 다시 그린다 */
-    public void render(LobbySnapshot lobby, String status) {
-        render(lobby, status, false);
-    }
-
-    /** error면 안내를 경고색으로 보인다. 상태가 바뀌면 그 상태에서 누를 곳에 포커스를 둔다 (S10-B2) */
     public void render(LobbySnapshot lobby, String status, boolean error) {
         Objects.requireNonNull(lobby);
+        Objects.requireNonNull(status);
         State before = renderedState;
         renderedState = lobby.state();
         this.error = error;
-        statusLabel.setForeground(error ? ERROR : Color.WHITE);
-        Objects.requireNonNull(status);
+        this.status = status;
         rendering = true;
         try {
             boolean initial = lobby.state() == State.INITIAL;
@@ -239,8 +243,9 @@ public final class P2pLobbyPanel extends JPanel {
             joinInternetButton.setEnabled(initial);
             hostInternetButton.setEnabled(initial);
             recentBox.setEnabled(initial && recentBox.getItemCount() > 0);
-            if (lobby.config() != null) modeBox.setSelectedItem(lobby.config().raid()
-                    ? lobby.config().raidMode() : lobby.config().mode());
+            if (lobby.config() != null) {
+                modeBox.setSelectedItem(lobby.config().raid() ? lobby.config().raidMode() : lobby.config().mode());
+            }
             modeBox.setEnabled(inLobby && lobby.role() == Role.HOST);
             readyButton.setEnabled(inLobby && lobby.config() != null);
             readyButton.setText(lobby.localReady() ? "준비 취소" : "게임 시작");
@@ -249,27 +254,329 @@ public final class P2pLobbyPanel extends JPanel {
                 case HOSTING, CONNECTING -> "취소";
                 default -> "나가기";
             });
-            this.status = status;
-            statusLabel.setText(wrap(status));
-            wrappedWidth = wrapWidth();
-            String peer = lobby.peerIdentity() == null ? null
-                    : internetRoom != null ? "인터넷 상대 (방 " + internetRoom + ")" : peerName(lobby.peerIdentity());
-            peerLabel.setText(peer == null ? ""
-                    : (lobby.role() == Role.HOST ? "접속한 상대: " : "호스트: ") + peer
-                    + (lobby.role() == Role.HOST ? "  (나: P1 왼쪽)" : "  (나: P2 오른쪽)"));
+            peer = lobby.peerIdentity() == null ? ""
+                    : (lobby.role() == Role.HOST ? "접속한 상대: " : "호스트: ")
+                    + (internetRoom != null ? "인터넷 상대 (방 " + internetRoom + ")" : peerName(lobby.peerIdentity()))
+                    + (lobby.role() == Role.HOST ? "  (나: P1 왼쪽)" : "  (나: P2 오른쪽)");
             ready = inLobby || lobby.state() == State.STARTING
                     ? "나: " + (lobby.localReady() ? "준비 완료" : "대기") + "   상대: " + (lobby.peerReady() ? "준비 완료" : "대기")
                     + (lobby.config() == null ? "" : "   모드: " + configLabel(lobby.config()))
                     : "";
-            readyLabel.setText(ready);
         } finally {
             rendering = false;
         }
-        if (before != renderedState) focusTarget().requestFocusInWindow();
+        if (lobby.state() != State.INITIAL) page = Page.WAITING;
+        else if (page == Page.WAITING) page = Page.INTERNET;
+        if (scene().byId(selectedId) == null) selectedId = defaultSelection();
+        if (before != renderedState) requestFocusInWindow();
         repaint();
     }
 
-    /** 지금 상태에서 키보드로 먼저 누를 곳: 첫 화면은 IP 입력, 로비는 게임 시작, 대기·접속 중은 취소 */
+    @Override
+    protected void paintComponent(Graphics g) {
+        Graphics2D g2 = (Graphics2D) g.create();
+        try {
+            stars.paint(g2, getWidth(), getHeight());
+            int unit = Math.max(10, getHeight() / 32);
+            UiKit.paintMoon(g2, getWidth() - unit * 5, unit, unit * 4);
+            UiKit.paintIsland(g2, 0, unit / 2, getHeight() / 3, unit * 4);
+            UiKit.paintIsland(g2, 1, getWidth() - unit * 5, getHeight() * 3 / 5, unit * 4);
+            Space space = space();
+            g2.translate(space.offsetX(), space.offsetY());
+            g2.scale(space.scale(), space.scale());
+            LobbyChrome.paint(g2, view(), scene(), space.virtualWidth(), space.virtualHeight());
+        } finally {
+            g2.dispose();
+        }
+    }
+
+    private void hover(MouseEvent e) {
+        Hit hit = hitAt(e);
+        setCursor(hit == null ? Cursor.getDefaultCursor() : Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        if (hit != null && !hit.id().equals(selectedId)) {
+            selectedId = hit.id();
+            repaint();
+        }
+    }
+
+    /** 클릭은 Enter와 같다. 글자 칸만 포커스를 받고, 나머지는 패널 포커스를 유지한다 */
+    private void press(MouseEvent e) {
+        Hit hit = hitAt(e);
+        if (hit == null) return;
+        selectedId = hit.id();
+        if (hit.text()) openEditor(hit);
+        else {
+            closeEditor();
+            activate(hit.id());
+            requestFocusInWindow();
+        }
+        e.consume();
+        repaint();
+    }
+    @Override
+    protected void processKeyEvent(KeyEvent e) {
+        if (e.getID() == KeyEvent.KEY_PRESSED && editing == null && !e.isConsumed()) {
+            onKey(e.getKeyCode());
+            e.consume();
+        }
+        super.processKeyEvent(e);
+    }
+
+    private void onKey(int key) {
+        if (editing != null) return;
+        switch (key) {
+            case KeyEvent.VK_UP -> moveSelection(0, -1);
+            case KeyEvent.VK_DOWN -> moveSelection(0, 1);
+            case KeyEvent.VK_LEFT -> moveSelection(-1, 0);
+            case KeyEvent.VK_RIGHT -> moveSelection(1, 0);
+            case KeyEvent.VK_ENTER -> activateSelected();
+            case KeyEvent.VK_ESCAPE -> escape();
+            case KeyEvent.VK_N -> newRoom();
+            case KeyEvent.VK_R -> { if (page == Page.INTERNET) actions.refreshRooms(); }
+            default -> { }
+        }
+    }
+
+    private void moveSelection(int dx, int dy) {
+        Hit hit = scene().byId(selectedId);
+        if (hit == null) {
+            selectedId = defaultSelection();
+            repaint();
+            return;
+        }
+        if (dx < 0 && ("vis".equals(hit.id()) || "mode".equals(hit.id()) || "wait-mode".equals(hit.id()) || "recent".equals(hit.id()))) {
+            cycle(-1, hit.id());
+            return;
+        }
+        if (dx > 0 && ("vis".equals(hit.id()) || "mode".equals(hit.id()) || "wait-mode".equals(hit.id()) || "recent".equals(hit.id()))) {
+            cycle(1, hit.id());
+            return;
+        }
+        String next = dy < 0 ? hit.up() : dy > 0 ? hit.down() : dx < 0 ? hit.left() : hit.right();
+        if (next == null && dx != 0 && (page == Page.INTERNET || page == Page.LAN)) {
+            page = dx < 0 ? Page.INTERNET : Page.LAN;
+            selectedId = page == Page.LAN ? "tab-lan" : "tab-net";
+        } else if (next != null && scene().byId(next) != null) {
+            selectedId = next;
+        }
+        repaint();
+    }
+
+    private void cycle(int delta, String id) {
+        switch (id) {
+            case "vis" -> createPublic = !createPublic;
+            case "mode" -> createModeIndex = Math.floorMod(createModeIndex + delta, RelayRoomMode.values().length);
+            case "wait-mode" -> modeBox.setSelectedIndex(Math.floorMod(modeBox.getSelectedIndex() + delta, modeBox.getItemCount()));
+            case "recent" -> {
+                if (recentBox.getItemCount() == 0) return;
+                int index = Math.floorMod(recentBox.getSelectedIndex() + delta, recentBox.getItemCount());
+                recentBox.setSelectedIndex(index);
+            }
+            default -> { }
+        }
+        repaint();
+    }
+
+    private void activateSelected() {
+        activate(selectedId);
+    }
+
+    private void activate(String id) {
+        switch (id) {
+            case "tab-net" -> page = Page.INTERNET;
+            case "tab-lan" -> page = Page.LAN;
+            case "btn-create" -> openCreate();
+            case "btn-code" -> openCode(null);
+            case "btn-refresh" -> actions.refreshRooms();
+            case "btn-back", "btn-lan-back", "btn-leave" -> actions.cancelOrBack();
+            case "btn-cancel", "btn-cancel-code" -> { page = Page.INTERNET; selectedId = "tab-net"; }
+            case "btn-make" -> hostInternetButton.doClick();
+            case "btn-host" -> hostButton.doClick();
+            case "btn-connect" -> connectButton.doClick();
+            case "btn-ready" -> readyButton.doClick();
+            case "btn-join-code" -> submitCode();
+            case "field-name", "field-code", "field-port", "field-address" -> {
+                Hit hit = scene().byId(id);
+                if (hit != null) openEditor(hit);
+            }
+            case "vis" -> createPublic = !createPublic;
+            default -> {
+                if (id.startsWith("room-")) joinRow(Integer.parseInt(id.substring(5)));
+            }
+        }
+        repaint();
+    }
+
+    private void joinRow(int index) {
+        if (index < 0 || index >= rooms.size()) return;
+        InternetRelay.ListedRoom room = rooms.get(index);
+        if (room.privateRoom()) openCode(room.name());
+        else actions.joinPublic(room.routeIndex(), room.id());
+    }
+
+    private void submitCode() {
+        codeField.setText(codePromptFor == null ? editor.getText() : codeField.getText());
+        if (editing != null) codeField.setText(editor.getText());
+        joinInternetButton.doClick();
+    }
+
+    private void openCreate() {
+        page = Page.CREATE;
+        selectedId = "field-name";
+    }
+
+    private void openCode(String roomName) {
+        page = Page.CODE;
+        codePromptFor = roomName;
+        selectedId = "field-code";
+    }
+
+    private void newRoom() {
+        if (renderedState != State.INITIAL) return;
+        page = Page.CREATE;
+        selectedId = "field-name";
+        Hit hit = scene().byId("field-name");
+        if (hit != null) openEditor(hit);
+        repaint();
+    }
+
+    private void escape() {
+        if (editing != null) {
+            commitEditor(false);
+            return;
+        }
+        if (page == Page.CREATE || page == Page.CODE) {
+            page = Page.INTERNET;
+            selectedId = "tab-net";
+            repaint();
+            return;
+        }
+        actions.cancelOrBack();
+    }
+
+    private void openEditor(Hit hit) {
+        editing = hit.id();
+        editor.setFont("field-port".equals(hit.id()) || "field-code".equals(hit.id())
+                ? GameTheme.digits(Math.max(14, hit.bounds().height / 2))
+                : GameTheme.text(Math.max(14, hit.bounds().height / 2), false));
+        editor.setText(switch (hit.id()) {
+            case "field-name" -> createName;
+            case "field-code" -> codeField.getText();
+            case "field-port" -> portField.getText();
+            case "field-address" -> addressField.getText();
+            default -> "";
+        });
+        Rectangle screen = space().toScreen(hit.bounds());
+        editor.setBounds(screen);
+        editor.setVisible(true);
+        editor.setFocusable(true);
+        editor.requestFocusInWindow();
+        editor.selectAll();
+    }
+
+    private void commitEditor(boolean activateAfter) {
+        if (editing == null) return;
+        String text = editor.getText() == null ? "" : editor.getText();
+        switch (editing) {
+            case "field-name" -> createName = text.trim();
+            case "field-code" -> codeField.setText(text.trim());
+            case "field-port" -> portField.setText(text.trim());
+            case "field-address" -> addressField.setText(text.trim());
+            default -> { }
+        }
+        String was = editing;
+        closeEditor();
+        requestFocusInWindow();
+        if (activateAfter && "field-code".equals(was)) submitCode();
+        repaint();
+    }
+
+    private void closeEditor() {
+        editing = null;
+        editor.setVisible(false);
+        editor.setFocusable(false);
+    }
+
+    private void refreshIfShown() {
+        if (isShowing() && page == Page.INTERNET && renderedState == State.INITIAL && editing == null) {
+            actions.refreshRooms();
+        }
+    }
+
+    private Hit hitAt(MouseEvent e) {
+        Point virtual = space().toVirtual(e.getX(), e.getY());
+        return scene().at(virtual.x, virtual.y);
+    }
+
+    private Space space() {
+        int preferredW = getPreferredSize() == null ? 0 : getPreferredSize().width;
+        int preferredH = getPreferredSize() == null ? 0 : getPreferredSize().height;
+        int virtualW = preferredW > 0 ? preferredW : Math.max(1, getWidth());
+        int virtualH = preferredH > 0 ? preferredH : Math.max(1, getHeight());
+        return Space.of(Math.max(1, getWidth()), Math.max(1, getHeight()), virtualW, virtualH);
+    }
+
+    private Scene scene() {
+        Space space = space();
+        return LobbyChrome.layout(view(), space.virtualWidth(), space.virtualHeight());
+    }
+
+    private View view() {
+        List<RoomRow> rows = new ArrayList<>();
+        for (InternetRelay.ListedRoom room : rooms) {
+            rows.add(new RoomRow(room.id(), room.name(), RelayRoomMode.fromToken(room.mode()).map(RelayRoomMode::label).orElse(room.mode()),
+                    room.privateRoom(), room.players()));
+        }
+        String recent = recentBox.getSelectedItem() instanceof String text && !text.isEmpty() ? text : "최근 IP";
+        String shownMode = page == Page.WAITING ? modeLabelOf(modeBox.getSelectedItem(), listedMode()) : listedMode().label();
+        return new View(page, rows, selectedId, createName, createPublic, shownMode,
+                codeField.getText(), portField.getText(), addressField.getText(), recent, recentBox.isEnabled(),
+                status.isEmpty() ? hintFor(page) : status, error, internetRoom,
+                createName, peer, ready, modeBox.isEnabled(), readyButton.getText(), backButton.getText());
+    }
+
+    private static String hintFor(Page page) {
+        return switch (page) {
+            case INTERNET -> "방을 고르거나 새로 만드세요.";
+            case CREATE -> "이름을 적고, 공개와 모드를 고른 뒤 만드세요.";
+            case CODE -> "호스트가 알려 준 방 코드를 입력하세요.";
+            case LAN -> "포트와 상대 IP를 입력하세요.";
+            case WAITING -> "준비가 되면 게임 시작을 누르세요.";
+        };
+    }
+
+    private static String modeLabelOf(Object selected, RelayRoomMode fallback) {
+        if (selected instanceof BattleMode mode) return tetris.ui.versus.BattleModes.label(mode);
+        if (selected == tetris.feature.raid.api.RaidMode.COOP) return "협동 레이드";
+        if (selected == tetris.feature.raid.api.RaidMode.RACE) return "레이스 레이드";
+        return fallback.label();
+    }
+
+    private String defaultSelection() {
+        return switch (page) {
+            case LAN -> "field-port";
+            case CREATE -> "field-name";
+            case CODE -> "field-code";
+            case WAITING -> "btn-ready";
+            case INTERNET -> rooms.isEmpty() ? "btn-create" : "room-0";
+        };
+    }
+
+    private static String peerName(String identity) {
+        int hash = identity.lastIndexOf('#');
+        return hash < 0 ? identity : identity.substring(0, hash);
+    }
+
+    private static String configLabel(tetris.feature.versus.api.MatchConfig config) {
+        return config.raid() ? modeLabelOf(config.raidMode(), RelayRoomMode.CLASSIC) : BattleModes.label(config.mode());
+    }
+
+    int wrapWidth() {
+        int width = getWidth();
+        if (width <= 0) return 250;
+        return Math.max(120, Math.min(360, (int) ((width - 24) / 1.3)));
+    }
+
     public JComponent focusTarget() {
         return switch (renderedState) {
             case INITIAL -> addressField;
@@ -279,36 +586,36 @@ public final class P2pLobbyPanel extends JPanel {
     }
 
     public boolean isError() { return error; }
-    public JComboBox<String> recentBox() { return recentBox; }
-
-    /** "주소#연결순번"에서 사람이 읽을 주소만 */
-    static String peerName(String identity) {
-        int hash = identity.lastIndexOf('#');
-        return hash < 0 ? identity : identity.substring(0, hash);
-    }
-
+    public LobbyChoice recentBox() { return recentBox; }
     public String statusText() { return status; }
     public String readyText() { return ready; }
-    public String peerText() { return peerLabel.getText(); }
+    public String peerText() { return peer; }
     public JTextField portField() { return portField; }
     public JTextField addressField() { return addressField; }
-    public JButton hostButton() { return hostButton; }
-    public JButton connectButton() { return connectButton; }
+    public LobbyPress hostButton() { return hostButton; }
+    public LobbyPress connectButton() { return connectButton; }
     public JTextField codeField() { return codeField; }
-    public JButton joinInternetButton() { return joinInternetButton; }
-    public JButton hostInternetButton() { return hostInternetButton; }
-    public JComboBox<Object> modeBox() { return modeBox; }
+    public LobbyPress joinInternetButton() { return joinInternetButton; }
+    public LobbyPress hostInternetButton() { return hostInternetButton; }
+    public LobbyChoice modeBox() { return modeBox; }
+    public LobbyPress readyButton() { return readyButton; }
+    public LobbyPress backButton() { return backButton; }
 
-    private static String modeLabel(Object value) {
-        if (value instanceof BattleMode mode) return BattleModes.label(mode);
-        if (value == tetris.feature.raid.api.RaidMode.COOP) return "협동 레이드";
-        if (value == tetris.feature.raid.api.RaidMode.RACE) return "레이스 레이드";
-        return "";
+    private <T extends JComponent> T focusForward(T component) {
+        component.setFocusable(false);
+        return component;
     }
 
-    private static String configLabel(tetris.feature.versus.api.MatchConfig config) {
-        return config.raid() ? modeLabel(config.raidMode()) : BattleModes.label(config.mode());
+
+    @Override
+    public void addNotify() {
+        super.addNotify();
+        if (!refreshTimer.isRunning()) refreshTimer.start();
     }
-    public JButton readyButton() { return readyButton; }
-    public JButton backButton() { return backButton; }
+
+    @Override
+    public void removeNotify() {
+        refreshTimer.stop();
+        super.removeNotify();
+    }
 }

@@ -22,6 +22,8 @@ public final class NineSlice {
     private final int cap;
     private final Axis axis;
     private final AssetStore assets;
+    private String tintBase;
+    private float tintHue;
     private BufferedImage source;
     private boolean resolved;
     private final Map<Long, BufferedImage> cache = new LinkedHashMap<>(16, 0.75f, true) {
@@ -40,6 +42,13 @@ public final class NineSlice {
         this.cap = Math.max(1, cap);
         this.axis = axis == null ? Axis.NINE : axis;
         this.assets = assets == null ? AssetStore.SHARED : assets;
+    }
+
+    /** 변형 파일이 없으면 base를 hue만큼 밀어 쓴다. 파일이 있으면 파일을 우선한다 */
+    public NineSlice(String path, String tintBase, float hue, int cap, Axis axis) {
+        this(path, cap, axis);
+        this.tintBase = tintBase;
+        this.tintHue = hue;
     }
 
     public boolean available() {
@@ -67,15 +76,60 @@ public final class NineSlice {
         paint(g, x, y, width, height, Integer.MAX_VALUE);
     }
 
+    /**
+     * 화면 배율(전체 화면·Windows 배율)이 걸린 Graphics에 작은 그림을 늘려 그리면 Java2D가 소프트웨어 변환으로 매 프레임 느리게 그린다.
+     * 장치 픽셀 크기로 한 번 잘라 두고 변환 없이 1:1로 찍는다.
+     */
     public void paint(Graphics2D g, int x, int y, int width, int height, int maxCorner) {
-        BufferedImage image = scaled(width, height, maxCorner);
-        if (image != null) g.drawImage(image, x, y, null);
+        java.awt.geom.AffineTransform t = g.getTransform();
+        boolean axisAligned = t.getShearX() == 0 && t.getShearY() == 0 && t.getScaleX() > 0 && t.getScaleY() > 0;
+        if (!axisAligned || (t.getScaleX() == 1 && t.getScaleY() == 1)) {
+            BufferedImage image = scaled(width, height, maxCorner);
+            if (image != null) g.drawImage(image, x, y, null);
+            return;
+        }
+        java.awt.geom.Point2D topLeft = t.transform(new java.awt.geom.Point2D.Double(x, y), null);
+        java.awt.geom.Point2D bottomRight = t.transform(new java.awt.geom.Point2D.Double(x + width, y + height), null);
+        int dx = (int) Math.round(topLeft.getX());
+        int dy = (int) Math.round(topLeft.getY());
+        int dw = Math.max(1, (int) Math.round(bottomRight.getX()) - dx);
+        int dh = Math.max(1, (int) Math.round(bottomRight.getY()) - dy);
+        int corner = maxCorner == Integer.MAX_VALUE ? Integer.MAX_VALUE
+                : Math.max(1, (int) Math.round(maxCorner * t.getScaleX()));
+        BufferedImage image = scaled(dw, dh, corner);
+        if (image == null) return;
+        g.setTransform(new java.awt.geom.AffineTransform());
+        try {
+            g.drawImage(image, dx, dy, null);
+        } finally {
+            g.setTransform(t);
+        }
     }
+    /** 장식 캡을 뺀 가로 여백. 원본 캡 픽셀을 그린 높이에 맞춰 줄인다 */
+    public int insetX(int width, int height) {
+        BufferedImage src = source();
+        if (src == null || width <= 0 || height <= 0) return Math.max(4, width / 8);
+        float scale = axis == Axis.HORIZONTAL ? height / (float) Math.max(1, src.getHeight())
+                : Math.min(width / (float) src.getWidth(), height / (float) src.getHeight());
+        int inset = Math.round(Math.min(cap, src.getWidth() / 2) * scale);
+        return Math.max(2, Math.min(inset, Math.max(2, width / 3)));
+    }
+
+    /** 위아래 테두리. 가로 3등분은 원본 높이의 1/6, 9등분은 캡 비율 */
+    public int insetY(int width, int height) {
+        BufferedImage src = source();
+        if (src == null || height <= 0) return Math.max(2, height / 6);
+        if (axis == Axis.HORIZONTAL) return Math.max(2, Math.min(height / 6, height / 3));
+        float scale = Math.min(width / (float) Math.max(1, src.getWidth()), height / (float) src.getHeight());
+        int inset = Math.round(Math.min(cap, src.getHeight() / 5) * scale);
+        return Math.max(2, Math.min(inset, Math.max(2, height / 3)));
+    }
+
 
     private BufferedImage source() {
         if (!resolved) {
             resolved = true;
-            source = assets.image(path);
+            source = tintBase == null ? assets.image(path) : assets.imageOrTint(path, tintBase, tintHue);
         }
         return source;
     }

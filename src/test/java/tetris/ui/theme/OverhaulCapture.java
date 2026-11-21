@@ -65,9 +65,25 @@ public final class OverhaulCapture {
         var smallSize = GamePanel.preferredSizeFor(small);
         var largeSize = GamePanel.preferredSizeFor(large);
         capture("game-small", game(small, false, false), smallSize.width, smallSize.height);
-        capture("game-large", game(large, false, false), largeSize.width, largeSize.height);
+        capture("combo-popup", game(cell, false, false), size.width, size.height);
+        combo(size.width, size.height);
         System.out.println("wrote " + OUT);
     }
+    private static void combo(int width, int height) throws Exception {
+        BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = image.createGraphics();
+        GameTheme.applyQuality(g);
+        g.setColor(new java.awt.Color(8, 12, 28));
+        g.fillRect(0, 0, width, height);
+        GameTheme.paintTitle(g, "4 COMBO", 42, width / 2, height / 2, false);
+        GameTheme.paintTitle(g, "T-SPIN", 36, width / 2, height / 2 + 72, false);
+        g.setFont(GameTheme.digits(36));
+        g.setColor(java.awt.Color.WHITE);
+        GameTheme.drawCentered(g, "10200", width / 2, height / 2 + 140);
+        g.dispose();
+        ImageIO.write(image, "png", OUT.resolve("combo-popup.png").toFile());
+    }
+
 
     private static MainMenuPanel menu(String title, List<String> labels) {
         List<MenuItem> items = labels.stream().map(label -> new MenuItem(label, () -> {})).toList();

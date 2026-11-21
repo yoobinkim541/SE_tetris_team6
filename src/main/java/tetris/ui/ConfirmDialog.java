@@ -17,6 +17,7 @@ public class ConfirmDialog extends JPanel {
     private final Runnable onYes;
     private final Runnable onNo;
     private int selected = NO;
+    private final tetris.ui.input.Hits hits = new tetris.ui.input.Hits();
 
     public ConfirmDialog(String message, Runnable onYes, Runnable onNo) {
         if (message == null || onYes == null || onNo == null)
@@ -25,6 +26,8 @@ public class ConfirmDialog extends JPanel {
         this.onYes = onYes;
         this.onNo = onNo;
         setOpaque(false);
+        setFocusable(true);
+        tetris.ui.input.MenuMouse.install(this, hits, this::hoverHit, this::clickHit);
 
         for (int key : new int[] {KeyEvent.VK_UP, KeyEvent.VK_DOWN, KeyEvent.VK_LEFT, KeyEvent.VK_RIGHT}) {
             KeyBindingManager.bindKey(this, key, this::toggleSelection);
@@ -63,29 +66,68 @@ public class ConfirmDialog extends JPanel {
         int centerX = w / 2;
 
         g2.setColor(Theme.TEXT);
-        int y = box[1] + unit * 3;
+        int y = box[1] + unit * 2;
+        int lineBoxH = Math.max(unit, lineHeight);
         for (String line : lines) {
-            Theme.drawCentered(g2, line, centerX, y);
+            tetris.ui.theme.UiKit.drawInBox(g2, line,
+                    new java.awt.Rectangle(box[0] + unit, y, box[2] - unit * 2, lineBoxH),
+                    tetris.ui.theme.UiKit.Align.CENTER);
             y += lineHeight;
         }
 
         int optionY = y + unit * 2;
+        hits.begin(null);
+        addOption("yes", centerX - unit * 3, optionY, unit);
+        addOption("no", centerX + unit * 3, optionY, unit);
         drawOption(g2, Messages.get("confirm.yes"), centerX - unit * 3, optionY, selected == YES, unit);
         drawOption(g2, Messages.get("confirm.no"), centerX + unit * 3, optionY, selected == NO, unit);
 
-        g2.setFont(Theme.text(Math.max(9, unit * 2 / 3), false));
+        g2.setFont(Theme.text(Math.max(12, unit * 2 / 3), false));
         g2.setColor(Theme.DIM_TEXT);
-        Theme.drawCentered(g2, Messages.get("guide.confirm"), centerX, box[1] + box[3] - unit);
+        tetris.ui.theme.UiKit.drawInBox(g2, Messages.get("guide.confirm"),
+                new java.awt.Rectangle(box[0] + unit, box[1] + box[3] - unit * 2, box[2] - unit * 2, unit),
+                tetris.ui.theme.UiKit.Align.CENTER);
     }
 
     private static void drawOption(Graphics2D g, String label, int centerX, int baselineY, boolean isSelected, int unit) {
         int width = unit * 5;
         int height = unit + unit / 2;
-        int x = centerX - width / 2;
         int y = baselineY - height + unit / 4;
-        tetris.ui.theme.UiKit.paintButton(g, isSelected, x, y, width, height, false, tetris.ui.theme.UiKit.pulse());
-        g.setFont(Theme.text(unit, true));
-        g.setColor(isSelected ? java.awt.Color.WHITE : Theme.TEXT);
-        Theme.drawCentered(g, label, centerX, y + height / 2 + g.getFontMetrics().getAscent() / 2 - 1);
+        float grow = isSelected ? 1.04f + 0.02f * tetris.ui.theme.UiKit.pulse() : 1f;
+        int dw = Math.round(width * grow);
+        int dh = Math.round(height * grow);
+        int dx = centerX - dw / 2;
+        int dy = y + (height - dh) / 2;
+        tetris.ui.theme.UiKit.paintButton(g, isSelected, dx, dy, dw, dh, false, tetris.ui.theme.UiKit.pulse());
+        g.setFont(unit > 14 ? tetris.ui.theme.GameTheme.display(unit) : Theme.text(unit, true));
+        tetris.ui.theme.UiKit.drawInAsset(g, tetris.ui.theme.UiKit.AssetSlot.BUTTON,
+                new java.awt.Rectangle(dx, dy, dw, dh), label, tetris.ui.theme.UiKit.Align.CENTER, isSelected);
+    }
+
+    private void addOption(String id, int centerX, int baselineY, int unit) {
+        int width = unit * 5;
+        int height = unit + unit / 2;
+        hits.add(id, centerX - width / 2, baselineY - height + unit / 4, width, height);
+    }
+
+    public String hitAt(int x, int y) {
+        return hits.hit(x, y);
+    }
+
+    private void hoverHit(String id) {
+        if ("yes".equals(id) && selected != YES) {
+            selected = YES;
+            repaint();
+        } else if ("no".equals(id) && selected != NO) {
+            selected = NO;
+            repaint();
+        }
+    }
+
+    private void clickHit(String id) {
+        if ("yes".equals(id)) selected = YES;
+        else if ("no".equals(id)) selected = NO;
+        else return;
+        confirm();
     }
 }

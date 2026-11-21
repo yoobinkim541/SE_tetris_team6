@@ -11,7 +11,7 @@ import java.nio.charset.StandardCharsets;
  * 한 바이트씩 읽고, 그 뒤 바이트는 스트림에 남긴다.
  */
 public final class RelayLine {
-    public static final int MAX_BYTES = 64;
+    public static final int MAX_BYTES = 256;
 
     private RelayLine() {
     }

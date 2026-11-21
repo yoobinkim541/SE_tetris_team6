@@ -27,7 +27,7 @@ test {
     // 저장·픽셀 인수 조건도 기본 CI에서 회귀 검증한다.
     useJUnitPlatform()
     finalizedBy jacocoTestReport
-    systemProperty 'java.awt.headless', 'true' // CI(화면 없음)와 같은 조건으로 UI 렌더링 테스트를 돌린다
+    systemProperty 'java.awt.headless', providers.gradleProperty('awtHeadless').getOrElse('true')
 }
 
 sourceSets.test.java.srcDir 'audit/java'
@@ -130,6 +130,15 @@ tasks.register('releaseJar', Jar) {
     dependsOn configurations.runtimeClasspath
     from { configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
     exclude 'META-INF/*.SF', 'META-INF/*.RSA', 'META-INF/*.DSA'
+}
+
+// 메인 중계만 담은 실행 jar. 오라클 VM의 tetris-relay 서비스가 이 파일을 쓴다.
+tasks.register('relayServerJar', Jar) {
+    group = 'distribution'
+    description = '중계 서버 실행 jar (Main-Class tetris.relay.RelayServer)'
+    archiveFileName = 'tetris-relay-server.jar'
+    manifest { attributes 'Main-Class': 'tetris.relay.RelayServer' }
+    from sourceSets.main.output
 }
 
 // 실행 jar와 의존 라이브러리(Jackson)를 jpackage 입력 폴더 하나에 모은다

@@ -64,6 +64,7 @@ public final class RaidScreenController implements AutoCloseable {
         panel.setGuide(onlineViewer != null ? onlineGuide() : guide(solo, soloKeys));
         panel.setResultActions(this::goMenu, this::goRetry);
         panel.setConfirmAction(this::cancelConfirm);
+        panel.setCardPointer(this::onCardPointer);
         try {
             if (onlineViewer != null) {
                 battleRouter = new BattleInputRouter(root, BattleKeyMap.online(), this::onCommand, this::accepts);
@@ -190,6 +191,13 @@ public final class RaidScreenController implements AutoCloseable {
         };
         cardIndex = Math.max(0, Math.min(2, next));
         panel.setCardSelection(cardIndex);
+    }
+
+    private void onCardPointer(int index, boolean confirm) {
+        if (closed || current == null || current.phase() != RaidPhase.CARD_PICK || current.offer() == null) return;
+        cardIndex = Math.max(0, Math.min(2, index));
+        panel.setCardSelection(cardIndex);
+        if (confirm) client.pickCard(current.offer().chooser() == 0 ? PlayerId.ONE : PlayerId.TWO, cardIndex);
     }
 
     private void handleConfirm(PlayerCommand command) {

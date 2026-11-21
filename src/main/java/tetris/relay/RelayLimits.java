@@ -10,13 +10,27 @@ import java.util.Objects;
 public record RelayLimits(int maxConnections, int maxPendingHandshakes, int newConnectionsPerIpPerSecond,
                           Duration handshakeDeadline, int maxWaitingRooms, Duration roomWaitLimit,
                           int maxPairedRooms, Duration idleLimit, Duration stalledWriteLimit,
-                          Duration maxSessionLength, int noRoomPerIpPerMinute) {
+                          Duration maxSessionLength, int noRoomPerIpPerMinute,
+                          int listPerIpPerSecond, int maxOpenRoomsPerIp) {
+    public static final int DEFAULT_LIST_PER_SECOND = 2;
+    public static final int DEFAULT_OPEN_ROOMS_PER_IP = 3;
+
+    /** 목록·방 개수 상한은 기본값. 기존 호출부는 그대로 둔다 */
+    public RelayLimits(int maxConnections, int maxPendingHandshakes, int newConnectionsPerIpPerSecond,
+                       Duration handshakeDeadline, int maxWaitingRooms, Duration roomWaitLimit,
+                       int maxPairedRooms, Duration idleLimit, Duration stalledWriteLimit,
+                       Duration maxSessionLength, int noRoomPerIpPerMinute) {
+        this(maxConnections, maxPendingHandshakes, newConnectionsPerIpPerSecond, handshakeDeadline,
+                maxWaitingRooms, roomWaitLimit, maxPairedRooms, idleLimit, stalledWriteLimit,
+                maxSessionLength, noRoomPerIpPerMinute, DEFAULT_LIST_PER_SECOND, DEFAULT_OPEN_ROOMS_PER_IP);
+    }
+
     public static final RelayLimits DEFAULT = new RelayLimits(300, 64, 5, Duration.ofSeconds(5), 100,
             Duration.ofMinutes(10), 100, Duration.ofSeconds(60), Duration.ofSeconds(10), Duration.ofHours(3), 10);
-
     public RelayLimits {
         if (maxConnections <= 0 || maxPendingHandshakes <= 0 || newConnectionsPerIpPerSecond <= 0
-                || maxWaitingRooms <= 0 || maxPairedRooms <= 0 || noRoomPerIpPerMinute <= 0) {
+                || maxWaitingRooms <= 0 || maxPairedRooms <= 0 || noRoomPerIpPerMinute <= 0
+                || listPerIpPerSecond <= 0 || maxOpenRoomsPerIp <= 0) {
             throw new IllegalArgumentException("limits must be positive");
         }
         for (Duration d : new Duration[]{handshakeDeadline, roomWaitLimit, idleLimit, stalledWriteLimit, maxSessionLength}) {

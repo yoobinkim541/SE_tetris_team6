@@ -149,11 +149,14 @@ public final class StarfieldBackground {
     }
 
     private void paintSky(Graphics2D g, int width, int height) {
-        BufferedImage cover = assets.cover(resource, width, height);
-        if (cover != null) {
-            g.drawImage(cover, 0, 0, null);
-            return;
-        }
+        // 배율이 걸린 화면에서 배경 한 장을 매 프레임 늘리면 느리다. 장치 픽셀 크기 그림을 1:1로 찍는다
+        boolean[] drawn = {false};
+        tetris.ui.theme.UiKit.drawDeviceImage(g, 0, 0, width, height, (w, h) -> {
+            BufferedImage cover = assets.cover(resource, w, h);
+            drawn[0] = cover != null;
+            return cover;
+        });
+        if (drawn[0]) return;
         g.setPaint(new LinearGradientPaint(0, 0, 0, height,
                 new float[] {0f, 0.55f, 1f},
                 new Color[] {new Color(0x12082A), new Color(0x07091A), new Color(0x1A0A32)}));
@@ -182,16 +185,15 @@ public final class StarfieldBackground {
             int x = (int) ((star.x * width + frame * star.drift) % width);
             if (x < 0) x += width;
             int y = (int) (star.y * height);
-            g.setColor(new Color((star.rgb & 0x00ffffff) | (alpha << 24), true));
-            g.fillOval(x, y, star.size, star.size);
+            tetris.ui.theme.UiKit.softDot(g, x, y, Math.max(2, star.size + 1),
+                    new Color((star.rgb & 0x00ffffff) | (alpha << 24), true));
         }
         for (Dust mote : dust) {
             int x = (int) ((mote.x * width + frame * mote.vx) % width);
             if (x < 0) x += width;
             int y = (int) ((mote.y * height + frame * mote.vy) % height);
             if (y < 0) y += height;
-            g.setColor(new Color(180, 170, 230, mote.alpha));
-            g.fillOval(x, y, mote.size, mote.size);
+            tetris.ui.theme.UiKit.softDot(g, x, y, Math.max(2, mote.size + 1), new Color(180, 170, 230, mote.alpha));
         }
         if (shoot != null) paintShoot(g, width, height);
     }

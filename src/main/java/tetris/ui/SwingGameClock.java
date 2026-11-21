@@ -3,7 +3,7 @@ package tetris.ui;
 import javax.swing.Timer;
 import tetris.feature.game.GameClock;
 
-/** javax.swing.Timer 기반 GameClock (TMR-1). coalesce를 켜서 밀린 Tick을 몰아서 처리하지 않는다. */
+/** javax.swing.Timer 기반 GameClock (TMR-1). coalesce를 켜서 밀린 Tick을 몰아서 처리하지 않는다. 콜백 예외는 EDT 핸들러가 기록하고 다음 Tick은 그대로 돈다. */
 public class SwingGameClock implements GameClock {
     private final Timer timer;
 

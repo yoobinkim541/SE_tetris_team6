@@ -24,6 +24,12 @@ public final class ScreenFade extends JComponent {
         timer.setCoalesce(true);
     }
 
+    /** 페이드가 보여도 클릭을 가로채지 않는다 */
+    @Override
+    public boolean contains(int x, int y) {
+        return false;
+    }
+
     public void play() {
         alpha = 0.55f;
         setVisible(true);
