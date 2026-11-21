@@ -186,7 +186,8 @@ class RaidEngineTest {
     void cardTimeoutPicksTheMiddleAndEachCardHasItsEffect() throws Exception {
         Harness harness = killOne(12);
         List<CardId> cards = harness.engine.snapshot().offer().cards();
-        harness.now += 4_999;
+        assertEquals(10_000, harness.engine.snapshot().offer().remainingMillis());
+        harness.now += 9_999;
         harness.engine.advance(harness.now);
         assertEquals(RaidPhase.CARD_PICK, harness.engine.snapshot().phase());
         harness.now += 1;
