@@ -36,6 +36,45 @@ flowchart LR
 
 제한: 방 500개, 메시지 64 KiB, 방향별 1 MiB/s(넘으면 늦춤), 방 코드 10분, 연결 3시간, IP별 틀린 코드 1분 10회.
 
+이름이 있는 방(v2)은 목록에 올라간다. 이름·공개 여부·모드를 빼면 예전과 같이 목록에 없는 방이다.
+
+| 방향 | 메시지 |
+|---|---|
+| 호스트 → 서버 | `{"op":"host","relay":1,"proto":N,"name":"대전","visibility":"public","mode":"classic"}` |
+| 서버 → 호스트 | `{"op":"room","code":"4821","id":"K7QM2X","expiresIn":600}` |
+| 목록 | `{"op":"list","relay":1}` → `{"op":"rooms","rooms":[{"id","name","mode","private","players"}]}` 후 닫음. 비밀 코드·IP는 없다 |
+| 공개 방 참가 | `{"op":"join","relay":1,"proto":N,"id":"K7QM2X"}` |
+| 비공개 방 | id로 참가하면 `{"op":"error","reason":"PRIVATE"}`. 코드로 참가하면 기존 join |
+
+모드 토큰: `classic` `item` `timed` `raid-coop` `raid-race`. 이름은 앞뒤 공백·제어 문자를 뺀 1~20자. 목록은 최신 50개, IP당 목록 초당 2회, IP당 대기 방 3개. 짝이 지어지거나 10분이 지나면 목록에서 사라진다.
+
+메인 서버(줄 프로토콜)도 같다. `HOST v1`은 그대로다. `HOST v2 public classic <name-base64url>` → `ROOM <코드> <id>`. `LIST v2` → `R <id> <mode> <0|1> <인원> <name-base64url>` … `END` 후 닫음. `JOINID v2 <id>`는 공개 방만. 비공개는 `ERR PRIVATE`. 옛 서버는 v2에 `ERR`을 주며, 클라이언트는 그때 예비 서버로 넘어간다.
+
+## 메인 서버 갱신
+
+오라클 VM에서 중계를 돌리는 사람용이다. 게임 JAR와 따로, 중계 클래스만 담은 jar를 만든다.
+
+```bat
+gradlew.bat relayServerJar
+```
+
+결과: `build/libs/tetris-relay-server.jar` (Main-Class `tetris.relay.RelayServer`).
+
+VM의 서비스는 `/opt/tetris-relay/relay.jar`를 classpath로 `tetris.relay.RelayServer 47123`을 실행한다 (`scripts/tetris-relay.service`). 갈아끼운 뒤 재시작한다.
+
+```bash
+scp build/libs/tetris-relay-server.jar <사용자>@<VM>:/tmp/relay.jar
+ssh <사용자>@<VM> 'sudo install -o tetris-relay -g tetris-relay -m 644 /tmp/relay.jar /opt/tetris-relay/relay.jar && sudo systemctl restart tetris-relay && sudo systemctl --no-pager status tetris-relay'
+```
+
+확인: `printf "HOST v1\n" | nc <VM> 47123` → `ROOM`으로 시작하는 한 줄. v2를 올린 뒤에는 `LIST v2`가 `END`로 끝나야 한다.
+
+예비 서버 이미지(배포는 하지 않는다. 명령만):
+
+```bash
+docker build -t tetris-relay:4 relay
+```
+
 ## 실행·테스트
 
 ```bash

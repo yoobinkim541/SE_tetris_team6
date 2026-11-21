@@ -2,6 +2,8 @@ package tetris.feature.network.relay;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -10,9 +12,13 @@ import java.net.Socket;
 import java.net.URI;
 import java.time.Duration;
 import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import tetris.relay.RelayLine;
+import tetris.relay.RoomName;
 
 /**
  * 메인 중계 서버({@code tetris.relay.RelayServer})와 TCP로 주고받는다. 서버는 게임 바이트 앞에 한 줄 핸드셰이크만 쓴다
@@ -49,6 +55,8 @@ public final class LineRelayTransport implements RelayTransport {
         private final Socket socket;
         private final Listener listener;
         private final AtomicBoolean closedOnce = new AtomicBoolean();
+        private volatile boolean listing;
+        private final List<ObjectNode> listed = new ArrayList<>();
 
         LineChannel(Socket socket, Listener listener) {
             this.socket = socket;
@@ -63,7 +71,14 @@ public final class LineRelayTransport implements RelayTransport {
                     String line = RelayLine.read(in);
                     String[] parts = line.trim().split(" ");
                     switch (parts[0]) {
-                        case "ROOM" -> listener.onText("{\"op\":\"room\",\"code\":\"" + (parts.length > 1 ? parts[1] : "") + "\"}");
+                        case "R" -> {
+                            if (listing) listed.add(roomNode(parts));
+                        }
+                        case "END" -> {
+                            listener.onText(roomsJson());
+                            return;
+                        }
+                        case "ROOM" -> listener.onText(roomOpened(parts));
                         case "ERR" -> {
                             listener.onText("{\"op\":\"error\",\"reason\":\"" + reason(parts.length > 1 ? parts[1] : "") + "\"}");
                             return;
@@ -97,6 +112,8 @@ public final class LineRelayTransport implements RelayTransport {
                 case "NO_ROOM", "ROOM_FULL" -> "NO_ROOM";
                 case "SLOW_DOWN" -> "TOO_MANY_ATTEMPTS";
                 case "FULL" -> "SERVER_FULL";
+                case "PRIVATE" -> "PRIVATE";
+                case "ROOM_LIMIT" -> "ROOM_LIMIT";
                 default -> "BAD_REQUEST";
             };
         }
@@ -106,8 +123,12 @@ public final class LineRelayTransport implements RelayTransport {
             try {
                 JsonNode request = JSON.readTree(text);
                 String line = switch (request.path("op").asText()) {
-                    case "host" -> "HOST v1";
-                    case "join" -> "JOIN v1 " + request.path("code").asText();
+                    case "host" -> hostLine(request);
+                    case "join" -> joinLine(request);
+                    case "list" -> {
+                        listing = true;
+                        yield "LIST v2";
+                    }
                     default -> throw new IOException("unknown relay request");
                 };
                 RelayLine.write(socket.getOutputStream(), line);
@@ -115,6 +136,56 @@ public final class LineRelayTransport implements RelayTransport {
             } catch (IOException e) {
                 return CompletableFuture.failedFuture(e);
             }
+        }
+        private static String hostLine(JsonNode request) {
+            if (!request.hasNonNull("name") || request.path("name").asText().isEmpty()) return "HOST v1";
+            String visibility = request.path("visibility").asText("public");
+            String mode = request.path("mode").asText("classic");
+            return "HOST v2 " + visibility + " " + mode + " " + RoomName.encode(request.path("name").asText());
+        }
+
+        private static String joinLine(JsonNode request) {
+            String id = request.path("id").asText("");
+            String code = request.path("code").asText("");
+            if (!id.isEmpty() && code.isEmpty()) return "JOINID v2 " + id;
+            return "JOIN v1 " + code;
+        }
+
+        private static String roomOpened(String[] parts) {
+            String code = parts.length > 1 ? parts[1] : "";
+            if (parts.length > 2 && !parts[2].isEmpty()) {
+                return "{\"op\":\"room\",\"code\":\"" + code + "\",\"id\":\"" + parts[2] + "\"}";
+            }
+            return "{\"op\":\"room\",\"code\":\"" + code + "\"}";
+        }
+
+        private static ObjectNode roomNode(String[] parts) {
+            ObjectNode room = JSON.createObjectNode();
+            room.put("id", parts.length > 1 ? parts[1] : "");
+            room.put("mode", parts.length > 2 ? parts[2] : "");
+            room.put("private", parts.length > 3 && "1".equals(parts[3]));
+            room.put("players", parts.length > 4 ? parsePlayers(parts[4]) : 1);
+            Optional<String> name = parts.length > 5 ? RoomName.decode(parts[5]) : Optional.empty();
+            room.put("name", name.orElse(""));
+            return room;
+        }
+
+        private static int parsePlayers(String text) {
+            try {
+                return Integer.parseInt(text);
+            } catch (NumberFormatException e) {
+                return 1;
+            }
+        }
+
+        private String roomsJson() {
+            ObjectNode message = JSON.createObjectNode();
+            message.put("op", "rooms");
+            ArrayNode rooms = message.putArray("rooms");
+            for (ObjectNode room : listed) {
+                if (!room.path("name").asText().isEmpty()) rooms.add(room);
+            }
+            return message.toString();
         }
 
         @Override

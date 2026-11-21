@@ -1,0 +1,157 @@
+{
+  "rects": "x,y,w,h pixels, origin top-left",
+  "ledgeBottom": "last solid rock row; boards sit under the image",
+  "displayBasis": "2560x1440 window scales the 600x720 raid canvas by 2",
+  "upscaler": null,
+  "assets": {
+    "ledge-jelly.png": {
+      "file": "ledge-jelly.png",
+      "size": [
+        1680,
+        720
+      ],
+      "ledgeBottom": 719,
+      "fringe": 0.08,
+      "encoding": "pngquant256"
+    },
+    "ledge-golem.png": {
+      "file": "ledge-golem.png",
+      "size": [
+        1680,
+        720
+      ],
+      "ledgeBottom": 719,
+      "fringe": 0.0,
+      "encoding": "pngquant256"
+    },
+    "ledge-witch.png": {
+      "file": "ledge-witch.png",
+      "size": [
+        1680,
+        720
+      ],
+      "ledgeBottom": 719,
+      "fringe": 0.02,
+      "encoding": "pngquant256"
+    },
+    "ledge-dragon.png": {
+      "file": "ledge-dragon.png",
+      "size": [
+        1680,
+        720
+      ],
+      "ledgeBottom": 719,
+      "fringe": 0.01,
+      "encoding": "pngquant256"
+    },
+    "ledge-golden.png": {
+      "file": "ledge-golden.png",
+      "size": [
+        1680,
+        720
+      ],
+      "ledgeBottom": 719,
+      "fringe": 0.06,
+      "encoding": "pngquant256"
+    },
+    "scene-raid.jpg": {
+      "file": "scene-raid.jpg",
+      "size": [
+        1200,
+        1440
+      ]
+    },
+    "scene-raid-wide.jpg": {
+      "file": "scene-raid-wide.jpg",
+      "size": [
+        1920,
+        1080
+      ]
+    },
+    "hp-frame.png": {
+      "file": "hp-frame.png",
+      "size": [
+        1080,
+        161
+      ],
+      "bar": {
+        "x": 202,
+        "y": 60,
+        "w": 608,
+        "h": 45
+      },
+      "percentPod": {
+        "x": 867,
+        "y": 61,
+        "w": 111,
+        "h": 43
+      },
+      "fringe": 0.0,
+      "encoding": "pngquant256"
+    },
+    "nametab-p1.png": {
+      "file": "nametab-p1.png",
+      "size": [
+        520,
+        136
+      ],
+      "text": [
+        164,
+        25,
+        306,
+        94
+      ],
+      "fringe": 0.01,
+      "encoding": "pngquant256"
+    },
+    "nametab-p2.png": {
+      "file": "nametab-p2.png",
+      "size": [
+        520,
+        136
+      ],
+      "text": [
+        58,
+        40,
+        198,
+        56
+      ],
+      "fringe": 0.02,
+      "encoding": "pngquant256"
+    },
+    "frame-ornate-cyan.png": {
+      "file": "frame-ornate-cyan.png",
+      "size": [
+        512,
+        512
+      ],
+      "sliceInsets": {
+        "top": 64,
+        "right": 64,
+        "bottom": 64,
+        "left": 64
+      },
+      "fringe": 0.01,
+      "encoding": "pngquant256",
+      "bytes": 10844,
+      "railThickness": 22
+    },
+    "frame-ornate-magenta.png": {
+      "file": "frame-ornate-magenta.png",
+      "size": [
+        512,
+        512
+      ],
+      "sliceInsets": {
+        "top": 64,
+        "right": 64,
+        "bottom": 64,
+        "left": 64
+      },
+      "derivedFrom": "frame-ornate-cyan.png cyan hues +102 deg toward #B44CFF-#E040FB; pink remainder pulled to violet",
+      "encoding": "pngquant256",
+      "bytes": 10930,
+      "railThickness": 22
+    }
+  }
+}

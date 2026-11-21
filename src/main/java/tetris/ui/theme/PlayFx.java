@@ -1,11 +1,13 @@
 package tetris.ui.theme;
 
+import java.awt.AlphaComposite;
+import java.awt.BasicStroke;
 import java.awt.Color;
+import java.awt.Composite;
 import java.awt.Font;
 import java.awt.Graphics2D;
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
+import java.awt.RadialGradientPaint;
+import java.awt.image.BufferedImage;
 import tetris.ui.fx.StarfieldBackground;
 
 /**
@@ -13,8 +15,15 @@ import tetris.ui.fx.StarfieldBackground;
  * 연출이 낮으면 입자와 흔들림만 끄고, 점수·삭제 표시는 남긴다.
  */
 public final class PlayFx {
-    private final List<Spark> sparks = new ArrayList<>();
-    private final List<Dust> dust = new ArrayList<>();
+    private static final int POOL = 40;
+
+    private final Spark[] sparks = new Spark[POOL];
+    private final Dust[] dust = new Dust[16];
+    private final Wave wave = new Wave();
+    private BufferedImage glow;
+    private int glowX;
+    private int glowY;
+    private int glowLife;
     private String popup = "";
     private Color popupColor = Color.WHITE;
     private int popupLife;
@@ -31,14 +40,19 @@ public final class PlayFx {
     private int countdownLife;
     private float countdownScale = 1f;
 
+    public PlayFx() {
+        for (int i = 0; i < sparks.length; i++) sparks[i] = new Spark();
+        for (int i = 0; i < dust.length; i++) dust[i] = new Dust();
+    }
+
     public void resetScore(long score) {
         shownScore = score;
         targetScore = score;
     }
 
     public void noteScore(long score) {
-        if (shownScore == Long.MIN_VALUE) shownScore = score;
         targetScore = score;
+        if (shownScore == Long.MIN_VALUE) shownScore = score;
     }
 
     public long displayScore() {
@@ -55,7 +69,14 @@ public final class PlayFx {
         boolean special = lines >= 4 || tSpin;
         backToBack = special && lastSpecial;
         lastSpecial = special;
-        if (!StarfieldBackground.lowEffects()) burst(centerX, centerY, lines >= 4 ? 0x3DE0FF : 0xFFFFFF);
+        if (!StarfieldBackground.lowEffects()) {
+            burst(centerX, centerY, lines >= 4 ? 0x3DE0FF : 0xFFFFFF, 12 + lines);
+            wave.arm(centerX, centerY, lines >= 4 ? 0x3DE0FF : 0xF4FBFF);
+            glowX = centerX;
+            glowY = centerY;
+            glowLife = 7;
+            shake = Math.min(4, 1 + lines);
+        }
         if (lines >= 4) showPopup("TETRIS", new Color(0x3DE0FF));
         else if (tSpin) showPopup(mini ? "T-SPIN MINI" : "T-SPIN", new Color(0xFF4AD8));
         else if (combo >= 2) showPopup(combo + " COMBO", Color.WHITE);
@@ -69,10 +90,13 @@ public final class PlayFx {
 
     public void noteHardDrop(int x, int y) {
         if (StarfieldBackground.lowEffects()) return;
-        shake = 5;
-        for (int i = 0; i < 8; i++) {
-            double angle = i * Math.PI / 4;
-            dust.add(new Dust(x, y, Math.cos(angle) * 1.6, -Math.abs(Math.sin(angle)) * 1.2 - 0.4));
+        shake = 3;
+        int spawned = 0;
+        for (Dust bit : dust) {
+            if (bit.life > 0) continue;
+            double angle = spawned * Math.PI / 4;
+            bit.arm(x, y, Math.cos(angle) * 1.6, -Math.abs(Math.sin(angle)) * 1.2 - 0.4);
+            if (++spawned >= 8) return;
         }
     }
 
@@ -95,6 +119,7 @@ public final class PlayFx {
         }
         if (popupLife > 0) popupLife--;
         if (bannerLife > 0) bannerLife--;
+        if (glowLife > 0) glowLife--;
         if (countdownLife > 0) {
             countdownLife--;
             countdownScale = 1f + countdownLife / 16f * 0.45f;
@@ -106,19 +131,19 @@ public final class PlayFx {
                 countdownStep = -1;
             }
         }
-        Iterator<Spark> sparksLeft = sparks.iterator();
-        while (sparksLeft.hasNext()) {
-            if (!sparksLeft.next().tick()) sparksLeft.remove();
-        }
-        Iterator<Dust> dustLeft = dust.iterator();
-        while (dustLeft.hasNext()) {
-            if (!dustLeft.next().tick()) dustLeft.remove();
-        }
+        for (Spark spark : sparks) if (spark.life > 0) spark.tick();
+        for (Dust bit : dust) if (bit.life > 0) bit.tick();
+        if (wave.life > 0) wave.tick();
     }
 
     public boolean active() {
-        return shake > 0 || popupLife > 0 || bannerLife > 0 || countdownStep >= 0
-                || !sparks.isEmpty() || !dust.isEmpty() || shownScore != targetScore;
+        if (shake > 0 || popupLife > 0 || bannerLife > 0 || countdownStep >= 0 || glowLife > 0 || wave.life > 0) {
+            return true;
+        }
+        if (shownScore != targetScore) return true;
+        for (Spark spark : sparks) if (spark.life > 0) return true;
+        for (Dust bit : dust) if (bit.life > 0) return true;
+        return false;
     }
 
     public int shakeX() {
@@ -127,17 +152,21 @@ public final class PlayFx {
 
     public void paintSparks(Graphics2D g) {
         if (StarfieldBackground.lowEffects()) return;
-        for (Spark spark : sparks) spark.paint(g);
-        for (Dust bit : dust) bit.paint(g);
+        if (glowLife > 0) paintGlow(g);
+        if (wave.life > 0) wave.paint(g);
+        for (Spark spark : sparks) if (spark.life > 0) spark.paint(g);
+        for (Dust bit : dust) if (bit.life > 0) bit.paint(g);
     }
 
     public void paintPopup(Graphics2D g, int centerX, int baseline, int windowHeight) {
         if (popupLife <= 0 || popup.isEmpty()) return;
         float alpha = popupLife > 8 ? 1f : popupLife / 8f;
-        Font font = GameTheme.popup(windowHeight);
-        g.setComposite(java.awt.AlphaComposite.getInstance(java.awt.AlphaComposite.SRC_OVER, alpha));
-        UiKit.paintGlowText(g, popup, font, popupColor, centerX, baseline);
-        g.setComposite(java.awt.AlphaComposite.SrcOver);
+        int size = Math.max(16, windowHeight / 18);
+        g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, alpha));
+        g.setFont(GameTheme.display(size));
+        UiKit.drawInBox(g, popup, new java.awt.Rectangle(centerX - windowHeight / 3, baseline - size, windowHeight * 2 / 3, size + 8),
+                UiKit.Align.CENTER);
+        g.setComposite(AlphaComposite.SrcOver);
     }
 
     public void paintBanner(Graphics2D g, int centerX, int y, int width) {
@@ -146,9 +175,9 @@ public final class PlayFx {
         int h = 36;
         int x = centerX - w / 2;
         UiKit.paintBanner(g, x, y, w, h);
-        g.setFont(GameTheme.digits(22));
-        g.setColor(Color.WHITE);
-        UiKit.drawCentered(g, banner, centerX, y + 25);
+        g.setFont(GameTheme.display(22));
+        g.setColor(java.awt.Color.WHITE);
+        UiKit.drawInAsset(g, UiKit.AssetSlot.BANNER, new java.awt.Rectangle(x, y, w, h), banner, UiKit.Align.CENTER);
     }
 
     /** 3, 2, 1, GO. 진행 중이 아니면 빈 문자열 */
@@ -172,12 +201,36 @@ public final class PlayFx {
         popupLife = 36;
     }
 
-    private void burst(int x, int y, int rgb) {
-        for (int i = 0; i < 14; i++) {
-            double angle = i * Math.PI * 2 / 14;
-            double speed = 1.2 + (i % 3) * 0.45;
-            sparks.add(new Spark(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed - 0.6, rgb));
+    private void burst(int x, int y, int rgb, int count) {
+        int spawned = 0;
+        for (Spark spark : sparks) {
+            if (spark.life > 0) continue;
+            double angle = spawned * Math.PI * 2 / count;
+            double speed = 1.1 + (spawned % 3) * 0.4;
+            spark.arm(x, y, Math.cos(angle) * speed, Math.sin(angle) * speed - 0.5, rgb);
+            if (++spawned >= count) return;
         }
+    }
+
+    private void paintGlow(Graphics2D g) {
+        if (glow == null) glow = glowSprite(64);
+        Composite previous = g.getComposite();
+        g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, Math.max(0.12f, glowLife / 8f)));
+        g.drawImage(glow, glowX - glow.getWidth() / 2, glowY - glow.getHeight() / 2, null);
+        g.setComposite(previous);
+    }
+
+    private static BufferedImage glowSprite(int size) {
+        BufferedImage image = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = image.createGraphics();
+        try {
+            g.setPaint(new RadialGradientPaint(size / 2f, size / 2f, size / 2f, new float[] {0f, 0.4f, 1f},
+                    new Color[] {new Color(255, 255, 255, 200), new Color(90, 220, 255, 80), new Color(60, 160, 255, 0)}));
+            g.fillOval(0, 0, size, size);
+        } finally {
+            g.dispose();
+        }
+        return image;
     }
 
     private static final class Spark {
@@ -185,29 +238,30 @@ public final class PlayFx {
         double y;
         double vx;
         double vy;
-        int life = 18;
-        final int rgb;
+        int life;
+        int rgb;
 
-        Spark(double x, double y, double vx, double vy, int rgb) {
+        void arm(double x, double y, double vx, double vy, int rgb) {
             this.x = x;
             this.y = y;
             this.vx = vx;
             this.vy = vy;
             this.rgb = rgb;
+            this.life = 16;
         }
 
-        boolean tick() {
+        void tick() {
             x += vx;
             y += vy;
-            vy += 0.08;
-            return --life > 0;
+            vx *= 0.93;
+            vy = vy * 0.93 + 0.07;
+            life--;
         }
 
         void paint(Graphics2D g) {
-            int alpha = Math.min(255, life * 14);
-            g.setColor(new Color((rgb >> 16) & 0xff, (rgb >> 8) & 0xff, rgb & 0xff, alpha));
-            int s = 2 + life / 8;
-            g.fillOval((int) x, (int) y, s, s);
+            int alpha = Math.min(220, life * 16);
+            int s = 4 + life / 6;
+            UiKit.softDot(g, (int) x, (int) y, s, new Color((rgb >> 16) & 0xff, (rgb >> 8) & 0xff, rgb & 0xff, alpha));
         }
     }
 
@@ -216,25 +270,54 @@ public final class PlayFx {
         double y;
         double vx;
         double vy;
-        int life = 12;
+        int life;
 
-        Dust(double x, double y, double vx, double vy) {
+        void arm(double x, double y, double vx, double vy) {
             this.x = x;
             this.y = y;
             this.vx = vx;
             this.vy = vy;
+            this.life = 12;
         }
 
-        boolean tick() {
+        void tick() {
             x += vx;
             y += vy;
             vy += 0.12;
-            return --life > 0;
+            life--;
         }
 
         void paint(Graphics2D g) {
-            g.setColor(new Color(180, 220, 255, Math.min(180, life * 16)));
-            g.fillRect((int) x, (int) y, 2, 2);
+            UiKit.softDot(g, (int) x, (int) y, 4, new Color(180, 220, 255, Math.min(180, life * 16)));
+        }
+    }
+
+    private static final class Wave {
+        int x;
+        int y;
+        int radius;
+        int life;
+        int rgb;
+
+        void arm(int x, int y, int rgb) {
+            this.x = x;
+            this.y = y;
+            this.rgb = rgb;
+            this.radius = 6;
+            this.life = 10;
+        }
+
+        void tick() {
+            radius += 5;
+            life--;
+        }
+
+        void paint(Graphics2D g) {
+            int alpha = Math.min(170, life * 18);
+            g.setColor(new Color((rgb >> 16) & 0xff, (rgb >> 8) & 0xff, rgb & 0xff, alpha));
+            g.setStroke(new BasicStroke(2f));
+            g.drawOval(x - radius, y - radius / 3, radius * 2, (int) (radius * 0.7));
+            g.setStroke(new BasicStroke(1f));
         }
     }
 }

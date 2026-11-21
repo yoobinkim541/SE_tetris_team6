@@ -10,9 +10,12 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.security.SecureRandom;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -46,10 +49,14 @@ public final class RelayServer implements Closeable {
     private final Set<Conn> connections = ConcurrentHashMap.newKeySet();
     private final AtomicInteger pending = new AtomicInteger();
     private final Map<String, Room> rooms = new ConcurrentHashMap<>();
+    private final Map<String, Room> roomsById = new ConcurrentHashMap<>();
     private final Object roomLock = new Object();
     private final Set<String> issuedCodes = new LinkedHashSet<>();
     private final Map<InetAddress, Deque<Long>> connectTimes = new HashMap<>();
     private final Map<InetAddress, Deque<Long>> noRoomTimes = new HashMap<>();
+    private final Map<InetAddress, Deque<Long>> listTimes = new HashMap<>();
+
+    private static final int LIST_LIMIT = 50;
 
     public RelayServer(int port, RelayLimits limits, LongSupplier nanoClock, Random random) {
         this.requestedPort = port;
@@ -155,13 +162,22 @@ public final class RelayServer implements Closeable {
         }
     }
 
-    /** 창(window) 안의 기록이 limit 미만이면 지금을 기록하고 true */
+    /** 창 안의 기록이 limit 미만이면 지금을 기록하고 true. 빈 주소와 넘치는 주소표는 지운다 */
     private static boolean withinRate(Map<InetAddress, Deque<Long>> table, InetAddress ip, long now, long window, int limit) {
         Deque<Long> times = table.computeIfAbsent(ip, k -> new ArrayDeque<>());
         while (!times.isEmpty() && now - times.peekFirst() >= window) times.pollFirst();
-        if (times.size() >= limit) return false;
-        times.addLast(now);
-        return true;
+        boolean allowed = times.size() < limit;
+        if (allowed) times.addLast(now);
+        if (times.isEmpty()) table.remove(ip);
+        if (table.size() > 4_096) {
+            for (InetAddress key : List.copyOf(table.keySet())) {
+                if (!key.equals(ip)) {
+                    table.remove(key);
+                    break;
+                }
+            }
+        }
+        return allowed;
     }
     //#endregion
 
@@ -178,7 +194,11 @@ public final class RelayServer implements Closeable {
         }
         String[] parts = line.trim().split(" ");
         if (parts.length == 2 && parts[0].equals("HOST") && parts[1].equals("v1")) {
-            host(conn);
+            host(conn, null, null, null);
+        } else if (parts.length == 5 && parts[0].equals("HOST") && parts[1].equals("v2")) {
+            hostV2(conn, parts[2], parts[3], parts[4]);
+        } else if (parts.length == 2 && parts[0].equals("LIST") && parts[1].equals("v2")) {
+            list(conn);
         } else if (parts.length == 3 && parts[0].equals("JOIN") && parts[1].equals("v1")) {
             Optional<String> code = LobbyCode.normalize(parts[2]);
             if (code.isEmpty()) {
@@ -186,38 +206,117 @@ public final class RelayServer implements Closeable {
             } else {
                 join(conn, code.get());
             }
+        } else if (parts.length == 3 && parts[0].equals("JOINID") && parts[1].equals("v2")) {
+            joinId(conn, parts[2]);
         } else {
             failHandshake(conn, "ERR BAD_REQUEST");
         }
     }
 
-    private void host(Conn conn) {
+    private void hostV2(Conn conn, String visibility, String mode, String nameToken) {
+        boolean isPublic = visibility.equals("public");
+        boolean isPrivate = visibility.equals("private");
+        Optional<RelayRoomMode> parsedMode = RelayRoomMode.fromToken(mode);
+        Optional<String> name = RoomName.decode(nameToken);
+        if ((!isPublic && !isPrivate) || parsedMode.isEmpty() || name.isEmpty()) {
+            failHandshake(conn, "ERR BAD_REQUEST");
+            return;
+        }
+        host(conn, name.get(), parsedMode.get().token(), isPrivate);
+    }
+
+    /** name이 null이면 v1: 목록에 올리지 않고 코드만 돌려준다 */
+    private void host(Conn conn, String name, String mode, Boolean isPrivate) {
+        boolean listed = name != null;
         Room room;
         synchronized (roomLock) {
-            if (waitingRooms() >= limits.maxWaitingRooms()) {
-                failHandshake(conn, "ERR FULL");
+            boolean overIp = openRoomsFrom(conn.ip) >= limits.maxOpenRoomsPerIp();
+            if (waitingRooms() >= limits.maxWaitingRooms() || overIp) {
+                failHandshake(conn, overIp && waitingRooms() < limits.maxWaitingRooms() ? "ERR ROOM_LIMIT" : "ERR FULL");
                 return;
             }
-            String code;
-            do {
-                code = LobbyCode.generate(random);
-            } while (issuedCodes.contains(code));
-            issuedCodes.add(code);
-            if (issuedCodes.size() > ISSUED_CODE_HISTORY) {
-                issuedCodes.remove(issuedCodes.iterator().next());
-            }
-            room = new Room(code, conn, nanoClock.getAsLong());
+            String code = freshToken();
+            String id = listed ? freshToken() : null;
+            room = new Room(code, id, conn, nanoClock.getAsLong(), listed, name, mode, Boolean.TRUE.equals(isPrivate));
             rooms.put(code, room);
+            if (id != null) roomsById.put(id, room);
         }
         conn.room = room;
-        if (!reply(conn, "ROOM " + room.code)) {
+        String line = listed ? "ROOM " + room.code + " " + room.id : "ROOM " + room.code;
+        if (!reply(conn, line)) {
             finishPending(conn);
             closeRoom(room, "host write failed");
             return;
         }
         finishPending(conn);
-        log("room " + room.code + " waiting");
+        log("room " + room.code + (listed ? " listed" : " waiting"));
         pump(conn, room, true);
+    }
+
+    private int openRoomsFrom(InetAddress ip) {
+        int n = 0;
+        for (Room room : rooms.values()) {
+            if (room.state == RoomState.WAITING && ip.equals(room.host.ip)) n++;
+        }
+        return n;
+    }
+
+    private String freshToken() {
+        String token;
+        do {
+            token = LobbyCode.generate(random);
+        } while (issuedCodes.contains(token) || rooms.containsKey(token) || roomsById.containsKey(token));
+        issuedCodes.add(token);
+        if (issuedCodes.size() > ISSUED_CODE_HISTORY) issuedCodes.remove(issuedCodes.iterator().next());
+        return token;
+    }
+
+    private void list(Conn conn) {
+        boolean allowed;
+        synchronized (listTimes) {
+            allowed = withinRate(listTimes, conn.ip, nanoClock.getAsLong(), SECOND_NANOS, limits.listPerIpPerSecond());
+        }
+        if (!allowed) {
+            failHandshake(conn, "ERR SLOW_DOWN");
+            return;
+        }
+        List<Room> listed = new ArrayList<>();
+        for (Room room : rooms.values()) {
+            if (room.listed && room.state == RoomState.WAITING) listed.add(room);
+        }
+        listed.sort(Comparator.comparingLong((Room room) -> room.createdAt).reversed());
+        if (listed.size() > LIST_LIMIT) listed = listed.subList(0, LIST_LIMIT);
+        for (Room room : listed) {
+            int players = room.client == null ? 1 : 2;
+            String line = "R " + room.id + " " + room.mode + " " + (room.isPrivate ? "1" : "0") + " "
+                    + players + " " + RoomName.encode(room.name);
+            if (!reply(conn, line)) {
+                finishPending(conn);
+                conn.close();
+                return;
+            }
+        }
+        reply(conn, "END");
+        finishPending(conn);
+        conn.close();
+    }
+
+    private void joinId(Conn conn, String id) {
+        Room room = roomsById.get(id);
+        if (room == null || room.state == RoomState.CLOSED) {
+            boolean allowed;
+            synchronized (noRoomTimes) {
+                allowed = withinRate(noRoomTimes, conn.ip, nanoClock.getAsLong(), MINUTE_NANOS,
+                        limits.noRoomPerIpPerMinute());
+            }
+            failHandshake(conn, allowed ? "ERR NO_ROOM" : "ERR SLOW_DOWN");
+            return;
+        }
+        if (room.isPrivate) {
+            failHandshake(conn, "ERR PRIVATE");
+            return;
+        }
+        join(conn, room.code);
     }
 
     private void join(Conn conn, String code) {
@@ -321,6 +420,7 @@ public final class RelayServer implements Closeable {
             room.state = RoomState.CLOSED;
         }
         rooms.remove(room.code, room);
+        if (room.id != null) roomsById.remove(room.id, room);
         room.host.close();
         if (room.client != null) room.client.close();
         log("room " + room.code + " closed: " + why);
@@ -357,6 +457,9 @@ public final class RelayServer implements Closeable {
         synchronized (noRoomTimes) {
             noRoomTimes.values().removeIf(d -> d.isEmpty() || now - d.peekLast() >= MINUTE_NANOS);
         }
+        synchronized (listTimes) {
+            listTimes.values().removeIf(d -> d.isEmpty() || now - d.peekLast() >= SECOND_NANOS);
+        }
     }
 
     private boolean stalled(Conn c, long now) {
@@ -382,17 +485,27 @@ public final class RelayServer implements Closeable {
 
     private static final class Room {
         final String code;
+        final String id;
         final Conn host;
         final long createdAt;
+        final boolean listed;
+        final String name;
+        final String mode;
+        final boolean isPrivate;
         volatile Conn client;
         volatile RoomState state = RoomState.WAITING;
         volatile long pairedAt;
         volatile long lastActivity;
 
-        Room(String code, Conn host, long createdAt) {
+        Room(String code, String id, Conn host, long createdAt, boolean listed, String name, String mode, boolean isPrivate) {
             this.code = code;
+            this.id = id;
             this.host = host;
             this.createdAt = createdAt;
+            this.listed = listed;
+            this.name = name;
+            this.mode = mode;
+            this.isPrivate = isPrivate;
             this.lastActivity = createdAt;
         }
 

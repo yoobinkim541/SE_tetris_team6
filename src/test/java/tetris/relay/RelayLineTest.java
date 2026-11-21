@@ -27,7 +27,7 @@ class RelayLineTest {
     }
 
     @Test
-    void 최대_64바이트를_넘는_줄은_거부한다() {
+    void 최대_길이를_넘는_줄은_거부한다() {
         byte[] longLine = ("A".repeat(RelayLine.MAX_BYTES + 1) + "\n").getBytes(StandardCharsets.UTF_8);
         assertThrows(IOException.class, () -> RelayLine.read(new ByteArrayInputStream(longLine)));
     }

@@ -132,6 +132,15 @@ tasks.register('releaseJar', Jar) {
     exclude 'META-INF/*.SF', 'META-INF/*.RSA', 'META-INF/*.DSA'
 }
 
+// 메인 중계만 담은 실행 jar. 오라클 VM의 tetris-relay 서비스가 이 파일을 쓴다.
+tasks.register('relayServerJar', Jar) {
+    group = 'distribution'
+    description = '중계 서버 실행 jar (Main-Class tetris.relay.RelayServer)'
+    archiveFileName = 'tetris-relay-server.jar'
+    manifest { attributes 'Main-Class': 'tetris.relay.RelayServer' }
+    from sourceSets.main.output
+}
+
 // 실행 jar와 의존 라이브러리(Jackson)를 jpackage 입력 폴더 하나에 모은다
 tasks.register('jpackageInput', Sync) {
     from jar

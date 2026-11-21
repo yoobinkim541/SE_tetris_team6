@@ -182,16 +182,15 @@ public final class StarfieldBackground {
             int x = (int) ((star.x * width + frame * star.drift) % width);
             if (x < 0) x += width;
             int y = (int) (star.y * height);
-            g.setColor(new Color((star.rgb & 0x00ffffff) | (alpha << 24), true));
-            g.fillOval(x, y, star.size, star.size);
+            tetris.ui.theme.UiKit.softDot(g, x, y, Math.max(2, star.size + 1),
+                    new Color((star.rgb & 0x00ffffff) | (alpha << 24), true));
         }
         for (Dust mote : dust) {
             int x = (int) ((mote.x * width + frame * mote.vx) % width);
             if (x < 0) x += width;
             int y = (int) ((mote.y * height + frame * mote.vy) % height);
             if (y < 0) y += height;
-            g.setColor(new Color(180, 170, 230, mote.alpha));
-            g.fillOval(x, y, mote.size, mote.size);
+            tetris.ui.theme.UiKit.softDot(g, x, y, Math.max(2, mote.size + 1), new Color(180, 170, 230, mote.alpha));
         }
         if (shoot != null) paintShoot(g, width, height);
     }

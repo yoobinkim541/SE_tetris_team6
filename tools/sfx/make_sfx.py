@@ -1,9 +1,9 @@
 """SE Tetris 효과음·배경음 합성.
 
-외부 샘플은 쓰지 않는다. 16비트 모노 22050 Hz WAV만 만든다.
-효과음은 가장자리를 짧게 페이드해 클릭을 없애고, 배경음은 끝과 처음이
-이어지게 원형으로 섞어 루프 이음새가 클릭이 되지 않게 한다(끝 페이드를
-넣으면 매 바퀴 음량이 꺼진다).
+외부 샘플은 쓰지 않는다. 효과음은 16비트 모노 22050 Hz PCM이다.
+배경음은 같은 합성을 16 kHz로 낮춘 16비트 모노 PCM이다. µ-law는 쓰지 않는다.
+루프는 8 kHz 위에서만 잘라 이음새가 그대로다. 효과음은 끝의 무음만 자르고
+페이드는 남긴다.
 
 저장소 루트에서:
     python tools/sfx/make_sfx.py
@@ -18,20 +18,21 @@ from pathlib import Path
 import numpy as np
 
 SR = 22050
+BGM_SR = 16000
 NYQUIST_GUARD = SR * 0.46
 SHIMMER = 2.0 ** (4.0 / 1200.0)
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_OUT = ROOT / "src" / "main" / "resources" / "sfx"
 
-# 레이드: 105 BPM, 16마디. 22050 * 60 / 12600 = 105.
+# 레이드: 105 BPM, 8마디(Am–F–C–G 한 바퀴). 16 kHz로 낮춘 뒤에도 1.8MB 안에 둔다.
 RAID_BEAT = 12600
-RAID_BARS = 16
+RAID_BARS = 8
 RAID_N = RAID_BEAT * 4 * RAID_BARS
 
-# 메뉴: 72 BPM, 12마디 = 정확히 40초. 22050 * 60 / 18375 = 72.
+# 메뉴: 72 BPM, 6마디(C–Am–G) = 20초. 16 kHz로 저장한다.
 MENU_BEAT = 18375
-MENU_BARS = 12
+MENU_BARS = 6
 MENU_N = MENU_BEAT * 4 * MENU_BARS
 
 
@@ -516,15 +517,11 @@ def pad_segment(freqs: tuple[float, ...], n: int, fade: int) -> np.ndarray:
 
 
 def render_bgm_raid() -> np.ndarray:
-    """가벼운 신스웨이브. 2마디마다 Am F C G / Am Dm F G."""
+    """가벼운 신스웨이브. 2마디마다 Am F C G. 끝 G가 다음 Am으로 이어진다."""
     chords = (
         (hz(45), hz(52), (hz(69), hz(72), hz(76), hz(81))),  # Am
         (hz(41), hz(48), (hz(65), hz(69), hz(72), hz(77))),  # F
         (hz(48), hz(55), (hz(60), hz(64), hz(67), hz(72))),  # C
-        (hz(43), hz(50), (hz(67), hz(71), hz(74), hz(79))),  # G
-        (hz(45), hz(52), (hz(69), hz(72), hz(76), hz(81))),  # Am
-        (hz(38), hz(45), (hz(62), hz(65), hz(69), hz(74))),  # Dm
-        (hz(41), hz(48), (hz(65), hz(69), hz(72), hz(77))),  # F
         (hz(43), hz(50), (hz(67), hz(71), hz(74), hz(79))),  # G
     )
     bar = RAID_BEAT * 4
@@ -559,13 +556,10 @@ def render_bgm_raid() -> np.ndarray:
 
 
 def render_bgm_menu() -> np.ndarray:
-    """잔잔한 패드와 종. 12마디, C–Am–F–G–C–G, 끝 G가 다음 C로 이어진다."""
+    """잔잔한 패드와 종. 6마디, C–Am–G. 끝 G가 다음 C로 이어진다."""
     chords = (
         (hz(48), (hz(60), hz(64), hz(67))),  # C
         (hz(45), (hz(57), hz(60), hz(64))),  # Am
-        (hz(41), (hz(53), hz(57), hz(60))),  # F
-        (hz(43), (hz(55), hz(59), hz(62))),  # G
-        (hz(48), (hz(60), hz(64), hz(67))),  # C
         (hz(43), (hz(55), hz(59), hz(62))),  # G
     )
     bar = MENU_BEAT * 4
@@ -620,27 +614,70 @@ CATALOG: list[tuple[str, str, object]] = [
 ]
 
 
-def write_wav(path: Path, samples: np.ndarray) -> None:
+def trim_tail(samples: np.ndarray) -> np.ndarray:
+    """끝의 무음만 자른다. 잘린 자리에는 짧은 페이드를 다시 넣어 클릭을 막는다."""
+    audio = np.asarray(samples, dtype=np.float64)
+    loud = np.flatnonzero(np.abs(audio) > 0.004)
+    if loud.size == 0:
+        return audio
+    keep = int(loud[-1]) + 1 + int(0.004 * SR)
+    keep = max(keep, int(0.025 * SR))
+    if keep >= len(audio) - 2:
+        return audio
+    trimmed = audio[:keep].copy()
+    fade = min(int(0.003 * SR), max(2, keep // 4))
+    trimmed[-fade:] *= np.linspace(1.0, 0.0, fade)
+    return trimmed
+
+
+def resample_periodic(samples: np.ndarray, n_out: int) -> np.ndarray:
+    """주기 신호를 늘이거나 줄인다. FFT라 이음새가 깨지지 않는다."""
+    audio = np.asarray(samples, dtype=np.float64)
+    spec = np.fft.rfft(audio)
+    kept = np.zeros(n_out // 2 + 1, dtype=np.complex128)
+    n_keep = min(len(spec), len(kept))
+    kept[:n_keep] = spec[:n_keep]
+    if n_keep == len(kept) and n_keep > 1 and len(spec) > n_keep:
+        kept[-1] = 0.0
+    return np.fft.irfft(kept, n=n_out).real * (n_out / len(audio))
+
+
+def to_bgm_rate(samples: np.ndarray) -> np.ndarray:
+    n_out = int(round(len(samples) * BGM_SR / SR))
+    return normalize_loop(resample_periodic(samples, n_out), float(np.max(np.abs(samples))))
+
+
+def write_wav(path: Path, samples: np.ndarray, sample_rate: int) -> None:
     pcm = np.clip(samples, -1.0, 1.0)
     ints = (pcm * 32767.0).astype("<i2")
     with wave.open(str(path), "wb") as handle:
         handle.setnchannels(1)
         handle.setsampwidth(2)
-        handle.setframerate(SR)
+        handle.setframerate(sample_rate)
         handle.writeframes(ints.tobytes())
+    if len(ints) < 2:
+        raise RuntimeError(f"너무 짧음: {path.name}")
+    boundary = abs(int(ints[0]) - int(ints[-1]))
+    steps = np.abs(np.diff(ints.astype(np.int32)))
+    if path.stem.startswith("bgm") and boundary > int(np.max(steps)) + 1:
+        raise RuntimeError(f"루프 이음새: {path.name} {boundary}")
 
 
-def file_stats(path: Path) -> tuple[float, float, float, int]:
+def file_stats(path: Path) -> tuple[float, float, float, int, int]:
     with wave.open(str(path), "rb") as handle:
-        if handle.getnchannels() != 1 or handle.getsampwidth() != 2 or handle.getframerate() != SR:
+        if handle.getnchannels() != 1 or handle.getsampwidth() != 2:
             raise RuntimeError(f"형식 불일치: {path.name}")
+        rate = handle.getframerate()
         frames = handle.getnframes()
         raw = handle.readframes(frames)
+    expected = BGM_SR if path.stem.startswith("bgm") else SR
+    if rate != expected:
+        raise RuntimeError(f"샘플링 불일치: {path.name} {rate}")
     ints = np.frombuffer(raw, dtype="<i2").astype(np.float64) / 32767.0
-    duration = frames / SR
+    duration = frames / rate
     peak = float(np.max(np.abs(ints))) if ints.size else 0.0
     rms = float(np.sqrt(np.mean(ints * ints))) if ints.size else 0.0
-    return duration, peak, rms, path.stat().st_size
+    return duration, peak, rms, path.stat().st_size, rate
 
 
 def main() -> None:
@@ -649,17 +686,23 @@ def main() -> None:
     written: list[str] = []
     for name, _desc, build in CATALOG:
         samples = build()
+        if name.startswith("bgm"):
+            samples = to_bgm_rate(samples)
+            rate = BGM_SR
+        else:
+            samples = trim_tail(samples)
+            rate = SR
         path = out / f"{name}.wav"
-        write_wav(path, samples)
+        write_wav(path, samples, rate)
         written.append(name)
     expected = [name for name, _desc, _build in CATALOG]
     if written != expected:
         raise SystemExit("파일 목록이 카탈로그와 다릅니다")
     total = 0
-    print(f"{'file':<22} {'sec':>8} {'peak':>7} {'rms':>7} {'bytes':>10}")
+    print(f"{'file':<22} {'sec':>8} {'peak':>7} {'rms':>7} {'rate':>6} {'bytes':>10}")
     for name, desc, _build in CATALOG:
         path = out / f"{name}.wav"
-        duration, peak, rms, size = file_stats(path)
+        duration, peak, rms, size, rate = file_stats(path)
         total += size
         if peak < 0.2 or rms < 0.01:
             raise SystemExit(f"너무 작음: {name} peak={peak:.3f} rms={rms:.3f}")
@@ -668,14 +711,12 @@ def main() -> None:
         limit = 60.0 if name == "bgm_raid" else 40.0 if name == "bgm_menu" else 2.5
         if duration > limit + 1e-6:
             raise SystemExit(f"길이 초과: {name} {duration:.3f}s > {limit}")
-        print(f"{name + '.wav':<22} {duration:8.3f} {peak:7.3f} {rms:7.3f} {size:10d}  {desc}")
+        print(f"{name + '.wav':<22} {duration:8.3f} {peak:7.3f} {rms:7.3f} {rate:6d} {size:10d}  {desc}")
     print(f"total_bytes {total} ({total / (1024 * 1024):.2f} MiB)")
-    if total > 6 * 1024 * 1024:
-        raise SystemExit("sfx 합계가 6 MiB를 넘습니다")
-    if MENU_N != 40 * SR:
-        raise SystemExit("메뉴 루프가 40초가 아닙니다")
-    if RAID_N / SR > 60.0:
-        raise SystemExit("레이드 루프가 60초를 넘습니다")
+    if total > 1_800_000:
+        raise SystemExit("sfx 합계가 1.8MB를 넘습니다")
+    if RAID_N / SR > 60.0 or MENU_N / SR > 40.0:
+        raise SystemExit("루프가 길이 제한을 넘습니다")
 
 
 if __name__ == "__main__":

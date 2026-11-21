@@ -37,15 +37,17 @@ class SoundTest {
                     assertEquals(AudioFormat.Encoding.PCM_SIGNED, format.getEncoding(), id.stem());
                     assertEquals(1, format.getChannels(), id.stem());
                     assertEquals(16, format.getSampleSizeInBits(), id.stem());
-                    assertEquals(22050f, format.getSampleRate(), 0.1f, id.stem());
-                    assertTrue(audio.getFrameLength() > (long) (0.02 * 22050), id.stem());
+                    float expectedRate = id.loops() ? 16000f : 22050f;
+                    assertEquals(expectedRate, format.getSampleRate(), 0.1f, id.stem());
+                    assertTrue(audio.getFrameLength() > (long) (0.02 * expectedRate), id.stem());
                     double seconds = audio.getFrameLength() / format.getSampleRate();
                     double limit = id == SoundId.BGM_RAID ? 60.0 : id == SoundId.BGM_MENU ? 40.0 : 2.5;
                     assertTrue(seconds <= limit, id.stem() + " " + seconds);
+                    if (id.loops()) assertSeam(id, audio.readAllBytes());
                 }
             }
         }
-        assertTrue(total <= 6L * 1024 * 1024, "sfx " + total);
+        assertTrue(total <= 1_800_000L, "sfx " + total);
         assertTrue(SoundId.BGM_RAID.loops());
         assertTrue(SoundId.BGM_MENU.loops());
         assertFalse(SoundId.MOVE.loops());
@@ -77,6 +79,19 @@ class SoundTest {
         assertEquals(0, opensAfterMiss[0]);
         assertFalse(absent.play(null));
         assertFalse(absent.loop(null));
+    }
+
+    @Test
+    void badFileDoesNotDisableTheDevice() {
+        int[] opens = {0};
+        SoundEffects fx = new SoundEffects(SoundEffects.class::getResourceAsStream, wav -> {
+            opens[0]++;
+            throw new IllegalArgumentException("bad format");
+        });
+        assertFalse(fx.play(SoundId.MOVE));
+        assertFalse(fx.play(SoundId.ROTATE));
+        assertFalse(fx.loop(SoundId.BGM_MENU));
+        assertEquals(3, opens[0]);
     }
 
     @Test
@@ -165,5 +180,27 @@ class SoundTest {
 
     private static SoundId sound(RaidEvent.Type type) {
         return SoundEffects.forRaidEvent(new RaidEvent(type, -1, 0));
+    }
+
+    /** 루프의 끝과 처음 차이가 곡 안의 보통 샘플 간격보다 크면 클릭이다. */
+    private static void assertSeam(SoundId id, byte[] pcm) {
+        int frames = pcm.length / 2;
+        assertTrue(frames > 2, id.stem());
+        int first = sample(pcm, 0);
+        int last = sample(pcm, frames - 1);
+        int maxStep = 0;
+        int prev = first;
+        for (int i = 1; i < frames; i++) {
+            int cur = sample(pcm, i);
+            maxStep = Math.max(maxStep, Math.abs(cur - prev));
+            prev = cur;
+        }
+        int boundary = Math.abs(first - last);
+        assertTrue(boundary <= maxStep + 1, id.stem() + " seam " + boundary + " > " + maxStep);
+    }
+
+    private static int sample(byte[] pcm, int index) {
+        int at = index * 2;
+        return (short) ((pcm[at] & 0xff) | (pcm[at + 1] << 8));
     }
 }

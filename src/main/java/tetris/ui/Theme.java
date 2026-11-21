@@ -20,7 +20,7 @@ final class Theme {
     static final Color ACCENT = new Color(0xFFC94D);
     static final Color HIGHLIGHT_ROW = new Color(0x3D4A63);
     static final Color WARNING = new Color(0xFF8A65);
-    static final Color OVERLAY = new Color(0, 0, 0, 170);
+    static final Color OVERLAY = new Color(0, 0, 0, 230);
 
     private Theme() {
     }
@@ -35,9 +35,9 @@ final class Theme {
         return GameTheme.fontFor(value, size, preferDigits);
     }
 
-    /** 블록 문자용 굵은 고정폭 글꼴 (RND-5) */
+    /** 블록 문자. Orbitron. 없는 글자는 그릴 때 글자 단위로 대체한다 */
     static Font blockLetter(int size) {
-        return new Font(Font.MONOSPACED, Font.BOLD, size);
+        return GameTheme.digits(size);
     }
 
     /** 패널 높이에 비례한 글자 크기. 셀 크기가 바뀌어도 화면 비율이 유지된다 */
@@ -47,8 +47,7 @@ final class Theme {
 
     static Graphics2D smooth(Graphics g) {
         Graphics2D g2 = (Graphics2D) g;
-        g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+        GameTheme.applyQuality(g2);
         return g2;
     }
 
@@ -77,38 +76,61 @@ final class Theme {
     static int drawPills(Graphics2D g, List<String> items, int selected, int centerX, int topY, int fontSize,
                          int buttonWidth, boolean colorBlind) {
         int buttonHeight = fontSize + fontSize / 2;
-        int gap = Math.max(6, fontSize / 3);
+        int gap = Math.max(8, (fontSize / 3 + 4) / 8 * 8);
         int y = topY;
         float pulse = UiKit.pulse();
         for (int i = 0; i < items.size(); i++) {
             boolean isSelected = i == selected;
-            int x = centerX - buttonWidth / 2;
-            UiKit.paintButton(g, isSelected, x, y, buttonWidth, buttonHeight, colorBlind, pulse);
+            float grow = isSelected ? 1.04f + 0.02f * pulse : 1f;
+            int dw = Math.round(buttonWidth * grow);
+            int dh = Math.round(buttonHeight * grow);
+            int x = centerX - dw / 2;
+            int dy = y + (buttonHeight - dh) / 2;
+            UiKit.paintButton(g, isSelected, x, dy, dw, dh, colorBlind, pulse);
             if (isSelected) {
-                UiKit.paintArrow(g, x - fontSize, y + buttonHeight / 2, Math.max(8, fontSize / 2), colorBlind, pulse);
+                UiKit.paintArrow(g, x - fontSize, dy + dh / 2, Math.max(8, fontSize / 2), colorBlind, pulse);
             }
-            g.setFont(font(items.get(i), fontSize, false));
-            g.setColor(isSelected ? Color.WHITE : TEXT);
-            drawCentered(g, items.get(i), centerX, y + buttonHeight / 2 + g.getFontMetrics().getAscent() / 2 - 1);
+            int size = fontSize;
+            int limit = Math.max(8, buttonWidth - fontSize);
+            g.setFont(GameTheme.display(size));
+            while (size > 11 && GameTheme.width(g, items.get(i)) > limit) {
+                g.setFont(GameTheme.display(--size));
+            }
+            UiKit.drawInAsset(g, UiKit.AssetSlot.BUTTON, new java.awt.Rectangle(x, dy, dw, dh),
+                    items.get(i), UiKit.Align.CENTER, isSelected);
             y += buttonHeight + gap;
         }
         return y;
     }
 
-    /** 화면 맨 아래 Key Guide 한 줄. 한글이 있으면 Do Hyeon, 숫자만 Orbitron */
+    /** 화면 맨 아래 Key Guide. 칸에 안 들어가면 줄을 나누고, 12px 아래로 내리지 않는다 */
     static void drawGuide(Graphics2D g, String guide, int width, int height) {
-        int size = Math.max(10, unit(height) * 3 / 4);
+        int size = Math.max(12, unit(height) * 3 / 4);
         g.setFont(font(guide, size, false));
         int barWidth = Math.min(width - size * 2, Math.max(size * 8, width * 3 / 4));
-        while (g.getFontMetrics().stringWidth(guide) > barWidth - size && size > 8) {
-            g.setFont(font(guide, --size, false));
-        }
-        int barHeight = size + size / 2;
+        String[] lines = guideLines(g, guide == null ? "" : guide, barWidth);
+        int barHeight = Math.max(28, size + size / 2 + (lines.length - 1) * (size + 4));
         int x = (width - barWidth) / 2;
-        int y = height - barHeight - size / 3;
+        int y = Math.max(0, height - barHeight - Math.max(4, size / 4));
         UiKit.paintCapsule(g, x, y, barWidth, barHeight);
         g.setColor(TEXT);
-        drawCentered(g, guide, width / 2, y + barHeight / 2 + g.getFontMetrics().getAscent() / 2 - 1);
+        java.awt.Rectangle hole = UiKit.contentBox(UiKit.AssetSlot.CAPSULE, new java.awt.Rectangle(x, y, barWidth, barHeight));
+        int lineH = Math.max(1, hole.height / lines.length);
+        for (int i = 0; i < lines.length; i++) {
+            UiKit.drawInBox(g, lines[i], new java.awt.Rectangle(hole.x, hole.y + i * lineH, hole.width, lineH),
+                    UiKit.Align.CENTER);
+        }
+    }
+
+    private static String[] guideLines(Graphics2D g, String guide, int barWidth) {
+        java.awt.Rectangle probe = UiKit.contentBox(UiKit.AssetSlot.CAPSULE, new java.awt.Rectangle(0, 0, barWidth, 32));
+        if (GameTheme.drawnBounds(g.getFont(), guide, g.getFontRenderContext()).getWidth() <= probe.width) {
+            return new String[] {guide};
+        }
+        int split = guide.indexOf("   ");
+        if (split < 0) split = guide.indexOf(" · ");
+        if (split <= 0) return new String[] {guide};
+        return new String[] {guide.substring(0, split).trim(), guide.substring(split).trim()};
     }
 
     /** 확인창·Pause용 반투명 배경과 가운데 상자. 반환: 상자 {x, y, w, h} */

@@ -18,9 +18,9 @@ import tetris.feature.raid.api.RaidEvent;
  * WAV 효과음. 클래스패스에서 처음 쓸 때 읽고, 같은 소리를 최대 4개까지 겹쳐 튼다.
  * 재생이 끝나기를 기다리지 않는다.
  *
- * <p>믹서가 없거나 파일이 없어도 예외를 던지지 않는다. 시스템 속성
+ * <p>믹서가 없거나 파일이 없어도 예외를 던지지 않는다. 파일 형식이 나빠도
+ * 그 소리만 건너뛰고, 장치 전체를 끄지 않는다. 시스템 속성
  * {@code tetris.sound=off} 이면 재생 메서드는 아무 것도 하지 않는다.
- * 음소거이거나 볼륨이 0이면 새 재생은 시작하지 않고, 이미 튼 소리는 게인만 낮춘다.
  */
 public final class SoundEffects {
     /** 이 값이 {@code off}이면 소리를 열지 않는다 */
@@ -260,21 +260,34 @@ public final class SoundEffects {
         }
     }
 
+    /** 라인을 못 여는 경우만 장치 고장이다. 파일 형식 오류는 그 소리만 건너뛴다. */
     private static boolean isMixerFailure(Exception ex) {
-        return ex instanceof LineUnavailableException
-                || ex instanceof SecurityException
-                || ex instanceof IllegalArgumentException;
+        return ex instanceof LineUnavailableException || ex instanceof SecurityException;
     }
 
     private static Clip openClip(byte[] wav) throws Exception {
-        Clip clip = AudioSystem.getClip();
+        Clip clip = acquireClip();
         try (AudioInputStream in = AudioSystem.getAudioInputStream(
                 new BufferedInputStream(new ByteArrayInputStream(wav)))) {
             clip.open(in);
             return clip;
         } catch (Exception ex) {
             closeQuietly(clip);
-            throw ex;
+            if (ex instanceof LineUnavailableException || ex instanceof SecurityException) throw ex;
+            throw new javax.sound.sampled.UnsupportedAudioFileException(
+                    ex.getMessage() == null ? "bad audio" : ex.getMessage());
+        }
+    }
+
+    /** 믹서가 없으면 IllegalArgumentException이 난다. 장치 없음으로 바꾼다. */
+    private static Clip acquireClip() throws LineUnavailableException, SecurityException {
+        try {
+            return AudioSystem.getClip();
+        } catch (IllegalArgumentException ex) {
+            LineUnavailableException wrapped = new LineUnavailableException(
+                    ex.getMessage() == null ? "mixer" : ex.getMessage());
+            wrapped.initCause(ex);
+            throw wrapped;
         }
     }
 }

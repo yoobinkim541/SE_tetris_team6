@@ -19,6 +19,10 @@ public final class RelayException extends Exception {
         EXPIRED,
         /** 서버가 요청을 이해하지 못했다 */
         BAD_REQUEST,
+        /** 공개 번호로 비공개 방에 들어오려 했다 */
+        PRIVATE,
+        /** 이 주소에서 연 대기 방이 너무 많다 */
+        ROOM_LIMIT,
         /** 짝이 지어지기 전에 연결이 끊겼다 */
         CLOSED;
 

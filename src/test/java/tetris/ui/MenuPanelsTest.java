@@ -74,11 +74,16 @@ public class MenuPanelsTest {
 
     @Test
     void screenSizeCyclesAndSaves() {
-        settingPanel.activateSelected(); // Screen Size
+        settingPanel.activateSelected(); // Medium -> Large
         assertEquals(ScreenSize.LARGE, settings.getScreenSize());
-        settingPanel.activateSelected();
+        assertFalse(settings.isFullscreen());
+        settingPanel.activateSelected(); // Large -> 전체 화면
+        assertTrue(settings.isFullscreen());
+        assertEquals(ScreenSize.LARGE, settings.getScreenSize());
+        settingPanel.activateSelected(); // 전체 화면 -> Small
         assertEquals(ScreenSize.SMALL, settings.getScreenSize());
-        assertEquals(2, saves);
+        assertFalse(settings.isFullscreen());
+        assertEquals(3, saves);
     }
 
     @Test

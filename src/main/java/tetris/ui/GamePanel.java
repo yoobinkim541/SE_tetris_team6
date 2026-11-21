@@ -246,9 +246,9 @@ public class GamePanel extends JPanel implements GameListener {
         int dot = Math.max(1, cellSize / 16);
         for (int row = 0; row < Board.HEIGHT; row++) {
             for (int col = 0; col < Board.WIDTH; col++) {
-                int cx = x + col * cellSize + cellSize / 2 - dot / 2;
-                int cy = y + row * cellSize + cellSize / 2 - dot / 2;
-                g.fillRect(cx, cy, dot, dot);
+                int cx = x + col * cellSize + (cellSize - dot) / 2;
+                int cy = y + row * cellSize + (cellSize - dot) / 2;
+                UiKit.softDot(g, cx, cy, Math.max(2, dot), new Color(0x8FB7D8));
             }
         }
         if (snapshot != null) {
@@ -290,17 +290,11 @@ public class GamePanel extends JPanel implements GameListener {
     private void drawTSpin(Graphics2D g, int x, int y) {
         if (snapshot == null || !snapshot.lastTSpin().isTSpin()) return;
         String text = snapshot.lastTSpin() == tetris.feature.rule.TSpinType.MINI ? "T-SPIN MINI" : "T-SPIN!";
-        int fontSize = Math.max(10, cellSize * 4 / 5);
-        g.setFont(Theme.text(fontSize, true));
+        int fontSize = Math.max(15, cellSize * 4 / 5);
         int boardWidth = cellSize * Board.WIDTH;
-        while (g.getFontMetrics().stringWidth(text) > boardWidth - cellSize && fontSize > 6)
-            g.setFont(Theme.text(--fontSize, true));
-        int textX = x + (boardWidth - g.getFontMetrics().stringWidth(text)) / 2;
-        int textY = y + cellSize * 3;
-        g.setColor(Theme.PANEL);
-        g.drawString(text, textX + 1, textY + 1); // 블록 위에서도 읽히도록 그림자
-        g.setColor(Theme.ACCENT);
-        g.drawString(text, textX, textY);
+        g.setFont(GameTheme.display(fontSize));
+        g.setColor(Color.WHITE);
+        UiKit.drawInBox(g, text, new Rectangle(x, y + cellSize, boardWidth, cellSize * 2), UiKit.Align.CENTER);
     }
 
     private void drawSideTabs(Graphics2D g, tetris.ui.theme.SoloLayout layout) {
@@ -312,18 +306,22 @@ public class GamePanel extends JPanel implements GameListener {
         } else if (snapshot == null || snapshot.mode() != tetris.feature.game.GameMode.ITEM) {
             g.setFont(Theme.font("홀드 없음", Math.max(12, cellSize / 2), false));
             g.setColor(Theme.DIM_TEXT);
-            Theme.drawCentered(g, "홀드 없음", layout.hold.x + layout.hold.width / 2,
-                    layout.hold.y + titleH + (layout.hold.height - titleH) / 2);
+            UiKit.drawInBox(g, "홀드 없음", new Rectangle(layout.hold.x, layout.hold.y + titleH,
+                    layout.hold.width, Math.max(8, layout.hold.height - titleH)), UiKit.Align.CENTER);
         }
         UiKit.paintTab(g, true, layout.next.x, layout.next.y, layout.next.width, layout.next.height);
         drawTabLabel(g, "다음", layout.next);
         boolean modern = snapshot != null && snapshot.nextBlocks().size() > 1;
         if (modern) {
-            int y = layout.next.y + titleH;
+            int count = snapshot.nextBlocks().size();
             int boxH = cellSize * 2;
+            int gap = 8;
+            int stack = count * boxH + Math.max(0, count - 1) * gap;
+            int innerTop = layout.next.y + titleH;
+            int y = innerTop + Math.max(0, (Math.max(boxH, layout.next.height - titleH) - stack) / 2);
             for (Block preview : snapshot.nextBlocks()) {
-                drawPiece(g, preview, new Rectangle(layout.next.x + 4, y, layout.next.width - 8, boxH));
-                y += boxH + Math.max(2, cellSize / 6);
+                drawPiece(g, preview, new Rectangle(layout.next.x + 8, y, Math.max(1, layout.next.width - 16), boxH));
+                y += boxH + gap;
             }
         } else if (snapshot != null && snapshot.nextBlock() != null) {
             drawPiece(g, snapshot.nextBlock(), firstNextBox());
@@ -345,23 +343,16 @@ public class GamePanel extends JPanel implements GameListener {
 
     private void drawKeyGuide(Graphics2D g, tetris.ui.theme.SoloLayout layout) {
         UiKit.paintCapsule(g, layout.guide.x, layout.guide.y, layout.guide.width, layout.guide.height);
-        String text = compactGuide(layout.guide.width - 28);
-        int size = 13;
-        g.setFont(Theme.font(text, size, false));
-        while (g.getFontMetrics().stringWidth(text) > layout.guide.width - 28 && size > 12) {
-            g.setFont(Theme.font(text, --size, false));
-        }
+        g.setFont(tetris.ui.theme.GameTheme.text(12, false));
         g.setColor(Color.WHITE);
-        int baseline = layout.guide.y + (layout.guide.height + g.getFontMetrics().getAscent()) / 2 - 1;
-        Theme.drawCentered(g, text, layout.guide.x + layout.guide.width / 2, baseline);
+        UiKit.drawInAsset(g, UiKit.AssetSlot.CAPSULE, layout.guide, compactGuide(), UiKit.Align.CENTER);
     }
 
-    private String compactGuide(int limit) {
+    private String compactGuide() {
         String rotate = keyGuide.length > 2 ? keyGuide[2] : "↑ 회전";
         String pause = keyGuide.length > 4 ? keyGuide[4] : "P 일시정지";
         String quit = keyGuide.length > 5 ? keyGuide[5] : "Q 나가기";
-        String full = rotate + "   " + pause + "   " + quit;
-        return full.length() * 14 <= limit ? full : pause + "   " + quit;
+        return rotate + "   " + pause + "   " + quit;
     }
 
     private int tabTitleHeight() {
@@ -379,22 +370,19 @@ public class GamePanel extends JPanel implements GameListener {
             g.setFont(Theme.font(label, --size, true));
         }
         g.setColor(Color.WHITE);
-        Theme.drawCentered(g, label, tab.x + tab.width / 2, tab.y + inset + g.getFontMetrics().getAscent());
+        UiKit.drawInAsset(g, UiKit.AssetSlot.TAB,
+                new Rectangle(tab.x, tab.y, tab.width, Math.max(16, inset + size + 4)), label, UiKit.Align.CENTER);
     }
 
     private void drawStatus(Graphics2D g, tetris.ui.theme.SoloLayout layout) {
         if (layout.status.height < 8 || layout.status.width < 8) return;
         String text = statusText();
         int h = Math.min(layout.status.height, Math.max(28, cellSize + 6));
-        UiKit.paintCapsule(g, layout.status.x, layout.status.y, layout.status.width, h);
-        int size = Math.max(9, Math.min(13, h - 8));
-        g.setFont(Theme.font(text, size, false));
-        while (g.getFontMetrics().stringWidth(text) > layout.status.width - h && size > 8) {
-            g.setFont(Theme.font(text, --size, false));
-        }
+        Rectangle box = new Rectangle(layout.status.x, layout.status.y, layout.status.width, h);
+        UiKit.paintCapsule(g, box.x, box.y, box.width, box.height);
+        g.setFont(Theme.font(text, Math.max(12, Math.min(13, h - 8)), false));
         g.setColor(Color.WHITE);
-        Theme.drawCentered(g, text, layout.status.x + layout.status.width / 2,
-                layout.status.y + h / 2 + g.getFontMetrics().getAscent() / 2 - 1);
+        UiKit.drawInAsset(g, UiKit.AssetSlot.CAPSULE, box, text, UiKit.Align.CENTER);
     }
 
     private String statusText() {
@@ -413,19 +401,14 @@ public class GamePanel extends JPanel implements GameListener {
     private void drawCapsule(Graphics2D g, Rectangle box, String label, String value) {
         if (box.width < 4 || box.height < 4) return;
         UiKit.paintCapsule(g, box.x, box.y, box.width, box.height);
-        int labelSize = Math.max(12, Math.min(15, box.height / 2));
-        g.setFont(Theme.font(label, labelSize, false));
+        int labelH = 12;
+        int gap = 4;
+        g.setFont(Theme.font(label, labelH, false));
         g.setColor(UiKit.CYAN);
-        Theme.drawCentered(g, label, box.x + box.width / 2, box.y - 3);
-        int inset = Math.max(10, box.height / 2);
-        int valueSize = Math.max(12, box.height / 2);
-        g.setFont(Theme.font(value, valueSize, true));
-        while (g.getFontMetrics().stringWidth(value) > box.width - inset * 2 && valueSize > 10) {
-            g.setFont(Theme.font(value, --valueSize, true));
-        }
+        UiKit.drawInBox(g, label, new Rectangle(box.x, box.y - gap - labelH, box.width, labelH), UiKit.Align.CENTER);
+        g.setFont(Theme.font(value, Math.max(12, box.height / 2), true));
         g.setColor(Color.WHITE);
-        Theme.drawCentered(g, value, box.x + box.width / 2,
-                box.y + (box.height + g.getFontMetrics().getAscent()) / 2 - 1);
+        UiKit.drawInAsset(g, UiKit.AssetSlot.CAPSULE, box, value, UiKit.Align.CENTER);
     }
 
     private void drawPiece(Graphics2D g, Block piece, Rectangle box) {
@@ -449,14 +432,14 @@ public class GamePanel extends JPanel implements GameListener {
     }
 
     private Rectangle pieceBox(Rectangle tab, int labelHeight) {
-        return new Rectangle(tab.x + 4, tab.y + labelHeight, tab.width - 8, Math.max(1, tab.height - labelHeight - 4));
+        return new Rectangle(tab.x + 8, tab.y + labelHeight + 8, Math.max(1, tab.width - 16),
+                Math.max(1, tab.height - labelHeight - 16));
     }
 
     private Rectangle firstNextBox() {
         tetris.ui.theme.SoloLayout layout = tetris.ui.theme.SoloLayout.of(cellSize);
-        int label = tabTitleHeight();
-        return new Rectangle(layout.next.x + 4, layout.next.y + label, layout.next.width - 8,
-                Math.min(cellSize * 4, Math.max(1, layout.next.height - label - 4)));
+
+        return pieceBox(layout.next, tabTitleHeight());
     }
 
     private static final int GAUGE_SEGMENTS = 10; // 지속 효과의 최대 남은 블록 수
@@ -623,12 +606,11 @@ public class GamePanel extends JPanel implements GameListener {
         Color color = item == null ? palette.color(type, colorBlindMode) : Color.WHITE;
         tetris.ui.theme.GemTiles.paint(g, x, y, size, color);
 
-        g.setFont(Theme.blockLetter(size * 3 / 5));
+        if (size < 8) return;
+        g.setFont(Theme.text(Math.max(8, size * 3 / 5), false));
         g.setColor(item == null ? palette.textColor(color) : Color.BLACK);
         String letter = item != null ? String.valueOf(item.symbol()) : String.valueOf(type.letter());
-        int textX = x + (size - g.getFontMetrics().stringWidth(letter)) / 2;
-        int textY = y + (size - g.getFontMetrics().getHeight()) / 2 + g.getFontMetrics().getAscent();
-        g.drawString(letter, textX, textY);
+        UiKit.drawInBox(g, letter, new Rectangle(x, y, size, size), UiKit.Align.CENTER);
     }
 
     private static int drawLabel(Graphics2D g, String label, int x, int y, int size) {

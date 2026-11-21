@@ -6,8 +6,11 @@ import java.awt.Dimension;
 import java.awt.GraphicsEnvironment;
 import java.awt.Insets;
 import java.awt.Rectangle;
+import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.awt.KeyboardFocusManager;
+import java.awt.KeyEventDispatcher;
 import java.time.Instant;
 import java.util.EnumMap;
 import java.util.List;
@@ -21,7 +24,6 @@ import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 import javax.swing.JComponent;
 import javax.swing.JFrame;
-import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.SwingUtilities;
 import tetris.DevMode;
@@ -78,6 +80,9 @@ public class MainFrame extends JFrame {
 
     private final CardLayout cards = new CardLayout();
     private final JPanel root = new JPanel(cards);
+    private final tetris.ui.input.Stage stage = new tetris.ui.input.Stage(root);
+    private boolean appliedFullscreen;
+    private final KeyEventDispatcher fullscreenKeys = this::onFullscreenKey;
     private final Map<Screen, JComponent> screens = new EnumMap<>(Screen.class);
     private final MainMenuPanel mainMenuPanel;
     private final MainMenuPanel soloMenuPanel;
@@ -223,7 +228,7 @@ public class MainFrame extends JFrame {
         debugOverlay = new NetDebugOverlay(DevMode::enabled,
                 () -> p2pLobby, () -> devRtt,
                 () -> battleOnline && screens.get(Screen.BATTLE) instanceof BattlePanel battle ? battle : null);
-        setContentPane(root);
+        setContentPane(stage);
 
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE); // EXT-1: 확인 없이 종료, 진행 중 게임은 폐기
         setResizable(false);
@@ -234,6 +239,7 @@ public class MainFrame extends JFrame {
             }
             @Override public void windowClosing(WindowEvent e) { closeBattle(); closeP2p(); closeRaid(); }
         });
+        KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(fullscreenKeys);
         applyScreenSize(settings.getScreenSize());
         setGlassPane(screenFade);
         updateTitle();
@@ -255,6 +261,9 @@ public class MainFrame extends JFrame {
                 && !(screen == Screen.RAID && battleOnline)) closeP2p();
         currentScreen = screen;
         cards.show(root, screen.name());
+        stage.setBackdrop(backdropFor(screen));
+        stage.setPauseAction(playing(screen) ? this::pauseFromCorner : null);
+        tetris.ui.fx.AssetStore.SHARED.enterScreen(cacheGroup(screen));
         screenFade.play();
         syncMusic(screen);
         if (screen == Screen.NAME_INPUT) nameInputPanel.focusField();
@@ -273,13 +282,110 @@ public class MainFrame extends JFrame {
 
     /** 셀 크기 적용: pack() 후 중앙 배치. 화면에 안 맞으면 셀 크기를 자동 축소 (RND-3) */
     public void applyScreenSize(ScreenSize size) {
+        if (size == null) return;
         appliedScreenSize = size;
-        int cell = fitCellSize(size.cellPixels());
+        if (settings.isFullscreen()) {
+            enterFullscreen();
+            return;
+        }
+        leaveFullscreen();
+        applyLogicalCell(fitCellSize(size.cellPixels()));
+        pack();
+        setLocationRelativeTo(null);
+    }
+
+    /** F11·Alt+Enter. Esc는 그대로 둔다 */
+    public void toggleFullscreen() {
+        settings.setFullscreen(!settings.isFullscreen());
+        onSettingsChanged();
+    }
+
+    public boolean isFullscreen() {
+        return appliedFullscreen;
+    }
+
+    private void enterFullscreen() {
+        applyLogicalCell(settings.getScreenSize().cellPixels());
+        setBorderless(true, monitorBounds());
+        appliedFullscreen = true;
+        restoreFocus();
+    }
+
+    private void leaveFullscreen() {
+        if (!appliedFullscreen && !isUndecorated()) return;
+        setBorderless(false, null);
+        appliedFullscreen = false;
+    }
+
+    private void applyLogicalCell(int cell) {
         gamePanel.setCellSize(cell);
         Dimension panelSize = GamePanel.preferredSizeFor(cell);
         for (JComponent screen : screens.values()) screen.setPreferredSize(panelSize);
-        pack();
-        setLocationRelativeTo(null);
+        stage.setLogicalSize(panelSize.width, panelSize.height);
+    }
+
+    private void setBorderless(boolean borderless, Rectangle bounds) {
+        boolean show = isVisible();
+        if (isDisplayable() && isUndecorated() != borderless) super.dispose();
+        if (!isDisplayable()) setUndecorated(borderless);
+        setResizable(false);
+        if (bounds != null) setBounds(bounds);
+        if (show && !isVisible()) setVisible(true);
+    }
+
+    private Rectangle monitorBounds() {
+        java.awt.GraphicsConfiguration gc = getGraphicsConfiguration();
+        if (gc == null) {
+            gc = GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice().getDefaultConfiguration();
+        }
+        return new Rectangle(gc.getBounds());
+    }
+
+    private boolean onFullscreenKey(KeyEvent event) {
+        if (!tetris.ui.input.FullscreenKeys.isToggle(event)) return false;
+        javax.swing.SwingUtilities.invokeLater(this::toggleFullscreen);
+        return true;
+    }
+
+    private void pauseFromCorner() {
+        if (currentScreen == Screen.GAME) {
+            session.togglePause();
+            return;
+        }
+        java.awt.Component focus = KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
+        if (focus == null) focus = this;
+        long when = System.currentTimeMillis();
+        focus.dispatchEvent(new KeyEvent(focus, KeyEvent.KEY_PRESSED, when, 0, KeyEvent.VK_P, 'P'));
+        focus.dispatchEvent(new KeyEvent(focus, KeyEvent.KEY_RELEASED, when, 0, KeyEvent.VK_P, 'P'));
+    }
+
+    private void restoreFocus() {
+        if (currentScreen == null) return;
+        JComponent screen = screens.get(currentScreen);
+        if (currentScreen == Screen.NAME_INPUT) nameInputPanel.focusField();
+        else if (screen != null) screen.requestFocusInWindow();
+    }
+
+    private static boolean playing(Screen screen) {
+        return screen == Screen.GAME || screen == Screen.BATTLE || screen == Screen.RAID;
+    }
+
+    private static String backdropFor(Screen screen) {
+        return switch (screen) {
+            case BATTLE, BATTLE_RESULT -> tetris.ui.fx.AssetStore.BG_VERSUS;
+            case RAID -> tetris.ui.input.Stage.WIDE_RAID;
+            case GAME -> null;
+            default -> tetris.ui.fx.AssetStore.BG_MENU;
+        };
+    }
+
+    private static String cacheGroup(Screen screen) {
+        return switch (screen) {
+            case GAME -> "game";
+            case BATTLE, BATTLE_RESULT -> "battle";
+            case RAID -> "raid";
+            default -> "menu";
+        };
     }
 
     /** 프로그램 종료 (Main Menu '게임 종료', 창 닫기) */
@@ -582,10 +688,7 @@ public class MainFrame extends JFrame {
     }
 
     private PlayerId confirmBattleForfeit() {
-        int choice = JOptionPane.showOptionDialog(this, "기권할 플레이어를 선택하세요.", "대전 기권",
-                JOptionPane.DEFAULT_OPTION, JOptionPane.QUESTION_MESSAGE, null,
-                new Object[]{"P1 기권", "P2 기권", "취소"}, "취소");
-        return switch (choice) { case 0 -> PlayerId.ONE; case 1 -> PlayerId.TWO; default -> null; };
+        return ForfeitChooser.choose(this);
     }
 
     private void closeBattle() {
@@ -593,7 +696,13 @@ public class MainFrame extends JFrame {
         if (battleController != null) { battleController.close(); battleController = null; }
     }
 
-    @Override public void dispose() { closeBattle(); closeP2p(); closeRaid(); super.dispose(); }
+    @Override public void dispose() {
+        KeyboardFocusManager.getCurrentKeyboardFocusManager().removeKeyEventDispatcher(fullscreenKeys);
+        closeBattle();
+        closeP2p();
+        closeRaid();
+        super.dispose();
+    }
 
     // ── 설정·저장 ────────────────────────────
     private boolean onSettingsChanged() {
@@ -603,7 +712,9 @@ public class MainFrame extends JFrame {
         GameSounds.SHARED.apply(settings);
         updateTitle();
         debugOverlay.refresh(); // 설정에서 끄면 열려 있는 화면의 줄이 바로 사라지고 타이머가 멈춘다
-        if (settings.getScreenSize() != appliedScreenSize) applyScreenSize(settings.getScreenSize());
+        if (settings.getScreenSize() != appliedScreenSize || settings.isFullscreen() != appliedFullscreen) {
+            applyScreenSize(settings.getScreenSize());
+        }
         gamePanel.applySettings(settings);
         keyBindings.rebind(settings.getKeyMap());
         return saveSettings();
@@ -633,6 +744,7 @@ public class MainFrame extends JFrame {
 
     // 사용 가능한 화면(작업 표시줄 제외)에 맞춘 실제 셀 크기. 설정값은 바꾸지 않는다 (RND-3)
     private int fitCellSize(int desired) {
+        if (settings.isFullscreen()) return desired;
         if (!isDisplayable()) pack(); // 창 테두리 크기(insets)는 pack 이후에 알 수 있다
         Insets insets = getInsets();
         Rectangle available = GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();

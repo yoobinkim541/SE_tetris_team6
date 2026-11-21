@@ -39,7 +39,11 @@ MAX_MESSAGE_BYTES = 64 * 1024
 BYTES_PER_SECOND = 1024 * 1024  # 방향별 전송 상한. 넘으면 버리지 않고 늦춘다
 FAILED_JOIN_LIMIT = 10          # IP별 1분 동안 틀린 코드 허용 횟수
 FAILED_JOIN_WINDOW = 60.0
-
+LIST_LIMIT = 50
+LIST_PER_SECOND = 2
+OPEN_ROOMS_PER_IP = 3
+MODES = {"classic", "item", "timed", "raid-coop", "raid-race"}
+ID_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 log = logging.getLogger("tetris-relay")
 
 
@@ -50,12 +54,21 @@ class Room:
     proto: int
     paired: asyncio.Event = field(default_factory=asyncio.Event)
     joiner: ServerConnection | None = None
+    id: str = ""
+    name: str = ""
+    mode: str = ""
+    private: bool = False
+    listed: bool = False
+    owner_ip: str = ""
+    created: float = 0.0
 
 
 class Relay:
     def __init__(self) -> None:
         self.rooms: dict[str, Room] = {}
+        self.rooms_by_id: dict[str, Room] = {}
         self.failed_joins: dict[str, deque[float]] = {}
+        self.list_times: dict[str, deque[float]] = {}
 
     # ── 접속 처리 ─────────────────────────────
 
@@ -70,7 +83,11 @@ class Relay:
             await self._fail(ws, "BAD_REQUEST")
             return
         if request["op"] == "host":
-            await self._host(ws, request["proto"])
+            await self._host(ws, request)
+        elif request["op"] == "list":
+            await self._list(ws)
+        elif request["op"] == "join_id":
+            await self._join_id(ws, request["proto"], request["id"], self._client_ip(ws))
         else:
             await self._join(ws, request["proto"], request["code"], self._client_ip(ws))
 
@@ -84,24 +101,53 @@ class Relay:
             return None
         if not isinstance(msg, dict) or msg.get("relay") != RELAY_VERSION:
             return None
+        if msg.get("op") == "list":
+            return {"op": "list"}
         proto = msg.get("proto")
         if not isinstance(proto, int) or isinstance(proto, bool):
             return None
         if msg.get("op") == "host":
-            return {"op": "host", "proto": proto}
+            return {"op": "host", "proto": proto, "name": msg.get("name"), "visibility": msg.get("visibility"),
+                    "mode": msg.get("mode"), "listed": any(key in msg for key in ("name", "visibility", "mode"))}
+        room_id = msg.get("id")
+        if msg.get("op") == "join" and isinstance(room_id, str) and room_id and "code" not in msg:
+            return {"op": "join_id", "proto": proto, "id": room_id}
         code = msg.get("code")
         if msg.get("op") == "join" and isinstance(code, str) and len(code) == 4 and code.isdigit():
             return {"op": "join", "proto": proto, "code": code}
         return None
 
-    async def _host(self, ws: ServerConnection, proto: int) -> None:
+    async def _host(self, ws: ServerConnection, request: dict) -> None:
+        proto = request["proto"]
+        ip = self._client_ip(ws)
+        listed = bool(request.get("listed"))
+        name = ""
+        mode = "classic"
+        private = False
+        if listed:
+            name = self._clean_name(request.get("name"))
+            mode = request.get("mode") or "classic"
+            visibility = request.get("visibility") or "public"
+            if name is None or mode not in MODES or visibility not in ("public", "private"):
+                await self._fail(ws, "BAD_REQUEST")
+                return
+            private = visibility == "private"
+            if self._open_rooms(ip) >= OPEN_ROOMS_PER_IP:
+                await self._fail(ws, "ROOM_LIMIT")
+                return
         if len(self.rooms) >= MAX_ROOMS:
             await self._fail(ws, "SERVER_FULL")
             return
-        room = Room(self._new_code(), ws, proto)
+        room = Room(self._new_code(), ws, proto, id=self._new_id() if listed else "", name=name or "",
+                    mode=mode if listed else "", private=private, listed=listed, owner_ip=ip, created=time.monotonic())
         self.rooms[room.code] = room
+        if room.id:
+            self.rooms_by_id[room.id] = room
         try:
-            await ws.send(json.dumps({"op": "room", "code": room.code, "expiresIn": int(UNPAIRED_TTL)}))
+            payload = {"op": "room", "code": room.code, "expiresIn": int(UNPAIRED_TTL)}
+            if room.id:
+                payload["id"] = room.id
+            await ws.send(json.dumps(payload))
             paired = asyncio.ensure_future(room.paired.wait())
             closed = asyncio.ensure_future(ws.wait_closed())
             done, _ = await asyncio.wait({paired, closed}, timeout=UNPAIRED_TTL,
@@ -117,6 +163,39 @@ class Relay:
         finally:
             if self.rooms.get(room.code) is room:
                 del self.rooms[room.code]
+            if room.id and self.rooms_by_id.get(room.id) is room:
+                del self.rooms_by_id[room.id]
+
+    async def _list(self, ws: ServerConnection) -> None:
+        ip = self._client_ip(ws)
+        if self._too_many_lists(ip):
+            await self._fail(ws, "TOO_MANY_ATTEMPTS")
+            return
+        waiting = [room for room in self.rooms.values() if room.listed and room.joiner is None]
+        waiting.sort(key=lambda room: room.created, reverse=True)
+        rooms = [{
+            "id": room.id,
+            "name": room.name,
+            "mode": room.mode,
+            "private": room.private,
+            "players": 1,
+        } for room in waiting[:LIST_LIMIT]]
+        try:
+            await ws.send(json.dumps({"op": "rooms", "rooms": rooms}))
+        except ConnectionClosed:
+            return
+        await ws.close()
+
+    async def _join_id(self, ws: ServerConnection, proto: int, room_id: str, ip: str) -> None:
+        room = self.rooms_by_id.get(room_id)
+        if room is None or room.joiner is not None:
+            self._record_failure(ip)
+            await self._fail(ws, "NO_ROOM")
+            return
+        if room.private:
+            await self._fail(ws, "PRIVATE")
+            return
+        await self._join(ws, proto, room.code, ip)
 
     async def _join(self, ws: ServerConnection, proto: int, code: str, ip: str) -> None:
         if self._too_many_failures(ip):
@@ -179,14 +258,45 @@ class Relay:
             if code not in self.rooms:
                 return code
 
+    def _new_id(self) -> str:
+        while True:
+            token = "".join(secrets.choice(ID_ALPHABET) for _ in range(6))
+            if token not in self.rooms_by_id and token not in self.rooms:
+                return token
+
+    @staticmethod
+    def _clean_name(raw: object) -> str | None:
+        if not isinstance(raw, str):
+            return None
+        name = "".join(ch for ch in raw if ch.isprintable() and ch not in "\r\n\t").strip()
+        if not name or len(name) > 20:
+            return None
+        return name
+
+    def _open_rooms(self, ip: str) -> int:
+        return sum(1 for room in self.rooms.values() if room.owner_ip == ip and room.joiner is None)
+
+    def _too_many_lists(self, ip: str) -> bool:
+        times = self.list_times.setdefault(ip, deque())
+        now = time.monotonic()
+        while times and now - times[0] >= 1:
+            times.popleft()
+        if len(times) >= LIST_PER_SECOND:
+            return True
+        times.append(now)
+        return False
+
     @staticmethod
     def _client_ip(ws: ServerConnection) -> str:
-        # 서버는 127.0.0.1에만 열고 Cloudflare 터널로만 공개하므로, 터널이 붙인 실제 IP 헤더를 쓴다
-        forwarded = ws.request.headers.get("CF-Connecting-IP") if ws.request else None
-        if forwarded:
-            return forwarded
         remote = ws.remote_address
-        return str(remote[0]) if remote else "?"
+        peer = str(remote[0]) if remote else "?"
+        # 터널은 루프백으로만 붙는다. 그 밖의 접속이 헤더로 제한을 피하지 못하게 한다
+        forwarded = ws.request.headers.get("CF-Connecting-IP") if ws.request else None
+        if forwarded and peer in {"127.0.0.1", "::1"}:
+            token = forwarded.split(",")[0].strip()
+            if token and len(token) <= 64 and token.isprintable() and " " not in token:
+                return token
+        return peer
 
     def _too_many_failures(self, ip: str) -> bool:
         times = self.failed_joins.get(ip)

@@ -31,6 +31,7 @@ public class Main {
 
         // 설정 파일의 개발자 토글도 --dev와 같은 개발자 모드 스위치로 반영한다 (dev-net-overlay)
         DevMode.setSettingEnabled(settings.isDevNetworkOverlay());
+        tetris.ui.theme.GameTheme.installSwingDefaults();
 
         // 2) MainFrame 생성 (화면 크기는 생성자에서 적용). 창 제목의 [개발자 모드] 표시도 MainFrame이 맡는다
         MainFrame frame = new MainFrame(settings, scoreboard, settingsRepository, scoreboardRepository);

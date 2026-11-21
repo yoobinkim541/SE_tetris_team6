@@ -44,35 +44,37 @@ public final class SoloLayout {
     }
 
     public static SoloLayout of(int cell) {
-        int frame = Math.max(16, cell / 2);
-        int side = cell * 5 + frame;
-        int crownH = Math.max(56, cell * 2);
-        int labelH = 18;
-        int hud = Math.max(36, cell + 6);
-        int guideH = 34;
-        int gap = Math.max(4, cell / 6);
-        int width = side * 2 + cell * Board.WIDTH;
-        int height = crownH + cell * Board.HEIGHT + labelH + hud + guideH;
-        Rectangle board = new Rectangle(side, crownH, cell * Board.WIDTH, cell * Board.HEIGHT);
+        int safe = Math.max(1, cell);
+        int frame = GameTheme.snap8(Math.max(16, safe / 2));
+        int gap = 8;
+        int side = GameTheme.snap8(safe * 5 + frame);
+        int crownH = GameTheme.snap8(Math.max(56, safe * 2));
+        int labelH = 16;
+        int hud = GameTheme.snap8(Math.max(40, safe + 8));
+        int guideH = GameTheme.snap8(Math.max(32, safe));
+        int width = side * 2 + safe * Board.WIDTH;
+        int height = crownH + safe * Board.HEIGHT + labelH + hud + guideH;
+        Rectangle board = new Rectangle(side, crownH, safe * Board.WIDTH, safe * Board.HEIGHT);
         Rectangle crown = new Rectangle(board.x, 0, board.width, board.y);
-        int tabW = side - frame - gap;
-        Rectangle hold = new Rectangle(gap, board.y, tabW, cell * 5);
-        Rectangle next = new Rectangle(board.x + board.width + frame, board.y, tabW, cell * 8);
+        int tabW = Math.max(8, side - frame - gap);
+        Rectangle hold = new Rectangle(gap, board.y, tabW, GameTheme.snap8(safe * 5));
+        Rectangle next = new Rectangle(board.x + board.width + frame, board.y, tabW, GameTheme.snap8(safe * 8));
         int effectsTop = hold.y + hold.height + gap;
         int effectsBottom = board.y + board.height;
-        Rectangle effects = new Rectangle(gap, effectsTop, tabW, Math.max(cell, effectsBottom - effectsTop));
+        Rectangle effects = new Rectangle(gap, effectsTop, tabW, Math.max(safe, effectsBottom - effectsTop));
         int inner = width - gap * 5;
-        int scoreW = Math.max(cell * 6, inner * 2 / 5);
-        int other = Math.max(1, (inner - scoreW) / 3);
+        int scoreW = GameTheme.snap8(Math.max(safe * 6, inner * 2 / 5));
+        int other = Math.max(8, (inner - scoreW) / 3);
         int tabY = board.y + board.height + labelH;
         Rectangle score = new Rectangle(gap, tabY, scoreW, hud);
         Rectangle level = new Rectangle(gap * 2 + scoreW, tabY, other, hud);
         Rectangle lines = new Rectangle(gap * 3 + scoreW + other, tabY, other, hud);
-        Rectangle time = new Rectangle(gap * 4 + scoreW + other * 2, tabY, other, hud);
-        Rectangle guide = new Rectangle(gap, height - guideH + 4, width - gap * 2, guideH - 8);
+        int timeX = gap * 4 + scoreW + other * 2;
+        Rectangle time = new Rectangle(timeX, tabY, Math.max(8, width - gap - timeX), hud);
+        Rectangle guide = new Rectangle(gap, height - guideH, width - gap * 2, Math.max(8, guideH - 8));
         int statusTop = next.y + next.height + gap;
-        Rectangle status = new Rectangle(next.x, statusTop, tabW, Math.max(28, tabY - statusTop - 4));
-        return new SoloLayout(cell, width, height, board, crown, hold, next, effects, guide, score, level, lines, time, status);
+        Rectangle status = new Rectangle(next.x, statusTop, tabW, Math.max(24, tabY - statusTop - 8));
+        return new SoloLayout(safe, width, height, board, crown, hold, next, effects, guide, score, level, lines, time, status);
     }
 
     public Rectangle boardCell(int row, int col) {

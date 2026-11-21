@@ -42,6 +42,7 @@ public class JsonSettingsRepository implements SettingsRepository {
     public boolean save(Settings settings) {
         ObjectNode root = JsonFile.newRoot();
         root.put("screenSize", settings.getScreenSize().name());
+        root.put("fullscreen", settings.isFullscreen());
         root.put("colorBlindMode", settings.isColorBlindMode());
         root.put("devNetworkOverlay", settings.isDevNetworkOverlay());
         root.put("difficulty", settings.getDifficulty().name());
@@ -59,6 +60,7 @@ public class JsonSettingsRepository implements SettingsRepository {
         List<String> warnings = new ArrayList<>();
 
         applyScreenSize(root.get("screenSize"), settings, warnings);
+        applyFullscreen(root.get("fullscreen"), settings, warnings);
         applyColorBlindMode(root.get("colorBlindMode"), settings, warnings);
         applyDevNetworkOverlay(root.get("devNetworkOverlay"), settings, warnings);
         applyDifficulty(root.get("difficulty"), settings, warnings);
@@ -74,14 +76,26 @@ public class JsonSettingsRepository implements SettingsRepository {
         if (isAbsent(node)) return;
 
         if (node.isTextual()) {
+            String text = node.asText();
+            if ("FULLSCREEN".equals(text)) {
+                settings.setFullscreen(true);
+                return;
+            }
             try {
-                settings.setScreenSize(ScreenSize.valueOf(node.asText()));
+                settings.setScreenSize(ScreenSize.valueOf(text));
                 return;
             } catch (IllegalArgumentException unknownSize) {
                 // 아래에서 경고한다
             }
         }
         warnings.add("화면 크기 설정이 올바르지 않아 기본값(Medium)을 사용합니다.");
+    }
+
+    /** 예전 파일에는 없다. 없으면 창 모드. 값이 false면 screenSize FULLSCREEN보다 우선한다 */
+    private static void applyFullscreen(JsonNode node, Settings settings, List<String> warnings) {
+        if (isAbsent(node)) return;
+        if (node.isBoolean()) settings.setFullscreen(node.asBoolean());
+        else warnings.add("전체 화면 설정이 올바르지 않아 기본값(꺼짐)을 사용합니다.");
     }
 
     private static void applyColorBlindMode(JsonNode node, Settings settings, List<String> warnings) {
