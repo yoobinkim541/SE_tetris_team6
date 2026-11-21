@@ -10,7 +10,7 @@ import java.util.function.Function;
 import tetris.component.block.Block;
 import tetris.feature.game.*;
 import tetris.feature.rule.BlockGenerator;
-import tetris.feature.rule.WeightedBlockGenerator;
+import tetris.feature.rule.BagBlockGenerator;
 import tetris.feature.item.Cell;
 import tetris.feature.item.ItemType;
 import tetris.feature.setting.AutoRepeat;
@@ -77,7 +77,7 @@ public final class LocalMatchEngine implements MatchEngine {
             tSpinLocks[i] = 0;
             clocks[i] = new DueTimeClock(() -> pulseTime);
             BlockGenerator generator = generators == null
-                    ? new WeightedBlockGenerator(config.difficulty().weights(), new Random()) : generators.apply(player);
+                    ? new BagBlockGenerator(config.difficulty().weights(), new Random()) : generators.apply(player);
             sessions[i] = new GameSession(sessionMode, config.difficulty(), generator, clocks[i], new GameListener() {
                 @Override public void onChanged(GameSnapshot state) { }
                 @Override public void onGameOver(GameSnapshot state) { } // collected after both Spawn attempts

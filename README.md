@@ -6,6 +6,18 @@ Java 21과 Swing으로 구현한 테트리스입니다. 일반 모드의 난이�
 
 현재 다운로드 버전은 **v0.5.0 (요구사항 3 기말 평가 빌드)** 입니다. 같은 릴리스의 `SHA256SUMS.txt`로 파일을 대조할 수 있습니다. 평가 빌드의 커밋·테스트 결과·체크섬은 [릴리스 노트](https://github.com/yoobinkim541/SE_tetris_team6/releases/tag/v0.5.0)와 [#162](https://github.com/yoobinkim541/SE_tetris_team6/issues/162)에 기록합니다. 기말평가일은 **2026-12-01**입니다([릴리스 확인표](docs/release-checklist.md)).
 
+### 챌린지 빌드 (평가 외 추가 기능, 미리 보기)
+
+**[챌린지 JAR 다운로드](https://github.com/yoobinkim541/SE_tetris_team6/releases/download/v0.6.0-challenge.1/SE-Tetris-challenge.jar)** · [릴리스 보기](https://github.com/yoobinkim541/SE_tetris_team6/releases/tag/v0.6.0-challenge.1)
+
+평가 빌드(v0.5.0)와 별도로 받는 미리 보기 빌드입니다. Java 21 이상에서 더블클릭하거나 `java -jar SE-Tetris-challenge.jar`로 실행합니다.
+
+- 보스 레이드: 솔로, 2인 협동, 1v1 레이스. 보스 4종(+황금 보스)과 패턴, 카드 보상
+- 온라인 대전·레이드: 같은 LAN(IP)과 인터넷(방 코드, 중계 서버)
+- 모던 조작(고스트·홀드·반시계 회전·DAS/ARR·NEXT 3개, 설정에서 클래식으로 변경 가능), 효과음·배경음, 크리스털 밤하늘 테마
+
+온라인으로 함께 하려면 두 사람 모두 같은 챌린지 빌드를 써야 합니다(평가 빌드와는 연결되지 않습니다). 평가 빌드와 다른 점은 [챌린지 계획서](docs/challenge-plan-v2.md)에 정리되어 있습니다.
+
 문서 바로가기
 
 - 3차 대전: [요구사항·인수 기준](docs/req3/requirements.md) · [결정 기록](docs/req3/decisions.md) · [아키텍처](docs/req3/architecture.md) · [네트워크 프로토콜](docs/req3/network-protocol.md) · [대전 규칙 설명·질문 답변표](docs/req3/s12-a-rules-brief.md) · [시연 동선](docs/req3/s12-b-demo.md) · [리허설 진행표](docs/req3/s12-rehearsal-runsheet.md)

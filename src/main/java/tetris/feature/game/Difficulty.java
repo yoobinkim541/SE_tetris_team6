@@ -41,7 +41,7 @@ public enum Difficulty {
         return minIntervalMillis;
     }
 
-    /** 블록 종류별 가중치. WeightedBlockGenerator의 입력 (GEN-4) */
+    /** 블록 종류별 가중치. BagBlockGenerator/WeightedBlockGenerator의 입력 (GEN-4) */
     public Map<BlockType, Integer> weights() {
         Map<BlockType, Integer> weights = new EnumMap<>(BlockType.class);
         int otherWeight = (TOTAL_WEIGHT - iWeight) / 6;
