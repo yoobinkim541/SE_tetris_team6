@@ -149,11 +149,14 @@ public final class StarfieldBackground {
     }
 
     private void paintSky(Graphics2D g, int width, int height) {
-        BufferedImage cover = assets.cover(resource, width, height);
-        if (cover != null) {
-            g.drawImage(cover, 0, 0, null);
-            return;
-        }
+        // 배율이 걸린 화면에서 배경 한 장을 매 프레임 늘리면 느리다. 장치 픽셀 크기 그림을 1:1로 찍는다
+        boolean[] drawn = {false};
+        tetris.ui.theme.UiKit.drawDeviceImage(g, 0, 0, width, height, (w, h) -> {
+            BufferedImage cover = assets.cover(resource, w, h);
+            drawn[0] = cover != null;
+            return cover;
+        });
+        if (drawn[0]) return;
         g.setPaint(new LinearGradientPaint(0, 0, 0, height,
                 new float[] {0f, 0.55f, 1f},
                 new Color[] {new Color(0x12082A), new Color(0x07091A), new Color(0x1A0A32)}));

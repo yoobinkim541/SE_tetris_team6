@@ -395,7 +395,7 @@ public final class UiKit {
         return (float) (0.5 + 0.5 * Math.sin(System.nanoTime() / 180_000_000.0));
     }
 
-    /** 단단한 점 대신 가장자리가 사라지는 원 */
+    /** 단단한 점 대신 가장자리가 사라지는 원. 별·입자가 매 프레임 수백 개라 (크기, 색)별 그림을 한 번 만들어 찍는다 */
     public static void softDot(Graphics2D g, int x, int y, int size, Color color) {
         if (g == null || color == null || size <= 0) return;
         if (size <= 2) {
@@ -403,15 +403,94 @@ public final class UiKit {
             g.fillOval(x, y, size, size);
             return;
         }
-        float radius = size / 2f;
-        java.awt.Paint previous = g.getPaint();
-        g.setPaint(new java.awt.RadialGradientPaint(x + radius, y + radius, radius,
-                new float[] {0f, 0.55f, 1f},
-                new Color[] {color,
-                        new Color(color.getRed(), color.getGreen(), color.getBlue(), Math.max(0, color.getAlpha() / 2)),
-                        new Color(color.getRed(), color.getGreen(), color.getBlue(), 0)}));
-        g.fillOval(x, y, size, size);
-        g.setPaint(previous);
+        int rgb = color.getRGB() & 0xffffff;
+        int alpha = color.getAlpha();
+        Composite previous = g.getComposite();
+        if (alpha < 255) {
+            float base = previous instanceof AlphaComposite ac && ac.getRule() == AlphaComposite.SRC_OVER ? ac.getAlpha() : 1f;
+            g.setComposite(AlphaComposite.getInstance(AlphaComposite.SRC_OVER, base * alpha / 255f));
+        }
+        java.awt.geom.AffineTransform t = g.getTransform();
+        boolean scaledOnly = t.getShearX() == 0 && t.getShearY() == 0 && t.getScaleX() > 0
+                && (t.getScaleX() != 1 || t.getScaleY() != 1);
+        try {
+            if (!scaledOnly) {
+                g.drawImage(softDotSprite(size, rgb), x, y, null);
+                return;
+            }
+            // 배율이 걸린 화면에서 점 그림을 늘리면 점마다 소프트웨어 변환이 돈다. 장치 픽셀 크기 점을 1:1로 찍는다
+            int deviceSize = Math.max(1, (int) Math.round(size * t.getScaleX()));
+            java.awt.geom.Point2D at = t.transform(new java.awt.geom.Point2D.Double(x, y), null);
+            g.setTransform(new java.awt.geom.AffineTransform());
+            g.drawImage(softDotSprite(deviceSize, rgb), (int) Math.round(at.getX()), (int) Math.round(at.getY()), null);
+        } finally {
+            g.setTransform(t);
+            g.setComposite(previous);
+        }
+    }
+
+    /** 반짝임은 알파만 바뀌므로 알파를 뺀 색으로 기억하고 그릴 때 투명도를 곱한다(캐시가 넘치지 않게) */
+    private static BufferedImage softDotSprite(int size, int rgb) {
+        long key = (((long) size) << 32) | rgb;
+        synchronized (DOTS) {
+            BufferedImage hit = DOTS.get(key);
+            if (hit != null) return hit;
+        }
+        Color opaque = new Color(rgb);
+        BufferedImage dot = new BufferedImage(size, size, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D d = dot.createGraphics();
+        try {
+            d.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            float radius = size / 2f;
+            d.setPaint(new java.awt.RadialGradientPaint(radius, radius, Math.max(0.5f, radius),
+                    new float[] {0f, 0.55f, 1f},
+                    new Color[] {opaque,
+                            new Color(opaque.getRed(), opaque.getGreen(), opaque.getBlue(), 128),
+                            new Color(opaque.getRed(), opaque.getGreen(), opaque.getBlue(), 0)}));
+            d.fillOval(0, 0, size, size);
+        } finally {
+            d.dispose();
+        }
+        synchronized (DOTS) {
+            DOTS.put(key, dot);
+        }
+        return dot;
+    }
+
+    private static final Map<Long, BufferedImage> DOTS = new java.util.LinkedHashMap<>(64, 0.75f, true) {
+        @Override protected boolean removeEldestEntry(Map.Entry<Long, BufferedImage> eldest) {
+            return size() > 256;
+        }
+    };
+
+    /**
+     * 배율이 걸린 화면에 큰 그림을 늘려 그리면 Java2D가 매 프레임 소프트웨어로 변환한다.
+     * 장치 픽셀 크기 그림을 받아 변환 없이 1:1로 찍는다. 배율이 1이거나 회전이 있으면 그대로 그린다.
+     */
+    public static void drawDeviceImage(Graphics2D g, int x, int y, int width, int height,
+                                       java.util.function.BiFunction<Integer, Integer, BufferedImage> imageForSize) {
+        if (g == null || width <= 0 || height <= 0) return;
+        java.awt.geom.AffineTransform t = g.getTransform();
+        boolean axisAligned = t.getShearX() == 0 && t.getShearY() == 0 && t.getScaleX() > 0 && t.getScaleY() > 0;
+        if (!axisAligned || (t.getScaleX() == 1 && t.getScaleY() == 1)) {
+            BufferedImage image = imageForSize.apply(width, height);
+            if (image != null) g.drawImage(image, x, y, width, height, null);
+            return;
+        }
+        java.awt.geom.Point2D topLeft = t.transform(new java.awt.geom.Point2D.Double(x, y), null);
+        java.awt.geom.Point2D bottomRight = t.transform(new java.awt.geom.Point2D.Double(x + width, y + height), null);
+        int dx = (int) Math.round(topLeft.getX());
+        int dy = (int) Math.round(topLeft.getY());
+        int dw = Math.max(1, (int) Math.round(bottomRight.getX()) - dx);
+        int dh = Math.max(1, (int) Math.round(bottomRight.getY()) - dy);
+        BufferedImage image = imageForSize.apply(dw, dh);
+        if (image == null) return;
+        g.setTransform(new java.awt.geom.AffineTransform());
+        try {
+            g.drawImage(image, dx, dy, dw, dh, null);
+        } finally {
+            g.setTransform(t);
+        }
     }
 
     public static Color toneColor(Tone tone) {

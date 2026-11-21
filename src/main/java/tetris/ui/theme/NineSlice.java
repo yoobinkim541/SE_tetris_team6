@@ -76,9 +76,34 @@ public final class NineSlice {
         paint(g, x, y, width, height, Integer.MAX_VALUE);
     }
 
+    /**
+     * 화면 배율(전체 화면·Windows 배율)이 걸린 Graphics에 작은 그림을 늘려 그리면 Java2D가 소프트웨어 변환으로 매 프레임 느리게 그린다.
+     * 장치 픽셀 크기로 한 번 잘라 두고 변환 없이 1:1로 찍는다.
+     */
     public void paint(Graphics2D g, int x, int y, int width, int height, int maxCorner) {
-        BufferedImage image = scaled(width, height, maxCorner);
-        if (image != null) g.drawImage(image, x, y, null);
+        java.awt.geom.AffineTransform t = g.getTransform();
+        boolean axisAligned = t.getShearX() == 0 && t.getShearY() == 0 && t.getScaleX() > 0 && t.getScaleY() > 0;
+        if (!axisAligned || (t.getScaleX() == 1 && t.getScaleY() == 1)) {
+            BufferedImage image = scaled(width, height, maxCorner);
+            if (image != null) g.drawImage(image, x, y, null);
+            return;
+        }
+        java.awt.geom.Point2D topLeft = t.transform(new java.awt.geom.Point2D.Double(x, y), null);
+        java.awt.geom.Point2D bottomRight = t.transform(new java.awt.geom.Point2D.Double(x + width, y + height), null);
+        int dx = (int) Math.round(topLeft.getX());
+        int dy = (int) Math.round(topLeft.getY());
+        int dw = Math.max(1, (int) Math.round(bottomRight.getX()) - dx);
+        int dh = Math.max(1, (int) Math.round(bottomRight.getY()) - dy);
+        int corner = maxCorner == Integer.MAX_VALUE ? Integer.MAX_VALUE
+                : Math.max(1, (int) Math.round(maxCorner * t.getScaleX()));
+        BufferedImage image = scaled(dw, dh, corner);
+        if (image == null) return;
+        g.setTransform(new java.awt.geom.AffineTransform());
+        try {
+            g.drawImage(image, dx, dy, null);
+        } finally {
+            g.setTransform(t);
+        }
     }
     /** 장식 캡을 뺀 가로 여백. 원본 캡 픽셀을 그린 높이에 맞춰 줄인다 */
     public int insetX(int width, int height) {

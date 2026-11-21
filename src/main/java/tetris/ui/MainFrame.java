@@ -242,11 +242,7 @@ public class MainFrame extends JFrame {
             }
             @Override
             public void windowDeactivated(WindowEvent e) {
-                SwingUtilities.invokeLater(() -> {
-                    if (changingChrome || System.nanoTime() < ignoreFocusLossUntil) return;
-                    if (isActive()) return;
-                    onFocusLost();
-                });
+                onFocusLost();
             }
             @Override public void windowClosing(WindowEvent e) { closeBattle(); closeP2p(); closeRaid(); }
         });
@@ -343,11 +339,15 @@ public class MainFrame extends JFrame {
 
     private void setBorderless(boolean borderless, Rectangle bounds) {
         boolean show = isVisible();
-        changingChrome = true;
-        ignoreFocusLossUntil = System.nanoTime() + 800_000_000L;
+        // 창을 다시 만들 때만(테두리 전환) dispose가 비활성 이벤트를 늦게 보낸다. 그때만 자동 일시정지를 건너뛴다
+        boolean recreate = isDisplayable() && isUndecorated() != borderless;
+        if (recreate) {
+            changingChrome = true;
+            ignoreFocusLossUntil = System.nanoTime() + 800_000_000L;
+        }
         Rectangle target = bounds == null ? null : new Rectangle(bounds);
         try {
-            if (isDisplayable() && isUndecorated() != borderless) super.dispose();
+            if (recreate) super.dispose();
             if (isDisplayable() && isUndecorated() != borderless) {
                 setVisible(false);
                 super.dispose();
@@ -370,8 +370,10 @@ public class MainFrame extends JFrame {
                 }
             }
         } finally {
-            changingChrome = false;
-            ignoreFocusLossUntil = System.nanoTime() + 800_000_000L;
+            if (recreate) {
+                changingChrome = false;
+                ignoreFocusLossUntil = System.nanoTime() + 800_000_000L;
+            }
         }
     }
 

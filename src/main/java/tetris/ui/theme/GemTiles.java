@@ -18,7 +18,24 @@ public final class GemTiles {
 
     public static void paint(Graphics2D g, int x, int y, int size, Color fill) {
         if (g == null || size <= 0 || fill == null) return;
-        g.drawImage(tile(fill, size), x, y, null);
+        java.awt.geom.AffineTransform t = g.getTransform();
+        boolean axisAligned = t.getShearX() == 0 && t.getShearY() == 0 && t.getScaleX() > 0 && t.getScaleY() > 0;
+        if (!axisAligned || (t.getScaleX() == 1 && t.getScaleY() == 1)) {
+            g.drawImage(tile(fill, size), x, y, null);
+            return;
+        }
+        // 배율이 걸린 화면에서 작은 칸 그림을 늘리면 소프트웨어 변환이 매 칸마다 돈다. 장치 픽셀 크기 칸을 만들어 1:1로 찍는다
+        java.awt.geom.Point2D topLeft = t.transform(new java.awt.geom.Point2D.Double(x, y), null);
+        java.awt.geom.Point2D bottomRight = t.transform(new java.awt.geom.Point2D.Double(x + size, y + size), null);
+        int dx = (int) Math.round(topLeft.getX());
+        int dy = (int) Math.round(topLeft.getY());
+        int ds = Math.max(1, (int) Math.round(bottomRight.getX()) - dx);
+        g.setTransform(new java.awt.geom.AffineTransform());
+        try {
+            g.drawImage(tile(fill, ds), dx, dy, null);
+        } finally {
+            g.setTransform(t);
+        }
     }
 
     static BufferedImage tile(Color fill, int size) {

@@ -182,12 +182,14 @@ public final class GameTheme {
     static Font faceFor(Font preferred, char c, java.awt.font.FontRenderContext context) {
         if (glyphDraws(preferred, c, context)) return preferred;
         int size = preferred == null ? 14 : Math.max(1, preferred.getSize());
-        Font dialog = new Font(Font.DIALOG, Font.PLAIN, size);
+        Font dialog = DIALOG_BY_SIZE.computeIfAbsent(size, s -> new Font(Font.DIALOG, Font.PLAIN, s));
         if (isArrow(c) && glyphDraws(dialog, c, context)) return dialog;
         Font hangul = text(size, false);
         if (glyphDraws(hangul, c, context)) return hangul;
         return dialog;
     }
+
+    private static final java.util.Map<Integer, Font> DIALOG_BY_SIZE = new java.util.concurrent.ConcurrentHashMap<>();
 
     private static boolean allGlyphsDraw(Font font, String text, java.awt.font.FontRenderContext context) {
         for (int i = 0; i < text.length(); i++) {
@@ -224,11 +226,38 @@ public final class GameTheme {
     }
 
 
-    /** 실제로 그릴 글꼴의 시각 경계. 빈 글리프는 대체 글꼴 경계로 바꾼다 */
+    /** 실제로 그릴 글꼴의 시각 경계. 빈 글리프는 대체 글꼴 경계로 바꾼다. 매 프레임 같은 글자를 재므로 결과를 기억한다 */
     public static java.awt.geom.Rectangle2D drawnBounds(Font font, String text, java.awt.font.FontRenderContext context) {
         Font face = font == null ? text(14, false) : font;
         java.awt.font.FontRenderContext frc = context == null
                 ? new java.awt.font.FontRenderContext(new java.awt.geom.AffineTransform(), true, true) : context;
+        java.awt.geom.AffineTransform tx = frc.getTransform();
+        BoundsKey key = new BoundsKey(face.getFontName(), face.getStyle(), face.getSize2D(), text == null ? "" : text,
+                tx.getScaleX(), tx.getScaleY(), frc.isAntiAliased(), frc.usesFractionalMetrics());
+        java.awt.geom.Rectangle2D hit;
+        synchronized (BOUNDS) {
+            hit = BOUNDS.get(key);
+        }
+        if (hit == null) {
+            hit = measureBounds(face, text, frc);
+            synchronized (BOUNDS) {
+                BOUNDS.put(key, hit);
+            }
+        }
+        return new java.awt.geom.Rectangle2D.Double(hit.getX(), hit.getY(), hit.getWidth(), hit.getHeight());
+    }
+
+    private record BoundsKey(String font, int style, float size, String text, double sx, double sy,
+                             boolean antiAliased, boolean fractional) { }
+
+    private static final java.util.Map<BoundsKey, java.awt.geom.Rectangle2D> BOUNDS =
+            new java.util.LinkedHashMap<>(256, 0.75f, true) {
+                @Override protected boolean removeEldestEntry(java.util.Map.Entry<BoundsKey, java.awt.geom.Rectangle2D> eldest) {
+                    return size() > 512;
+                }
+            };
+
+    private static java.awt.geom.Rectangle2D measureBounds(Font face, String text, java.awt.font.FontRenderContext frc) {
         if (text == null || text.isBlank()) return face.createGlyphVector(frc, "가Ag0").getVisualBounds();
         java.awt.geom.Rectangle2D union = null;
         float cursor = 0f;
