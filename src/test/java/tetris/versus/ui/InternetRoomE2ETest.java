@@ -192,7 +192,8 @@ class InternetRoomE2ETest {
         Path python = Path.of("relay/.venv/Scripts/python.exe");
         if (!python.toFile().exists()) python = Path.of("relay/.venv/bin/python");
         assumeTrue(python.toFile().exists(), "relay/.venv가 없어 예비 서버 E2E를 건너뜀 (relay/README.md 참고)");
-        return new ProcessBuilder(python.toString(), "tetris_relay.py", "--host", "127.0.0.1", "--port", String.valueOf(port))
+        // 작업 폴더를 relay로 바꾸므로 절대 경로로 넘긴다. 리눅스는 상대 경로를 바뀐 폴더 기준으로 찾는다
+        return new ProcessBuilder(python.toAbsolutePath().toString(), "tetris_relay.py", "--host", "127.0.0.1", "--port", String.valueOf(port))
                 .directory(Path.of("relay").toFile())
                 .redirectErrorStream(true)
                 .start();
