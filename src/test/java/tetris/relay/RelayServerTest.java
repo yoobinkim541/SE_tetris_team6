@@ -427,6 +427,8 @@ class RelayServerTest {
             Socket h = open();
             assertTrue(seen.add(hostRoom(h)), "duplicate code");
             h.close();
+            // IP당 대기 방 상한이 있어, 닫은 방이 정리된 뒤 다음 방을 연다
+            eventually(() -> server.waitingRooms() == 0, "room closed");
         }
     }
     //#endregion

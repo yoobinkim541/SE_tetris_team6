@@ -40,7 +40,8 @@ public class Main {
         ErrorLog.setReporter(frame::reportFailure);
         Thread.currentThread().setUncaughtExceptionHandler((thread, error) -> ErrorLog.shared().report(thread.getName(), error));
 
-        // 3) Main Menu 표시
+        // 3) 창을 띄우고 Main Menu 표시
+        frame.setVisible(true);
         frame.showScreen(MainFrame.Screen.MAIN_MENU);
         frame.showWarnings(warnings);
     }
