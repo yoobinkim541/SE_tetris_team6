@@ -35,9 +35,9 @@ final class Theme {
         return GameTheme.fontFor(value, size, preferDigits);
     }
 
-    /** 블록 문자. Orbitron. 없는 글자는 그릴 때 글자 단위로 대체한다 */
+    /** 블록 문자. 싱글·대전 보드가 같은 라벨 글꼴로 그린다 */
     static Font blockLetter(int size) {
-        return GameTheme.digits(size);
+        return GameTheme.text(size, false);
     }
 
     /** 패널 높이에 비례한 글자 크기. 셀 크기가 바뀌어도 화면 비율이 유지된다 */

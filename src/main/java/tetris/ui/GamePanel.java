@@ -607,7 +607,7 @@ public class GamePanel extends JPanel implements GameListener {
         tetris.ui.theme.GemTiles.paint(g, x, y, size, color);
 
         if (size < 8) return;
-        g.setFont(Theme.text(Math.max(8, size * 3 / 5), false));
+        g.setFont(Theme.blockLetter(Math.max(8, size * 3 / 5)));
         g.setColor(item == null ? palette.textColor(color) : Color.BLACK);
         String letter = item != null ? String.valueOf(item.symbol()) : String.valueOf(type.letter());
         UiKit.drawInBox(g, letter, new Rectangle(x, y, size, size), UiKit.Align.CENTER);

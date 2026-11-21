@@ -6,7 +6,6 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 
 import java.awt.Color;
 import java.awt.Graphics2D;
-import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.util.BitSet;
 import java.util.Arrays;
@@ -100,16 +99,14 @@ class OrdinaryGlyphAuditTest {
         BufferedImage image = new BufferedImage(CELL, CELL, BufferedImage.TYPE_INT_RGB);
         Graphics2D g = image.createGraphics();
         try {
-            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+            tetris.ui.theme.GameTheme.applyQuality(g);
             g.setColor(fill);
             g.fillRect(0, 0, CELL, CELL);
+            // 게임과 같은 글꼴·같은 공통 글자 경로(잉크 기준 가운데)로 그린다
             g.setFont(Theme.blockLetter(CELL * 3 / 5));
             g.setColor(foreground);
-            String letter = String.valueOf(type.letter());
-            int textX = (CELL - g.getFontMetrics().stringWidth(letter)) / 2;
-            int textY = (CELL - g.getFontMetrics().getHeight()) / 2 + g.getFontMetrics().getAscent();
-            g.drawString(letter, textX, textY);
+            tetris.ui.theme.UiKit.drawInBox(g, String.valueOf(type.letter()),
+                    new java.awt.Rectangle(0, 0, CELL, CELL), tetris.ui.theme.UiKit.Align.CENTER);
         } finally {
             g.dispose();
         }

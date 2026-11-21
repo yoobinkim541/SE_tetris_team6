@@ -388,9 +388,17 @@ class RelayServerTest {
         server.close();
         start(new RelayLimits(300, 64, 3, Duration.ofSeconds(5), 100, Duration.ofMinutes(10), 100,
                 Duration.ofSeconds(60), Duration.ofSeconds(10), Duration.ofHours(3), 10));
-        for (int i = 0; i < 3; i++) hostRoom(open());
+        java.util.List<Socket> hosts = new java.util.ArrayList<>();
+        for (int i = 0; i < 3; i++) {
+            Socket host = open();
+            hostRoom(host);
+            hosts.add(host);
+        }
         Socket fourth = open();
         assertTrue(closedByPeer(fourth));
+        // 대기 방은 IP당 3개까지라, 연결 속도 제한만 보려고 앞의 방을 닫고 시계를 넘긴다
+        for (Socket host : hosts) host.close();
+        eventually(() -> server.waitingRooms() == 0, "rooms closed");
         advance(Duration.ofSeconds(2));
         hostRoom(open());
     }

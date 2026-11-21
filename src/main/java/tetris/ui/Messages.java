@@ -30,7 +30,7 @@ public class Messages {
         TEXT.put("menu.multi.classic", "로컬 일반 대전");
         TEXT.put("menu.multi.item", "로컬 아이템 대전");
         TEXT.put("menu.multi.timed", "로컬 시간제한 대전");
-        TEXT.put("menu.multi.online", "온라인 대전 (LAN/인터넷)");
+        TEXT.put("menu.multi.online", "온라인 대전 (LAN·인터넷)");
         TEXT.put("menu.back", "메인 메뉴");
 
         TEXT.put("game.next", "NEXT");
