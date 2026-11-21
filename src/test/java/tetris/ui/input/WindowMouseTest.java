@@ -38,7 +38,8 @@ import tetris.ui.fx.AssetStore;
 /** 전체 화면 배치·마우스 클릭 뒤에도 방향키와 Enter가 동작한다 */
 @Timeout(60)
 class WindowMouseTest {
-    private static final Path CAPTURES = Path.of("C:/Users/asus/Desktop/SE-tetris/assets-work/window");
+    // 다른 캡처 테스트와 같은 규칙: 기본은 build 아래, -Dtetris.capture.dir로 바꾼다 (특정 PC 경로를 쓰면 다른 PC에서 실패한다)
+    private static final Path CAPTURES = Path.of(System.getProperty("tetris.capture.dir", "build/verification/window"));
 
     @Test
     void portraitIsCenteredOnWidescreenWithoutBlackBars() throws Exception {

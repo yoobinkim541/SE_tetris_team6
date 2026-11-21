@@ -3,6 +3,7 @@ package tetris.versus.ui;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
@@ -185,9 +186,12 @@ class InternetRoomE2ETest {
         }
     }
 
+    // 예비 서버(Python)는 relay/.venv가 있어야 띄울 수 있다. 없으면 실패 대신 건너뛴다. CI는 이 환경을 만들어서 실제로 돌린다.
+    // 만드는 법: python -m venv relay/.venv 뒤 relay/.venv의 python으로 pip install -r relay/requirements.txt
     private static Process startPython(int port) throws Exception {
         Path python = Path.of("relay/.venv/Scripts/python.exe");
         if (!python.toFile().exists()) python = Path.of("relay/.venv/bin/python");
+        assumeTrue(python.toFile().exists(), "relay/.venv가 없어 예비 서버 E2E를 건너뜀 (relay/README.md 참고)");
         return new ProcessBuilder(python.toString(), "tetris_relay.py", "--host", "127.0.0.1", "--port", String.valueOf(port))
                 .directory(Path.of("relay").toFile())
                 .redirectErrorStream(true)
